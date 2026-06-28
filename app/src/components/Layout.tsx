@@ -95,11 +95,11 @@ export function Layout() {
       )}
 
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-[min(18rem,88vw)] md:w-56 shrink-0 bg-white border-r border-border flex flex-col overflow-y-auto overscroll-contain transition-transform duration-200 ease-out md:translate-x-0 safe-top ${
+        className={`fixed md:sticky md:top-0 inset-y-0 left-0 z-50 w-[min(18rem,88vw)] md:w-56 shrink-0 bg-white border-r border-border flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden overscroll-contain transition-transform duration-200 ease-out md:translate-x-0 safe-top ${
           menuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="hidden md:block px-5 py-6 border-b border-border">
+        <div className="hidden md:block px-5 py-6 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-yuzu flex items-center justify-center text-sm font-bold">Y</div>
             <div>
@@ -108,7 +108,7 @@ export function Layout() {
             </div>
           </div>
         </div>
-        <div className="md:hidden flex items-center justify-between px-4 py-4 border-b border-border">
+        <div className="md:hidden flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
           <span className="font-semibold text-sm">Navigation</span>
           <button
             type="button"
@@ -119,7 +119,7 @@ export function Layout() {
             <MenuIcon open />
           </button>
         </div>
-        <nav className="flex-1 p-3 space-y-4">
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-4">
           {nav.map((group) => (
             <div key={group.section}>
               <div className="px-3 text-[10px] uppercase tracking-wider text-muted mb-1">{group.section}</div>
@@ -143,7 +143,7 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t border-border safe-bottom">
+        <div className="p-3 border-t border-border safe-bottom shrink-0">
           <Button variant="ghost" className="w-full text-xs" onClick={signOut}>
             Déconnexion
           </Button>
