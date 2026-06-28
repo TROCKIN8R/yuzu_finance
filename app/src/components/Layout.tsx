@@ -20,6 +20,7 @@ const nav: { section: string; links: NavItem[] }[] = [
   {
     section: 'Comptabilité',
     links: [
+      { to: '/ledger', label: 'Grand livre' },
       { to: '/expenses', label: 'Dépenses' },
       { to: '/payroll', label: 'Paie' },
       { to: '/dividends', label: 'Dividendes' },

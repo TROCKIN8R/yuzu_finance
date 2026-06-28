@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Expense, ExpenseCategory } from '../lib/types'
+import type { Expense, ExpenseCategory, OrganizationSettings } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
+import { computePurchaseTaxes } from '../lib/taxes'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -27,6 +28,7 @@ const empty = {
 
 export function ExpensesPage() {
   const [rows, setRows] = useState<Expense[]>([])
+  const [settings, setSettings] = useState<OrganizationSettings | null>(null)
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -51,8 +53,23 @@ export function ExpensesPage() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const { data } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false })
+    const [{ data }, { data: set }] = await Promise.all([
+      supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+      supabase.from('organization_settings').select('*').maybeSingle(),
+    ])
     setRows((data as Expense[]) ?? [])
+    setSettings(set.data)
+  }
+
+  function recalcTaxes(amount: number) {
+    if (!settings) return { gst: 0, qst: 0 }
+    const t = computePurchaseTaxes(amount, settings)
+    return { gst: t.gst, qst: t.qst }
+  }
+
+  function onAmountChange(amount: number) {
+    const taxes = recalcTaxes(amount)
+    setForm({ ...form, amount, ...taxes })
   }
 
   function openNew() {
@@ -205,10 +222,30 @@ export function ExpensesPage() {
           </Field>
           <Field label="Description"><input className={inputClass} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Montant HT *"><input type="number" step="0.01" min="0" className={inputClass} required value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></Field>
-            <Field label="TPS"><input type="number" step="0.01" min="0" className={inputClass} value={form.gst} onChange={(e) => setForm({ ...form, gst: Number(e.target.value) })} /></Field>
-            <Field label="TVQ"><input type="number" step="0.01" min="0" className={inputClass} value={form.qst} onChange={(e) => setForm({ ...form, qst: Number(e.target.value) })} /></Field>
+            <Field label="Montant HT *">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className={inputClass}
+                required
+                value={form.amount}
+                onChange={(e) => onAmountChange(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="TPS (CTI)">
+              <input type="number" step="0.01" min="0" className={inputClass} value={form.gst} onChange={(e) => setForm({ ...form, gst: Number(e.target.value) })} />
+            </Field>
+            <Field label="TVQ (RTI)">
+              <input type="number" step="0.01" min="0" className={inputClass} value={form.qst} onChange={(e) => setForm({ ...form, qst: Number(e.target.value) })} />
+            </Field>
           </div>
+          {settings && (
+            <p className="text-xs text-muted">
+              TPS/TVQ calculées sur le HT{settings.charge_gst || settings.charge_qst ? '' : ' (taxes désactivées dans les paramètres)'} — TVQ sur montant + TPS (Québec).
+              Total TTC : <strong>{formatCad(form.amount + form.gst + form.qst)}</strong>
+            </p>
+          )}
           <Field label="Payé">
             <select className={inputClass} value={form.paid ? 'yes' : 'no'} onChange={(e) => setForm({ ...form, paid: e.target.value === 'yes' })}>
               <option value="yes">Oui</option><option value="no">Non (à payer)</option>

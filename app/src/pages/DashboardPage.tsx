@@ -57,24 +57,24 @@ export function DashboardPage() {
   }, [])
 
   async function load() {
-    const [clients, entries, invoices, payments, expenses, payroll, salesTax, dividends, corpTax] = await Promise.all([
+    const [clients, entries, invoices, payments, expenses, payroll, dividends, corpTax, salesTaxPaid] = await Promise.all([
       supabase.from('clients').select('id', { count: 'exact', head: true }),
       supabase
         .from('time_entries')
         .select('hours, rate_override, billable, invoice_id, projects(default_hourly_rate)')
         .is('invoice_id', null)
         .eq('billable', true),
-      supabase.from('invoices').select('id, total, status, subtotal').neq('status', 'void'),
+      supabase.from('invoices').select('id, total, status, subtotal, gst, qst').neq('status', 'void'),
       supabase.from('payments').select('invoice_id, amount'),
-      supabase.from('expenses').select('total, paid, category'),
+      supabase.from('expenses').select('amount, total, paid, gst, qst, category'),
       supabase
         .from('payroll_runs')
         .select(
           'gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
         ),
-      supabase.from('sales_tax_periods').select('gst_net, qst_net').eq('status', 'open'),
       supabase.from('dividends').select('total_amount'),
       supabase.from('corporate_tax_records').select('amount, paid_amount, status'),
+      supabase.from('sales_tax_periods').select('gst_net, qst_net').eq('status', 'paid'),
     ])
 
     const paidMap: Record<string, number> = {}
@@ -96,11 +96,11 @@ export function DashboardPage() {
         payments: payments.data ?? [],
         expenses: expenses.data ?? [],
         payrollRuns: payroll.data ?? [],
-        invoices: (invoices.data ?? []) as { id: string; total: number; status: string; subtotal: number }[],
+        invoices: (invoices.data ?? []) as { id: string; total: number; status: string; subtotal: number; gst: number; qst: number }[],
         invoicePaidMap: paidMap,
-        salesTaxOpen: salesTax.data ?? [],
         dividends: dividends.data ?? [],
-        corporateTaxDue: corpTax.data ?? [],
+        corporateTax: corpTax.data ?? [],
+        salesTaxRemitted: salesTaxPaid.data ?? [],
       })
     )
   }
@@ -113,7 +113,12 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl sm:text-2xl font-semibold">Tableau de bord</h1>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl sm:text-2xl font-semibold">Tableau de bord</h1>
+        <Link to="/ledger" className="text-sm text-yuzu-dark hover:underline font-medium">
+          Voir le grand livre →
+        </Link>
+      </div>
 
       <section>
         <h2 className="text-sm font-medium text-muted mb-3">Opérations</h2>
@@ -140,7 +145,7 @@ export function DashboardPage() {
           <StmtRow label="Paiements clients reçus" value={formatCad(cf.clientPayments)} />
 
           <StmtSection title="Décaissements" />
-          <StmtRow label="Dépenses payées" value={formatCad(cf.expensesPaid)} indent negative />
+          <StmtRow label="Dépenses payées (TTC)" value={formatCad(cf.expensesPaid)} indent negative />
           <StmtRow label="Salaire net versé aux employés" value={formatCad(cf.payrollNetToEmployee)} indent negative />
           <StmtRow
             label="Retenues employé remises (impôts, RPC, AE, RQAP)"
@@ -148,12 +153,14 @@ export function DashboardPage() {
             indent
             negative
           />
-          <StmtRow label="Cotisations employeur (RPC, AE, RQAP, avantages)" value={formatCad(cf.employerPayrollContributions)} indent negative />
+          <StmtRow label="Cotisations employeur" value={formatCad(cf.employerPayrollContributions)} indent negative />
+          <StmtRow label="Remises TPS/TVQ" value={formatCad(cf.salesTaxRemitted)} indent negative />
+          <StmtRow label="Impôts société payés" value={formatCad(cf.corporateTaxPaid)} indent negative />
           <StmtRow label="Dividendes distribués" value={formatCad(cf.dividendsPaid)} indent negative />
           <StmtRow label="Total décaissements" value={formatCad(fin.cashOut)} bold negative />
         </div>
         <p className="text-xs text-muted mt-2">
-          Les retenues et cotisations sont comptabilisées au moment du paiement de la paie (hypothèse : remise immédiate).
+          Revenus comptés à l&apos;émission (factures envoyées/payées). TPS/TVQ passif = taxes perçues − CTI/RTI.
         </p>
       </section>
 
@@ -165,10 +172,12 @@ export function DashboardPage() {
           <StmtSection title="Actif" />
           <StmtRow label="Trésorerie estimée" value={formatCad(bs.cash)} />
           <StmtRow label="Comptes clients (CC)" value={formatCad(bs.accountsReceivable)} />
+          <StmtRow label="TPS à recevoir (CTI)" value={formatCad(bs.gstReceivable)} indent />
+          <StmtRow label="TVQ à recevoir (RTI)" value={formatCad(bs.qstReceivable)} indent />
           <StmtRow label="Total actif" value={formatCad(bs.totalAssets)} bold />
 
           <StmtSection title="Passif" />
-          <StmtRow label="Comptes fournisseurs (dépenses non payées)" value={formatCad(bs.accountsPayable)} />
+          <StmtRow label="Comptes fournisseurs" value={formatCad(bs.accountsPayable)} />
           <StmtRow label="TPS à remettre" value={formatCad(bs.gstPayable)} indent />
           <StmtRow label="TVQ à remettre" value={formatCad(bs.qstPayable)} indent />
           <StmtRow label="Impôts société dus" value={formatCad(bs.corporateTaxDue)} />
@@ -180,23 +189,24 @@ export function DashboardPage() {
 
         <section className="bg-white border border-border rounded-xl p-5">
           <h2 className="font-semibold mb-1">État des résultats (cumul)</h2>
-          <p className="text-xs text-muted mb-4">Revenus et charges depuis le début</p>
+          <p className="text-xs text-muted mb-4">Base comptable : revenus HT, dépenses HT, paie employeur</p>
 
           <StmtSection title="Revenus" />
-          <StmtRow label="Revenus de services (sous-total facturé)" value={formatCad(inc.revenueSubtotal)} />
+          <StmtRow label="Revenus de services (HT, factures émises)" value={formatCad(inc.revenueSubtotal)} />
 
-          <StmtSection title="Charges" />
-          <StmtRow label="Dépenses d'exploitation" value={formatCad(inc.operatingExpenses)} indent negative />
+          <StmtSection title="Charges d'exploitation" />
+          <StmtRow label="Dépenses d'exploitation (HT)" value={formatCad(inc.operatingExpenses)} indent negative />
           <StmtRow label="Salaires bruts" value={formatCad(inc.payrollGross)} indent negative />
-          <StmtRow label="Cotisations employeur (RPC, AE, RQAP, avantages)" value={formatCad(inc.employerPayrollContributions)} indent negative />
-          <StmtRow label="Dividendes distribués" value={formatCad(inc.dividendsDistributed)} indent negative />
-          <StmtRow label="Résultat net estimé" value={formatCad(inc.netIncomeEstimate)} bold />
+          <StmtRow label="Cotisations employeur" value={formatCad(inc.employerPayrollContributions)} indent negative />
+          <StmtRow label="Résultat d'exploitation" value={formatCad(inc.operatingIncome)} bold />
+
+          <StmtSection title="Distributions (avoir)" />
+          <StmtRow label="Dividendes payés (hors P&L)" value={formatCad(inc.dividendsDistributed)} indent />
 
           <p className="text-xs text-muted mt-4">
-            Les retenues à la source (impôts employé) ne sont pas une charge de l&apos;entreprise — elles transitent par
-            la paie. Le coût employeur inclut le brut + cotisations employeur uniquement.
+            Les retenues à la source ne sont pas une charge — elles transitent par la paie. Les CTI/RTI réduisent le
+            passif TPS/TVQ, pas les dépenses.
           </p>
-          <p className="text-xs text-muted mt-2">Brouillon de gestion — valider avec votre CPA pour la production fiscale.</p>
         </section>
       </div>
     </div>

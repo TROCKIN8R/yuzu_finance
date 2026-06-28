@@ -1,4 +1,5 @@
 import { invoiceBalance } from './invoice'
+import { isRevenueInvoice } from './taxes'
 
 export interface CashFlowBreakdown {
   clientPayments: number
@@ -7,11 +8,15 @@ export interface CashFlowBreakdown {
   employeeWithholdings: number
   employerPayrollContributions: number
   dividendsPaid: number
+  corporateTaxPaid: number
+  salesTaxRemitted: number
 }
 
 export interface BalanceSheetDetail {
   cash: number
   accountsReceivable: number
+  gstReceivable: number
+  qstReceivable: number
   totalAssets: number
   accountsPayable: number
   gstPayable: number
@@ -27,8 +32,8 @@ export interface IncomeDetail {
   operatingExpenses: number
   payrollGross: number
   employerPayrollContributions: number
+  operatingIncome: number
   dividendsDistributed: number
-  netIncomeEstimate: number
 }
 
 export interface FinancialSnapshot {
@@ -62,6 +67,10 @@ type PayrollRunRow = {
   other_deductions: number
   employer_benefits: number
   net_pay: number
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100
 }
 
 export function employeeDeductionsTotal(p: Pick<
@@ -102,20 +111,20 @@ export function payrollEmployerTotal(p: Pick<
   return Number(p.gross_pay) + employerContributionsTotal(p)
 }
 
-/** Amounts withheld from employee + employer portions to remit to government. */
+/** Amounts withheld from employee + employer statutory portions to remit. */
 export function payrollRemittancesTotal(p: PayrollRunRow): number {
   return employeeDeductionsTotal(p) + employerContributionsTotal(p) - Number(p.employer_benefits)
 }
 
 export function buildFinancialSnapshot(data: {
   payments: { amount: number }[]
-  expenses: { total: number; paid: boolean; category?: string }[]
+  expenses: { amount: number; total: number; paid: boolean; gst: number; qst: number; category?: string }[]
   payrollRuns: PayrollRunRow[]
-  invoices: { id: string; total: number; status: string; subtotal: number }[]
+  invoices: { id: string; total: number; status: string; subtotal: number; gst: number; qst: number }[]
   invoicePaidMap: Record<string, number>
-  salesTaxOpen: { gst_net: number; qst_net: number }[]
   dividends?: { total_amount: number }[]
-  corporateTaxDue?: { amount: number; paid_amount: number; status: string }[]
+  corporateTax?: { amount: number; paid_amount: number; status: string }[]
+  salesTaxRemitted?: { gst_net: number; qst_net: number }[]
 }): FinancialSnapshot {
   const clientPayments = data.payments.reduce((s, p) => s + Number(p.amount), 0)
 
@@ -124,38 +133,58 @@ export function buildFinancialSnapshot(data: {
   const employeeWithholdings = data.payrollRuns.reduce((s, p) => s + employeeDeductionsTotal(p), 0)
   const employerPayrollContributions = data.payrollRuns.reduce((s, p) => s + employerContributionsTotal(p), 0)
   const dividendsPaid = (data.dividends ?? []).reduce((s, d) => s + Number(d.total_amount), 0)
+  const corporateTaxPaid = (data.corporateTax ?? []).reduce((s, r) => s + Number(r.paid_amount), 0)
+  const salesTaxRemitted = (data.salesTaxRemitted ?? []).reduce(
+    (s, t) => s + Math.max(0, Number(t.gst_net)) + Math.max(0, Number(t.qst_net)),
+    0
+  )
 
   const cashOut =
-    expensesPaid + payrollNetToEmployee + employeeWithholdings + employerPayrollContributions + dividendsPaid
+    expensesPaid +
+    payrollNetToEmployee +
+    employeeWithholdings +
+    employerPayrollContributions +
+    dividendsPaid +
+    corporateTaxPaid +
+    salesTaxRemitted
 
   let accountsReceivable = 0
   let revenueYtd = 0
+  let gstCollected = 0
+  let qstCollected = 0
   for (const inv of data.invoices) {
-    if (inv.status === 'void') continue
+    if (inv.status === 'void' || !isRevenueInvoice(inv.status)) continue
     revenueYtd += Number(inv.subtotal)
+    gstCollected += Number(inv.gst)
+    qstCollected += Number(inv.qst)
     const paid = data.invoicePaidMap[inv.id] ?? 0
     accountsReceivable += invoiceBalance(Number(inv.total), paid)
   }
 
+  const gstItc = data.expenses.reduce((s, e) => s + Number(e.gst), 0)
+  const qstItr = data.expenses.reduce((s, e) => s + Number(e.qst), 0)
+
   const accountsPayable = data.expenses.filter((e) => !e.paid).reduce((s, e) => s + Number(e.total), 0)
-  const gstPayable = data.salesTaxOpen.reduce((s, t) => s + Number(t.gst_net), 0)
-  const qstPayable = data.salesTaxOpen.reduce((s, t) => s + Number(t.qst_net), 0)
+  const gstPayable = round2(Math.max(0, gstCollected - gstItc))
+  const qstPayable = round2(Math.max(0, qstCollected - qstItr))
+  const gstReceivable = round2(Math.max(0, gstItc - gstCollected))
+  const qstReceivable = round2(Math.max(0, qstItr - qstCollected))
   const salesTaxPayable = gstPayable + qstPayable
 
-  const corporateTaxDue = (data.corporateTaxDue ?? [])
+  const corporateTaxDue = (data.corporateTax ?? [])
     .filter((r) => r.status !== 'paid')
     .reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
 
-  const expensesYtd = data.expenses.reduce((s, e) => s + Number(e.total), 0)
+  // P&L: pre-tax expenses only; recoverable taxes are balance-sheet items
+  const expensesYtd = data.expenses.reduce((s, e) => s + Number(e.amount), 0)
   const payrollGross = data.payrollRuns.reduce((s, p) => s + Number(p.gross_pay), 0)
   const payrollYtd = payrollGross + employerPayrollContributions
+  const operatingIncome = revenueYtd - expensesYtd - payrollYtd
 
   const cash = clientPayments - cashOut
-  const totalAssets = cash + accountsReceivable
+  const totalAssets = cash + accountsReceivable + gstReceivable + qstReceivable
   const totalLiabilities = accountsPayable + gstPayable + qstPayable + corporateTaxDue
   const equity = totalAssets - totalLiabilities
-
-  const netIncomeEstimate = revenueYtd - expensesYtd - payrollYtd - dividendsPaid
 
   return {
     cashIn: clientPayments,
@@ -177,10 +206,14 @@ export function buildFinancialSnapshot(data: {
       employeeWithholdings,
       employerPayrollContributions,
       dividendsPaid,
+      corporateTaxPaid,
+      salesTaxRemitted,
     },
     balanceSheet: {
       cash,
       accountsReceivable,
+      gstReceivable,
+      qstReceivable,
       totalAssets,
       accountsPayable,
       gstPayable,
@@ -195,8 +228,8 @@ export function buildFinancialSnapshot(data: {
       operatingExpenses: expensesYtd,
       payrollGross,
       employerPayrollContributions,
+      operatingIncome,
       dividendsDistributed: dividendsPaid,
-      netIncomeEstimate,
     },
   }
 }

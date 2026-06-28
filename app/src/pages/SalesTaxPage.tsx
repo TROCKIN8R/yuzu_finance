@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { matchesSearch } from '../lib/filters'
+import { isRevenueInvoice } from '../lib/taxes'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -57,8 +58,8 @@ export function SalesTaxPage() {
       supabase.from('invoices').select('gst, qst, invoice_date, status').gte('invoice_date', period_start).lte('invoice_date', period_end).neq('status', 'void'),
       supabase.from('expenses').select('gst, qst, expense_date').gte('expense_date', period_start).lte('expense_date', period_end),
     ])
-    const gst_collected = (inv.data ?? []).reduce((s, i) => s + Number(i.gst), 0)
-    const qst_collected = (inv.data ?? []).reduce((s, i) => s + Number(i.qst), 0)
+    const gst_collected = (inv.data ?? []).filter((i) => isRevenueInvoice(i.status)).reduce((s, i) => s + Number(i.gst), 0)
+    const qst_collected = (inv.data ?? []).filter((i) => isRevenueInvoice(i.status)).reduce((s, i) => s + Number(i.qst), 0)
     const gst_itc = (exp.data ?? []).reduce((s, e) => s + Number(e.gst), 0)
     const qst_itr = (exp.data ?? []).reduce((s, e) => s + Number(e.qst), 0)
     setForm({ ...form, gst_collected, qst_collected, gst_itc, qst_itr })

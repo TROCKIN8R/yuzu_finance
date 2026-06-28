@@ -13,6 +13,7 @@ import { PayrollPage } from './pages/PayrollPage'
 import { DividendsPage } from './pages/DividendsPage'
 import { SalesTaxPage } from './pages/SalesTaxPage'
 import { CorporateTaxPage } from './pages/CorporateTaxPage'
+import { GeneralLedgerPage } from './pages/GeneralLedgerPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="dividends" element={<DividendsPage />} />
           <Route path="sales-tax" element={<SalesTaxPage />} />
           <Route path="corporate-tax" element={<CorporateTaxPage />} />
+          <Route path="ledger" element={<GeneralLedgerPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

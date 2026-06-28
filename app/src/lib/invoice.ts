@@ -1,12 +1,8 @@
 import type { OrganizationSettings, Project, TimeEntry } from './types'
 import { effectiveRate, formatCad, lineAmount } from './format'
+import { computeSalesTaxes, type TaxSettings } from './taxes'
 
-export interface LineTaxes {
-  subtotal: number
-  gst: number
-  qst: number
-  total: number
-}
+export type LineTaxes = ReturnType<typeof computeSalesTaxes>
 
 export interface InvoiceLineDraft {
   project_id: string | null
@@ -23,17 +19,12 @@ export interface InvoiceLineDraft {
   sort_order: number
 }
 
-type TaxSettings = Pick<OrganizationSettings, 'charge_gst' | 'charge_qst' | 'gst_rate' | 'qst_rate'>
-
 function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
-export function computeLineTaxes(subtotal: number, settings: TaxSettings): LineTaxes {
-  const base = round2(subtotal)
-  const gst = settings.charge_gst ? round2(base * settings.gst_rate) : 0
-  const qst = settings.charge_qst ? round2(base * settings.qst_rate) : 0
-  return { subtotal: base, gst, qst, total: round2(base + gst + qst) }
+export function computeLineTaxes(subtotal: number, settings: TaxSettings) {
+  return computeSalesTaxes(subtotal, settings)
 }
 
 export function computeInvoiceTotals(subtotal: number, settings: TaxSettings): LineTaxes {

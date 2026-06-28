@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { BillingType, Client, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
+import type { Client, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import {
