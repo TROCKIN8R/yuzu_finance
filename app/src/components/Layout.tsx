@@ -21,6 +21,7 @@ const nav: { section: string; links: NavItem[] }[] = [
     links: [
       { to: '/expenses', label: 'Dépenses' },
       { to: '/payroll', label: 'Paie' },
+      { to: '/dividends', label: 'Dividendes' },
       { to: '/sales-tax', label: 'TPS / TVQ' },
       { to: '/corporate-tax', label: 'Impôts société' },
     ],

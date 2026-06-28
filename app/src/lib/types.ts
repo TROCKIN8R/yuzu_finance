@@ -1,6 +1,47 @@
 export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
 export type TaxPeriodStatus = 'open' | 'filed' | 'paid'
 export type CorpTaxStatus = 'estimated' | 'due' | 'paid'
+export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'
+
+export interface Employee {
+  id: string
+  user_id: string
+  first_name: string
+  last_name: string
+  email: string | null
+  yearly_salary: number
+  pay_frequency: PayFrequency
+  estimated_yearly_income: number | null
+  active: boolean
+  hire_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Dividend {
+  id: string
+  user_id: string
+  payment_date: string
+  total_amount: number
+  employee_count: number
+  amount_per_employee: number
+  description: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  dividend_allocations?: DividendAllocation[]
+}
+
+export interface DividendAllocation {
+  id: string
+  user_id: string
+  dividend_id: string
+  employee_id: string
+  amount: number
+  created_at: string
+  employees?: Pick<Employee, 'first_name' | 'last_name'>
+}
 
 export interface Expense {
   id: string
@@ -23,6 +64,7 @@ export interface Expense {
 export interface PayrollRun {
   id: string
   user_id: string
+  employee_id: string | null
   pay_period_start: string
   pay_period_end: string
   payment_date: string
@@ -41,6 +83,7 @@ export interface PayrollRun {
   notes: string | null
   created_at: string
   updated_at: string
+  employees?: Pick<Employee, 'first_name' | 'last_name'>
 }
 
 export interface SalesTaxPeriod {
@@ -118,6 +161,7 @@ export interface TimeEntry {
   id: string
   user_id: string
   project_id: string
+  employee_id: string | null
   entry_date: string
   hours: number
   description: string
@@ -129,6 +173,7 @@ export interface TimeEntry {
   projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'client_id'> & {
     clients?: Pick<Client, 'legal_name'>
   }
+  employees?: Pick<Employee, 'first_name' | 'last_name'>
   invoices?: Pick<Invoice, 'invoice_number'>
 }
 

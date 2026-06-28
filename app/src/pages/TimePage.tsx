@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Project, TimeEntry } from '../lib/types'
+import type { Employee, Project, TimeEntry } from '../lib/types'
 import { effectiveRate, formatCad, formatDate, lineAmount, relationOne, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
+import { employeeDisplayName } from '../lib/payrollCalc'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -14,17 +15,20 @@ type Filter = 'all' | 'unbilled' | 'invoiced'
 
 export function TimePage() {
   const [rows, setRows] = useState<TimeEntry[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [allProjects, setAllProjects] = useState<Project[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [billingFilter, setBillingFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
+  const [employeeFilter, setEmployeeFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
     project_id: '',
+    employee_id: '',
     entry_date: todayIso(),
     hours: 1,
     description: '',
@@ -46,36 +50,43 @@ export function TimePage() {
       const proj = relationOne(t.projects)
       if (billingFilter === 'unbilled' && t.invoice_id) return false
       if (billingFilter === 'invoiced' && !t.invoice_id) return false
+      if (employeeFilter && t.employee_id !== employeeFilter) return false
       if (projectFilter && t.project_id !== projectFilter) return false
       if (clientFilter && proj?.client_id !== clientFilter) return false
       if (!inDateRange(t.entry_date, dateFrom, dateTo)) return false
       const inv = relationOne((t as TimeEntry & { invoices?: { invoice_number: string } | { invoice_number: string }[] }).invoices)
-      return matchesSearch(search, t.description, proj?.name, proj?.clients?.legal_name, inv?.invoice_number)
+      const emp = relationOne(t.employees)
+      return matchesSearch(search, t.description, proj?.name, proj?.clients?.legal_name, inv?.invoice_number, emp ? employeeDisplayName(emp) : '')
     })
-  }, [rows, billingFilter, projectFilter, clientFilter, dateFrom, dateTo, search])
+  }, [rows, billingFilter, projectFilter, clientFilter, employeeFilter, dateFrom, dateTo, search])
 
-  const hasFilters = !!(search || projectFilter || clientFilter || dateFrom || dateTo || billingFilter !== 'all')
+  const hasFilters = !!(search || projectFilter || clientFilter || employeeFilter || dateFrom || dateTo || billingFilter !== 'all')
 
   useEffect(() => {
     load()
   }, [])
 
   async function load() {
-    const [p, entries] = await Promise.all([
+    const [p, entries, emp] = await Promise.all([
       supabase.from('projects').select('*, clients(legal_name)').order('name'),
       supabase
         .from('time_entries')
-        .select('*, projects(name, default_hourly_rate, client_id, clients(legal_name)), invoices(invoice_number)')
+        .select('*, projects(name, default_hourly_rate, client_id, clients(legal_name)), employees(first_name, last_name), invoices(invoice_number)')
         .order('entry_date', { ascending: false }),
+      supabase.from('employees').select('*').eq('active', true).order('last_name').order('first_name'),
     ])
     setAllProjects((p.data as Project[]) ?? [])
     setProjects(((p.data as Project[]) ?? []).filter((x) => x.status === 'active'))
     setRows((entries.data as TimeEntry[]) ?? [])
+    setEmployees((emp.data as Employee[]) ?? [])
   }
+
+  const defaultEmployeeId = employees[0]?.id ?? ''
 
   function openNew() {
     setForm({
       project_id: projects[0]?.id ?? '',
+      employee_id: defaultEmployeeId,
       entry_date: todayIso(),
       hours: 1,
       description: '',
@@ -93,6 +104,7 @@ export function TimePage() {
     }
     setForm({
       project_id: t.project_id,
+      employee_id: t.employee_id ?? defaultEmployeeId,
       entry_date: t.entry_date,
       hours: Number(t.hours),
       description: t.description,
@@ -107,6 +119,7 @@ export function TimePage() {
     e.preventDefault()
     const payload = {
       project_id: form.project_id,
+      employee_id: form.employee_id || null,
       entry_date: form.entry_date,
       hours: form.hours,
       description: form.description,
@@ -136,10 +149,15 @@ export function TimePage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Suivi du temps</h1>
-        <Button onClick={openNew} disabled={projects.length === 0}>
+        <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
           Logger du temps
         </Button>
       </div>
+      {employees.length === 0 && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
+          Ajoutez un employé dans la section Paie avant de logger du temps.
+        </p>
+      )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune entrée de temps." />
       ) : (
@@ -161,6 +179,12 @@ export function TimePage() {
               ]}
             />
             <FilterSelect
+              label="Employé"
+              value={employeeFilter}
+              onChange={setEmployeeFilter}
+              options={[{ value: '', label: 'Tous' }, ...employees.map((e) => ({ value: e.id, label: employeeDisplayName(e) }))]}
+            />
+            <FilterSelect
               label="Projet"
               value={projectFilter}
               onChange={setProjectFilter}
@@ -179,6 +203,7 @@ export function TimePage() {
                 setSearch('')
                 setProjectFilter('')
                 setClientFilter('')
+                setEmployeeFilter('')
                 setDateFrom('')
                 setDateTo('')
                 setBillingFilter('all')
@@ -192,6 +217,7 @@ export function TimePage() {
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
+                <th className="px-4 py-3 font-medium">Employé</th>
                 <th className="px-4 py-3 font-medium">Date</th>
                 <th className="px-4 py-3 font-medium">Projet</th>
                 <th className="px-4 py-3 font-medium">Description</th>
@@ -207,8 +233,10 @@ export function TimePage() {
                 const rate = proj ? effectiveRate(t, proj) : 0
                 const amt = t.billable && proj ? lineAmount(Number(t.hours), rate) : 0
                 const inv = relationOne((t as TimeEntry & { invoices?: { invoice_number: string } | { invoice_number: string }[] }).invoices)
+                const emp = relationOne(t.employees)
                 return (
                   <tr key={t.id} className="hover:bg-stone-50/50">
+                    <td className="px-4 py-3 text-muted">{emp ? employeeDisplayName(emp) : '—'}</td>
                     <td className="px-4 py-3">{formatDate(t.entry_date)}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{proj?.name ?? '—'}</div>
@@ -243,6 +271,13 @@ export function TimePage() {
       )}
       <Modal title={editingId ? 'Modifier le temps' : 'Logger du temps'} open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">
+          <Field label="Employé *">
+            <select className={inputClass} required value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })}>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>{employeeDisplayName(e)}</option>
+              ))}
+            </select>
+          </Field>
           <Field label="Projet *">
             <select className={inputClass} required value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}>
               {projects.map((p) => (
