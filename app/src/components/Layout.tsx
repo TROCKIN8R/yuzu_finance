@@ -1,24 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
+import {
+  IconGrid,
+  IconLandmark,
+  IconLayoutDashboard,
+  IconLogOut,
+  IconMenu,
+  IconReceipt,
+  IconSettings,
+  IconUsers,
+  IconWallet,
+} from './icons'
 
-type NavItem = { to: string; label: string; end?: boolean }
+type NavItem = {
+  to: string
+  label: string
+  end?: boolean
+  icon: ComponentType<{ className?: string }>
+}
 
 const primaryNav: { section: string; links: NavItem[] }[] = [
   {
     section: 'Facturation',
     links: [
-      { to: '/partners', label: 'Partenaires' },
-      { to: '/billing/projects', label: 'Prestation → Encaissement' },
+      { to: '/partners', label: 'Partenaires', icon: IconUsers },
+      { to: '/billing/projects', label: 'Prestation → Encaissement', icon: IconReceipt },
     ],
   },
   {
     section: 'Finances',
     links: [
-      { to: '/bank', label: 'Banque' },
-      { to: '/compensation/payroll', label: 'Rémunération' },
-      { to: '/other', label: 'Autre' },
+      { to: '/bank', label: 'Banque', icon: IconLandmark },
+      { to: '/compensation/payroll', label: 'Rémunération', icon: IconWallet },
+      { to: '/other', label: 'Autre', icon: IconGrid },
     ],
   },
 ]
@@ -46,29 +62,89 @@ function mobileTitle(pathname: string) {
   return mobilePageTitles.find((t) => t.match(pathname))?.title ?? 'Yuzu Finance'
 }
 
-function MenuIcon({ open }: { open: boolean }) {
-  return (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-      {open ? (
-        <path strokeLinecap="round" d="M6 6l12 12M6 18L18 6" />
-      ) : (
-        <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
-      )}
-    </svg>
-  )
+function profileInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
+function sectionHeaderClass(isFirst: boolean) {
+  return `px-3 mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500 ${
+    isFirst ? '' : 'pt-4 mt-2 border-t border-border'
+  }`
 }
 
 function navLinkClass(isActive: boolean) {
-  return `block px-3 py-3 md:py-2 rounded-lg text-sm transition-colors min-h-[44px] md:min-h-0 flex items-center ${
-    isActive ? 'bg-yuzu-light text-ink font-medium' : 'text-muted hover:bg-stone-50 hover:text-ink active:bg-stone-100'
+  return `flex items-center gap-2.5 px-3 py-2.5 md:py-2 rounded-lg text-sm transition-colors min-h-[44px] md:min-h-0 ${
+    isActive
+      ? 'bg-yuzu-light text-ink font-medium'
+      : 'text-stone-600 hover:bg-stone-50 hover:text-ink active:bg-stone-100'
   }`
+}
+
+function navGroupClass() {
+  return 'space-y-0.5 border-l-2 border-stone-200 ml-3 pl-1.5'
+}
+
+function settingsLinkClass(isActive: boolean) {
+  return `flex items-center justify-center shrink-0 min-h-[44px] min-w-[44px] md:min-h-9 md:min-w-9 rounded-lg transition-colors ${
+    isActive ? 'bg-yuzu-light text-ink' : 'text-stone-500 hover:bg-stone-100 hover:text-ink active:bg-stone-200'
+  }`
+}
+
+function isNavItemActive(to: string, pathname: string) {
+  if (to === '/') return pathname === '/'
+  if (to === '/billing/projects') return pathname.startsWith('/billing')
+  if (to === '/compensation/payroll') return pathname.startsWith('/compensation')
+  if (to === '/other') {
+    return otherModulePaths.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  }
+  return pathname === to || pathname.startsWith(`${to}/`)
+}
+
+function ProfileHeader({
+  profileName,
+  settingsActive,
+  onNavigate,
+  compact,
+}: {
+  profileName: string
+  settingsActive: boolean
+  onNavigate?: () => void
+  compact?: boolean
+}) {
+  return (
+    <div className={`flex items-center gap-2 ${compact ? 'px-1' : ''}`}>
+      <div
+        className={`${compact ? 'w-8 h-8 text-xs' : 'w-9 h-9 text-sm'} rounded-full bg-yuzu-light text-yuzu-dark flex items-center justify-center font-semibold shrink-0`}
+        aria-hidden
+      >
+        {profileInitials(profileName)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className={`font-semibold truncate ${compact ? 'text-sm' : 'text-sm leading-tight'}`}>{profileName}</div>
+        {!compact && <div className="text-xs text-muted truncate">Yuzu Finance</div>}
+      </div>
+      <NavLink
+        to="/settings"
+        onClick={onNavigate}
+        className={settingsLinkClass(settingsActive)}
+        aria-label="Paramètres"
+        title="Paramètres"
+      >
+        <IconSettings />
+      </NavLink>
+    </div>
+  )
 }
 
 export function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [profileName, setProfileName] = useState('Compte')
   const pageTitle = mobileTitle(location.pathname)
+  const settingsActive = location.pathname === '/settings'
 
   useEffect(() => {
     setMenuOpen(false)
@@ -81,6 +157,28 @@ export function Layout() {
     }
   }, [menuOpen])
 
+  useEffect(() => {
+    async function loadProfile() {
+      const { data: session } = await supabase.auth.getSession()
+      const user = session.session?.user
+      if (!user) return
+
+      const { data: settings } = await supabase
+        .from('organization_settings')
+        .select('company_operating_name, email')
+        .maybeSingle()
+
+      const metadataName =
+        typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name.trim() : ''
+      const operatingName = settings?.company_operating_name?.trim() ?? ''
+      const emailName = user.email?.split('@')[0] ?? ''
+      const name = operatingName || metadataName || emailName || 'Compte'
+      setProfileName(name)
+    }
+
+    loadProfile()
+  }, [])
+
   async function signOut() {
     await supabase.auth.signOut()
     navigate('/login')
@@ -88,7 +186,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen min-h-[100dvh] flex flex-col md:flex-row">
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-2 bg-white border-b border-border safe-top">
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between gap-2 px-3 py-2 bg-white border-b border-border safe-top">
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
@@ -96,12 +194,19 @@ export function Layout() {
           aria-expanded={menuOpen}
           aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
         >
-          <MenuIcon open={menuOpen} />
+          <IconMenu open={menuOpen} />
         </button>
         <div className="flex flex-col items-center min-w-0 flex-1 px-1">
           <span className="font-semibold text-sm truncate w-full text-center">{pageTitle}</span>
         </div>
-        <div className="w-[44px]" aria-hidden />
+        <NavLink
+          to="/settings"
+          className={settingsLinkClass(settingsActive)}
+          aria-label="Paramètres"
+          title="Paramètres"
+        >
+          <IconSettings />
+        </NavLink>
       </header>
 
       {menuOpen && (
@@ -118,97 +223,60 @@ export function Layout() {
           menuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="hidden md:block px-5 py-6 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-yuzu flex items-center justify-center text-sm font-bold">Y</div>
-            <div>
-              <div className="font-semibold text-sm leading-tight">Yuzu Finance</div>
-              <div className="text-xs text-muted">Espace privé</div>
-            </div>
-          </div>
+        <div className="hidden md:block px-4 py-4 border-b border-border shrink-0">
+          <ProfileHeader profileName={profileName} settingsActive={settingsActive} />
         </div>
-        <div className="md:hidden flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
-          <span className="font-semibold text-sm">Navigation</span>
-          <button
-            type="button"
-            onClick={() => setMenuOpen(false)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-stone-100"
-            aria-label="Fermer"
-          >
-            <MenuIcon open />
-          </button>
-        </div>
-        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-4">
-          <div>
-            <NavLink
-              to="/"
-              end
+        <div className="md:hidden flex flex-col gap-3 px-4 py-4 border-b border-border shrink-0">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-sm">Navigation</span>
+            <button
+              type="button"
               onClick={() => setMenuOpen(false)}
-              className={({ isActive }) => navLinkClass(isActive)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-stone-100"
+              aria-label="Fermer"
             >
-              Tableau de bord
-            </NavLink>
+              <IconMenu open />
+            </button>
+          </div>
+          <ProfileHeader
+            profileName={profileName}
+            settingsActive={settingsActive}
+            onNavigate={() => setMenuOpen(false)}
+            compact
+          />
+        </div>
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-1">
+          <div>
+            <div className={sectionHeaderClass(true)}>Vue d&apos;ensemble</div>
+            <div className={navGroupClass()}>
+              <NavLink
+                to="/"
+                end
+                onClick={() => setMenuOpen(false)}
+                className={({ isActive }) => navLinkClass(isActive)}
+              >
+                <IconLayoutDashboard className={location.pathname === '/' ? 'opacity-100' : 'opacity-70'} />
+                Tableau de bord
+              </NavLink>
+            </div>
           </div>
 
           {primaryNav.map((group) => (
             <div key={group.section}>
-              <div className="px-3 text-[10px] uppercase tracking-wider text-muted mb-1">{group.section}</div>
-              <div className="space-y-0.5">
+              <div className={sectionHeaderClass(false)}>{group.section}</div>
+              <div className={navGroupClass()}>
                 {group.links.map((l) => {
-                  const otherActive =
-                    l.to === '/other' &&
-                    otherModulePaths.some(
-                      (p) => location.pathname === p || location.pathname.startsWith(`${p}/`)
-                    )
-                  const billingActive = location.pathname.startsWith('/billing')
-                  if (l.to === '/billing/projects') {
-                    return (
-                      <NavLink
-                        key={l.to}
-                        to={l.to}
-                        end={l.end}
-                        onClick={() => setMenuOpen(false)}
-                        className={navLinkClass(billingActive)}
-                      >
-                        {l.label}
-                      </NavLink>
-                    )
-                  }
-                  const compensationActive = location.pathname.startsWith('/compensation')
-                  if (l.to === '/compensation/payroll') {
-                    return (
-                      <NavLink
-                        key={l.to}
-                        to={l.to}
-                        end={l.end}
-                        onClick={() => setMenuOpen(false)}
-                        className={navLinkClass(compensationActive)}
-                      >
-                        {l.label}
-                      </NavLink>
-                    )
-                  }
-                  if (l.to === '/other') {
-                    return (
-                      <NavLink
-                        key={l.to}
-                        to={l.to}
-                        end={l.end}
-                        onClick={() => setMenuOpen(false)}
-                        className={navLinkClass(otherActive)}
-                      >
-                        {l.label}
-                      </NavLink>
-                    )
-                  }
+                  const active = isNavItemActive(l.to, location.pathname)
+                  const Icon = l.icon
                   return (
                     <NavLink
                       key={l.to}
                       to={l.to}
                       end={l.end}
                       onClick={() => setMenuOpen(false)}
-                      className={({ isActive }) => navLinkClass(isActive)}
+                      className={navLinkClass(active)}
                     >
+                      <Icon className={active ? 'opacity-100' : 'opacity-70'} />
                       {l.label}
                     </NavLink>
                   )
@@ -217,15 +285,13 @@ export function Layout() {
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t border-border safe-bottom shrink-0 space-y-1">
-          <NavLink
-            to="/settings"
-            onClick={() => setMenuOpen(false)}
-            className={({ isActive }) => `${navLinkClass(isActive)} w-full`}
+        <div className="px-3 py-4 border-t border-border safe-bottom shrink-0">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-2.5 px-3 min-h-[44px] md:min-h-0 text-sm text-stone-600"
+            onClick={signOut}
           >
-            Paramètres
-          </NavLink>
-          <Button variant="ghost" className="w-full text-xs" onClick={signOut}>
+            <IconLogOut className="opacity-70" />
             Déconnexion
           </Button>
         </div>
