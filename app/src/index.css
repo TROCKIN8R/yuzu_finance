@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --color-yuzu: #e5a817;
+  --color-yuzu-light: #fef9e8;
+  --color-yuzu-dark: #b8860b;
+  --color-ink: #1c1917;
+  --color-muted: #78716c;
+  --color-surface: #fafaf9;
+  --color-border: #e7e5e4;
+}
+
+body {
+  @apply bg-surface text-ink font-sans antialiased;
+}

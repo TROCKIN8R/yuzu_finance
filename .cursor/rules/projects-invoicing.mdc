@@ -1,0 +1,38 @@
+---
+description: Project time tracking and invoice generation
+globs: projects/**,clients/**,invoices/issued/**,scripts/**,config/invoicing.example.json,templates/invoice.md
+alwaysApply: false
+---
+
+# Projects & invoicing
+
+## Primary store: Supabase (UI)
+
+- Web app in `app/` — see `supabase/README.md`.
+- Tables: `clients`, `projects`, `time_entries`, `invoices`, `payments`, `organization_settings`.
+- Unbilled time: `time_entries.invoice_id IS NULL`.
+
+## Legacy CSV + CLI (bulk / agents)
+
+- `clients/clients.csv` — client master
+- `projects/projects.csv` — projects linked to `client_id`, with `default_hourly_rate`
+- `projects/time-entries.csv` — hours log; `invoiced=yes` after billing
+- `invoices/invoice-registry.csv` — issued invoice index
+- `config/invoicing.local.json` or Supabase `organization_settings` — company block, tax flags
+
+## CLI (from repo root)
+
+```bash
+python3 scripts/add_project.py client --name "..." --email "..."
+python3 scripts/add_project.py project --client CLIENT_ID --name "..." --rate 150
+python3 scripts/log_time.py --project PROJECT_ID --hours 2.5 --desc "..."
+python3 scripts/generate_invoice.py --project PROJECT_ID --dry-run
+python3 scripts/generate_invoice.py --project PROJECT_ID
+```
+
+## Rules
+
+- One line per time entry; never delete billed entries.
+- `rate_override` on a row overrides project `default_hourly_rate` for that entry only.
+- Set `charge_gst` / `charge_qst` in `config/invoicing.json` when registered.
+- Generated invoices land in `invoices/issued/`; update registry `status` (draft → sent → paid).

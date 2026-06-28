@@ -1,0 +1,41 @@
+---
+description: Core context for Québec corp finance work in this workspace
+alwaysApply: true
+---
+
+# Québec incorporated company — agent context
+
+## Entity
+
+- Québec **société par actions** (incorporated), **single shareholder/director**.
+- That person is also a **paid employee** — payroll rules apply fully (not contractor treatment).
+- Currency: **CAD**. Timezone: **America/Montreal**.
+
+## Start here
+
+1. Read `AGENTS.md`, `company/profile.md`, and `company/share-structure.md` before dividends or equity work.
+2. Work only inside this repo’s folder structure; do not scatter files.
+3. Label outputs **draft for owner/CPA review** — agents are not CPAs or lawyers.
+
+## Québec + federal obligations (awareness)
+
+| Area | Federal (CRA) | Québec (Revenu Québec) |
+|------|---------------|------------------------|
+| Corporate income tax | T2 | CO-17 |
+| Payroll slips | T4 | RL-1 |
+| Source deductions | RP remittances | TPZ remittances |
+| Sales tax | GST/HST | QST |
+| Annual info | — | Déclaration annuelle (NEQ) |
+
+Agents **prepare support schedules**; owner or CPA **files** unless explicitly told to draft a specific form field-by-field.
+
+## Owner-employee specifics
+
+- Record salary through payroll, not random shareholder draws.
+- **Dividends** (if any) are separate from payroll — track in equity, not wages.
+- Reasonable salary, benefits, and vacation should follow `company/profile.md` and employment law norms.
+
+## Deadlines
+
+- Flag upcoming remittance and filing dates; never assume they were submitted.
+- If a deadline is ≤5 business days away and work is incomplete, stop and alert the owner.

@@ -1,0 +1,35 @@
+---
+description: Agent behavior when editing or creating finance files
+alwaysApply: true
+---
+
+# Agent conduct
+
+## Before changing data
+
+1. Read existing files for the period — do not overwrite silently.
+2. Prefer **append** (new rows, new dated files) over editing historical posted entries.
+3. Correcting errors: add reversing entry + corrected entry; note both in `company/decision-log.md`.
+
+## Communication
+
+- Summaries: table with totals, period covered, and list of source files used.
+- Flag **assumptions** explicitly.
+- Use "draft" / "for review" on anything that could affect tax or payroll.
+
+## Tooling
+
+- CSV and Markdown for ledgers and reports (git-friendly).
+- Excel only when owner requests or template exists in `templates/`.
+- Scripts go in `scripts/` with a one-line README if non-obvious.
+
+## Scope control
+
+- One task per change set when possible (e.g. "March bank rec" not "March rec + payroll + new COA").
+- Do not create marketing docs, unrelated code, or extra READMEs unless asked.
+
+## Prohibited
+
+- Fabricating balances or transactions to "make reports balance."
+- Auto-filing with Revenu Québec or CRA.
+- Recommending specific salary/dividend splits as tax advice.

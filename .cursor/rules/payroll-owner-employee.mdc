@@ -1,0 +1,39 @@
+---
+description: Owner-employee payroll rules for Québec
+globs: payroll/**,taxes/**
+alwaysApply: false
+---
+
+# Payroll — single owner-employee
+
+## Treatment
+
+- Owner is an **employee (T4 + RL-1)**, not self-employed payroll.
+- Pay runs live in `payroll/runs/YYYY-MM-DD_pay-period.csv`.
+- Remittance records in `payroll/remittances/`.
+
+## Each pay run must include
+
+- Gross pay, vacation pay (if applicable), taxable benefits
+- Employee deductions: income tax, CPP, EI, QPIP (if applicable), Québec tax
+- Employer portions: matching CPP/EI/QPIP employer shares, employer contributions
+- Net pay and payment date / method
+
+## Equity vs payroll
+
+| Type | Where it goes |
+|------|----------------|
+| Salary / wages | Payroll expense + liabilities |
+| Dividends | Equity / retained earnings — **not** payroll |
+| Shareholder loan | Liability account — track repayments |
+| Owner contribution | Equity |
+
+## Slips & remittances
+
+- Draft T4/RL-1 summaries in `payroll/year-end/` — CPA files.
+- Track CRA RP and Revenu Québec TPZ remittance due dates; never mark paid without owner confirmation.
+
+## Rates
+
+- Use current CRA and Revenu Québec tables for the tax year in `company/profile.md`.
+- If rates are uncertain, cite the source URL and year; do not guess.

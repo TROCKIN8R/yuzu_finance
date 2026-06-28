@@ -1,0 +1,34 @@
+---
+description: Protect sensitive financial and personal data
+alwaysApply: true
+---
+
+# Data security & privacy
+
+## Never commit or paste in chat
+
+- Full bank account numbers, routing numbers, online banking passwords
+- Full SIN, full credit card numbers, API keys, `.env` contents
+- **Supabase service_role key** (bypasses all RLS)
+- Populated `clients/*.csv`, `projects/*.csv`, `invoices/issued/` (use Supabase)
+- `company/profile.local.md`, `company/legal-index.local.md`, `config/invoicing.local.json`
+- Unredacted PDF statements (store locally; commit redacted extracts if needed)
+
+## Redaction
+
+- Bank statements: keep last 4 digits only in shared files.
+- Employee/shareholder SIN: reference as `***-***-XXX` (last 3 only if required for matching).
+
+## Separation
+
+- **Corporate only** in this repo. Personal expenses paid personally → note for reimbursement; do not mix into corporate GL without owner approval.
+- Credit cards: corporate card transactions only in corporate books unless explicitly reclassified.
+
+## File handling
+
+- Preserve original filenames in `archive/` when renaming for convention.
+- Do not delete financial source documents; move superseded files to `archive/YYYY/`.
+
+## Git
+
+- Respect `.gitignore`. If a secret was committed, tell the owner immediately — do not rewrite history without explicit instruction.

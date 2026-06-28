@@ -1,0 +1,15 @@
+-- Example: set organization_settings after first login.
+-- Replace USER_UUID with your auth.users.id from Supabase dashboard.
+-- Run locally only — do not put real NEQ, addresses, or names in this public repo.
+
+-- update public.organization_settings set
+--   company_legal_name = 'Your Company Inc.',
+--   company_operating_name = '',
+--   address_line1 = '',
+--   city = '',
+--   province = 'QC',
+--   postal_code = '',
+--   neq = '',
+--   payment_terms_days = 30,
+--   payment_instructions = ''
+-- where user_id = 'USER_UUID';
