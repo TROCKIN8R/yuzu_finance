@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Client, Project, ProjectStatus } from '../lib/types'
-import { formatCad } from '../lib/format'
+import type { BillingType, Client, Project, ProjectStatus } from '../lib/types'
 import { matchesSearch } from '../lib/filters'
+import { billingTypeLabel, projectAmountLabel } from '../lib/invoice'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -19,7 +19,9 @@ export function ProjectsPage() {
     client_id: '',
     name: '',
     status: 'active' as ProjectStatus,
+    billing_type: 'hourly' as BillingType,
     default_hourly_rate: 150,
+    fixed_price: 3500,
     notes: '',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -31,7 +33,15 @@ export function ProjectsPage() {
     return rows.filter((p) => {
       if (clientFilter && p.client_id !== clientFilter) return false
       if (statusFilter && p.status !== statusFilter) return false
-      return matchesSearch(search, p.name, p.clients?.legal_name, p.notes, p.default_hourly_rate)
+      return matchesSearch(
+        search,
+        p.name,
+        p.clients?.legal_name,
+        p.notes,
+        p.default_hourly_rate,
+        p.fixed_price,
+        p.billing_type
+      )
     })
   }, [rows, search, clientFilter, statusFilter])
 
@@ -51,7 +61,15 @@ export function ProjectsPage() {
   }
 
   function openNew() {
-    setForm({ client_id: clients[0]?.id ?? '', name: '', status: 'active', default_hourly_rate: 150, notes: '' })
+    setForm({
+      client_id: clients[0]?.id ?? '',
+      name: '',
+      status: 'active',
+      billing_type: 'hourly',
+      default_hourly_rate: 150,
+      fixed_price: 3500,
+      notes: '',
+    })
     setEditingId(null)
     setOpen(true)
   }
@@ -61,7 +79,9 @@ export function ProjectsPage() {
       client_id: p.client_id,
       name: p.name,
       status: p.status,
+      billing_type: p.billing_type === 'fixed' ? 'fixed' : 'hourly',
       default_hourly_rate: p.default_hourly_rate,
+      fixed_price: p.fixed_price != null ? Number(p.fixed_price) : 3500,
       notes: p.notes ?? '',
     })
     setEditingId(p.id)
@@ -74,7 +94,9 @@ export function ProjectsPage() {
       client_id: form.client_id,
       name: form.name,
       status: form.status,
-      default_hourly_rate: form.default_hourly_rate,
+      billing_type: form.billing_type,
+      default_hourly_rate: form.billing_type === 'hourly' ? form.default_hourly_rate : 0,
+      fixed_price: form.billing_type === 'fixed' ? form.fixed_price : null,
       notes: form.notes || null,
     }
     if (editingId) {
@@ -130,64 +152,125 @@ export function ProjectsPage() {
                 { value: 'archived', label: 'archived' },
               ]}
             />
-            <ClearFiltersButton visible={hasFilters} onClick={() => { setSearch(''); setClientFilter(''); setStatusFilter('') }} />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setClientFilter('')
+                setStatusFilter('')
+              }}
+            />
           </ListToolbar>
           {filtered.length === 0 ? (
             <EmptyState message="Aucun projet ne correspond aux filtres." />
           ) : (
-        <DataTable>
-
-            <thead className="bg-stone-50 text-muted text-left">
-              <tr>
-                <th className="px-4 py-3 font-medium">Projet</th>
-                <th className="px-4 py-3 font-medium">Client</th>
-                <th className="px-4 py-3 font-medium">Taux</th>
-                <th className="px-4 py-3 font-medium">Statut</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-stone-50/50">
-                  <td className="px-4 py-3 font-medium">{p.name}</td>
-                  <td className="px-4 py-3 text-muted">{p.clients?.legal_name ?? '—'}</td>
-                  <td className="px-4 py-3">{formatCad(p.default_hourly_rate)}/h</td>
-                  <td className="px-4 py-3">
-                    <Badge label={p.status} tone={p.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(p)}>
-                      Modifier
-                    </Button>
-                    <Button variant="danger" className={tableActionClass} onClick={() => remove(p.id)}>
-                      Suppr.
-                    </Button>
-                  </td>
+            <DataTable minWidth={900}>
+              <thead className="bg-stone-50 text-muted text-left">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Projet</th>
+                  <th className="px-4 py-3 font-medium">Client</th>
+                  <th className="px-4 py-3 font-medium">Facturation</th>
+                  <th className="px-4 py-3 font-medium">Montant</th>
+                  <th className="px-4 py-3 font-medium">Statut</th>
+                  <th className="px-4 py-3" />
                 </tr>
-              ))}
-            </tbody>
-        </DataTable>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filtered.map((p) => (
+                  <tr key={p.id} className="hover:bg-stone-50/50">
+                    <td className="px-4 py-3 font-medium">{p.name}</td>
+                    <td className="px-4 py-3 text-muted">{p.clients?.legal_name ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <Badge label={billingTypeLabel(p.billing_type)} tone={p.billing_type === 'fixed' ? 'sent' : 'active'} />
+                    </td>
+                    <td className="px-4 py-3">{projectAmountLabel(p)}</td>
+                    <td className="px-4 py-3">
+                      <Badge label={p.status} tone={p.status} />
+                      {p.billing_type === 'fixed' && p.invoice_id && (
+                        <span className="ml-2 text-xs text-muted">facturé</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right space-x-2">
+                      <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(p)}>
+                        Modifier
+                      </Button>
+                      <Button variant="danger" className={tableActionClass} onClick={() => remove(p.id)}>
+                        Suppr.
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
           )}
         </>
       )}
       <Modal title={editingId ? 'Modifier le projet' : 'Nouveau projet'} open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">
           <Field label="Client *">
-            <select className={inputClass} required value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
+            <select
+              className={inputClass}
+              required
+              value={form.client_id}
+              onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+            >
               {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.legal_name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.legal_name}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Nom du projet *">
-            <input className={inputClass} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <input
+              className={inputClass}
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </Field>
+          <Field label="Type de facturation *">
+            <select
+              className={inputClass}
+              value={form.billing_type}
+              onChange={(e) => setForm({ ...form, billing_type: e.target.value as BillingType })}
+            >
+              <option value="hourly">Horaire (temps enregistré)</option>
+              <option value="fixed">Forfait (montant fixe)</option>
+            </select>
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Taux horaire (CAD) *">
-              <input type="number" step="0.01" min="0" className={inputClass} required value={form.default_hourly_rate} onChange={(e) => setForm({ ...form, default_hourly_rate: Number(e.target.value) })} />
-            </Field>
+            {form.billing_type === 'hourly' ? (
+              <Field label="Taux horaire (CAD) *">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className={inputClass}
+                  required
+                  value={form.default_hourly_rate}
+                  onChange={(e) => setForm({ ...form, default_hourly_rate: Number(e.target.value) })}
+                />
+              </Field>
+            ) : (
+              <Field label="Montant forfaitaire (CAD) *">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className={inputClass}
+                  required
+                  value={form.fixed_price}
+                  onChange={(e) => setForm({ ...form, fixed_price: Number(e.target.value) })}
+                />
+              </Field>
+            )}
             <Field label="Statut">
-              <select className={inputClass} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ProjectStatus })}>
+              <select
+                className={inputClass}
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as ProjectStatus })}
+              >
                 <option value="active">active</option>
                 <option value="on_hold">on_hold</option>
                 <option value="completed">completed</option>
@@ -195,8 +278,15 @@ export function ProjectsPage() {
               </select>
             </Field>
           </div>
+          {form.billing_type === 'fixed' && (
+            <p className="text-xs text-muted">
+              Les projets forfaitaires apparaissent dans Factures → Créer une facture. Le temps ne s&apos;y applique pas.
+            </p>
+          )}
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              Annuler
+            </Button>
             <Button type="submit">Enregistrer</Button>
           </div>
         </form>

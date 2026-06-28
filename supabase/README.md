@@ -10,7 +10,7 @@ Run **`supabase/setup.sql`** once in the Supabase **SQL Editor** on an empty pro
 
 ### Existing project (already ran older migrations)
 
-Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/archive/`.
+Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/archive/` in filename order. Latest: `20260701000000_fixed_price_invoice_lines.sql` (forfait projects + per-line invoice taxes).
 
 ## Auth lockdown
 
@@ -29,6 +29,6 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 
 | Module | Tables |
 |--------|--------|
-| Core | `organization_settings`, `clients`, `projects`, `time_entries`, `invoices`, `payments` |
+| Core | `organization_settings`, `clients`, `projects`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
 | Finance v2 | `expenses`, `payroll_runs`, `sales_tax_periods`, `corporate_tax_records` |
 | HR | `employees`, `dividends`, `dividend_allocations` |

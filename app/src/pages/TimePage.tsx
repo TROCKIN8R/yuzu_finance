@@ -77,7 +77,7 @@ export function TimePage() {
       supabase.from('employees').select('*').eq('active', true).order('last_name').order('first_name'),
     ])
     setAllProjects((p.data as Project[]) ?? [])
-    setProjects(((p.data as Project[]) ?? []).filter((x) => x.status === 'active'))
+    setProjects(((p.data as Project[]) ?? []).filter((x) => x.status === 'active' && x.billing_type !== 'fixed'))
     setRows((entries.data as TimeEntry[]) ?? [])
     setEmployees((emp.data as Employee[]) ?? [])
   }

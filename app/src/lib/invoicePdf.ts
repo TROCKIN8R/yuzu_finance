@@ -1,16 +1,17 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import type { Client, Invoice, OrganizationSettings, TimeEntry } from './types'
-import { effectiveRate, formatDate, lineAmount } from './format'
+import type { Client, Invoice, InvoiceLineItem, OrganizationSettings } from './types'
+import { formatDate } from './format'
+import type { InvoiceLineDraft } from './invoice'
 
 interface PdfInput {
   invoice: Invoice
   client: Client
   settings: OrganizationSettings | null
-  entries: TimeEntry[]
+  lines: (InvoiceLineItem | InvoiceLineDraft)[]
 }
 
-export function downloadInvoicePdf({ invoice, client, settings, entries }: PdfInput) {
+export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInput) {
   const doc = new jsPDF()
   const company = settings?.company_legal_name || 'Facture'
   const margin = 14
@@ -57,24 +58,40 @@ export function downloadInvoicePdf({ invoice, client, settings, entries }: PdfIn
   }
   y += 6
 
-  const rows = entries.map((e) => {
-    const rate = e.projects ? effectiveRate(e, e.projects) : 0
-    const amt = lineAmount(Number(e.hours), rate)
+  const rows = lines.map((line) => {
+    const qtyLabel =
+      line.unit_label === 'h' ? `${Number(line.quantity).toFixed(2)} h` : `${Number(line.quantity).toFixed(0)}`
+    const unitPrice =
+      line.unit_label === 'h'
+        ? `${Number(line.unit_price).toFixed(2)} $/h`
+        : `${Number(line.unit_price).toFixed(2)} $`
     return [
-      formatDate(e.entry_date),
-      e.description,
-      Number(e.hours).toFixed(2),
-      `${rate.toFixed(2)} $`,
-      `${amt.toFixed(2)} $`,
+      line.line_date ? formatDate(line.line_date) : '—',
+      line.description,
+      qtyLabel,
+      unitPrice,
+      `${Number(line.subtotal).toFixed(2)} $`,
+      `${Number(line.gst).toFixed(2)} $`,
+      `${Number(line.qst).toFixed(2)} $`,
+      `${Number(line.total).toFixed(2)} $`,
     ]
   })
 
   autoTable(doc, {
     startY: y,
-    head: [['Date', 'Description', 'Heures', 'Taux', 'Montant']],
+    head: [['Date', 'Description', 'Qté', 'Prix unit.', 'Sous-total', 'TPS', 'TVQ', 'Total']],
     body: rows,
-    styles: { fontSize: 8 },
+    styles: { fontSize: 7 },
     headStyles: { fillColor: [229, 168, 23] },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right' },
+      7: { halign: 'right' },
+    },
   })
 
   const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8

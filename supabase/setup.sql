@@ -128,7 +128,8 @@ create table public.projects (
   status public.project_status not null default 'active',
   default_hourly_rate numeric(10, 2) not null,
   currency text not null default 'CAD',
-  billing_type text not null default 'hourly',
+  billing_type text not null default 'hourly' check (billing_type in ('hourly', 'fixed')),
+  fixed_price numeric(10, 2) check (fixed_price is null or fixed_price >= 0),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -244,6 +245,46 @@ create trigger invoices_updated_at
 alter table public.time_entries
   add constraint time_entries_invoice_id_fkey
   foreign key (invoice_id) references public.invoices (id) on delete set null;
+
+alter table public.projects
+  add column invoice_id uuid references public.invoices (id) on delete set null;
+
+create index projects_invoice_id_idx on public.projects (invoice_id);
+
+-- ---------------------------------------------------------------------------
+-- Invoice line items (per-row taxes)
+-- ---------------------------------------------------------------------------
+
+create table public.invoice_line_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  invoice_id uuid not null references public.invoices (id) on delete cascade,
+  project_id uuid references public.projects (id) on delete set null,
+  time_entry_id uuid references public.time_entries (id) on delete set null,
+  line_date date,
+  description text not null,
+  quantity numeric(10, 2) not null default 1 check (quantity > 0),
+  unit_label text not null default 'forfait',
+  unit_price numeric(12, 2) not null check (unit_price >= 0),
+  subtotal numeric(12, 2) not null check (subtotal >= 0),
+  gst numeric(12, 2) not null default 0 check (gst >= 0),
+  qst numeric(12, 2) not null default 0 check (qst >= 0),
+  total numeric(12, 2) not null check (total >= 0),
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index invoice_line_items_user_id_idx on public.invoice_line_items (user_id);
+create index invoice_line_items_invoice_id_idx on public.invoice_line_items (invoice_id);
+
+create trigger invoice_line_items_set_user_id
+  before insert on public.invoice_line_items
+  for each row execute function public.set_user_id();
+
+create trigger invoice_line_items_updated_at
+  before update on public.invoice_line_items
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- Payments
@@ -460,6 +501,7 @@ alter table public.projects enable row level security;
 alter table public.employees enable row level security;
 alter table public.time_entries enable row level security;
 alter table public.invoices enable row level security;
+alter table public.invoice_line_items enable row level security;
 alter table public.payments enable row level security;
 alter table public.payroll_runs enable row level security;
 alter table public.expenses enable row level security;
@@ -488,6 +530,9 @@ create policy "time_entries_all_own" on public.time_entries
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "invoices_all_own" on public.invoices
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "invoice_line_items_all_own" on public.invoice_line_items
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "payments_all_own" on public.payments
@@ -521,6 +566,7 @@ revoke all on table public.projects from anon, public;
 revoke all on table public.employees from anon, public;
 revoke all on table public.time_entries from anon, public;
 revoke all on table public.invoices from anon, public;
+revoke all on table public.invoice_line_items from anon, public;
 revoke all on table public.payments from anon, public;
 revoke all on table public.payroll_runs from anon, public;
 revoke all on table public.expenses from anon, public;
@@ -535,6 +581,7 @@ grant select, insert, update, delete on table public.projects to authenticated;
 grant select, insert, update, delete on table public.employees to authenticated;
 grant select, insert, update, delete on table public.time_entries to authenticated;
 grant select, insert, update, delete on table public.invoices to authenticated;
+grant select, insert, update, delete on table public.invoice_line_items to authenticated;
 grant select, insert, update, delete on table public.payments to authenticated;
 grant select, insert, update, delete on table public.payroll_runs to authenticated;
 grant select, insert, update, delete on table public.expenses to authenticated;

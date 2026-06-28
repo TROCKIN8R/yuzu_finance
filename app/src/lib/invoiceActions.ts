@@ -2,7 +2,9 @@ import { supabase } from './supabase'
 import { deriveInvoiceStatus } from './invoice'
 
 export async function deleteInvoice(invoiceId: string) {
+  await supabase.from('invoice_line_items').delete().eq('invoice_id', invoiceId)
   await supabase.from('time_entries').update({ invoice_id: null }).eq('invoice_id', invoiceId)
+  await supabase.from('projects').update({ invoice_id: null }).eq('invoice_id', invoiceId)
   await supabase.from('payments').delete().eq('invoice_id', invoiceId)
   const { error } = await supabase.from('invoices').delete().eq('id', invoiceId)
   if (error) throw error

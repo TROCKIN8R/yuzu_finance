@@ -122,6 +122,7 @@ export interface CorporateTaxRecord {
 }
 
 export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived'
+export type BillingType = 'hourly' | 'fixed'
 export type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'void'
 
 export interface Client {
@@ -150,11 +151,33 @@ export interface Project {
   status: ProjectStatus
   default_hourly_rate: number
   currency: string
-  billing_type: string
+  billing_type: BillingType
+  fixed_price: number | null
+  invoice_id: string | null
   notes: string | null
   created_at: string
   updated_at: string
   clients?: Pick<Client, 'legal_name'>
+}
+
+export interface InvoiceLineItem {
+  id: string
+  user_id: string
+  invoice_id: string
+  project_id: string | null
+  time_entry_id: string | null
+  line_date: string | null
+  description: string
+  quantity: number
+  unit_label: string
+  unit_price: number
+  subtotal: number
+  gst: number
+  qst: number
+  total: number
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 export interface TimeEntry {
@@ -267,6 +290,12 @@ export interface Database {
           status?: InvoiceStatus
         }
         Update: Partial<OmitSystemFields<Invoice>>
+        Relationships: []
+      }
+      invoice_line_items: {
+        Row: InvoiceLineItem
+        Insert: OmitSystemFields<InvoiceLineItem> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<InvoiceLineItem>>
         Relationships: []
       }
       payments: {
