@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
 
 type NavItem = { to: string; label: string; end?: boolean }
 
-const nav: { section: string; links: NavItem[] }[] = [
-  { section: 'Vue d\'ensemble', links: [{ to: '/', label: 'Tableau de bord', end: true }] },
+const primaryNav: { section: string; links: NavItem[] }[] = [
   {
-    section: 'Opérations',
+    section: 'Facturation',
     links: [
       { to: '/clients', label: 'Clients' },
       { to: '/projects', label: 'Projets' },
@@ -18,21 +17,24 @@ const nav: { section: string; links: NavItem[] }[] = [
     ],
   },
   {
-    section: 'Comptabilité',
+    section: 'Finances',
     links: [
-      { to: '/ledger', label: 'Grand livre' },
-      { to: '/bank', label: 'Banque' },
-      { to: '/adjustments', label: 'Ajustements' },
       { to: '/expenses', label: 'Dépenses' },
-      { to: '/employee-expenses', label: 'Frais à rembourser' },
       { to: '/payroll', label: 'Paie' },
       { to: '/dividends', label: 'Dividendes' },
-      { to: '/sales-tax', label: 'TPS / TVQ' },
-      { to: '/corporate-tax', label: 'Impôts société' },
+      { to: '/bank', label: 'Banque' },
+      { to: '/taxes', label: 'Fiscalité' },
     ],
   },
-  { section: 'Administration', links: [{ to: '/settings', label: 'Paramètres' }] },
 ]
+
+const moreNav: NavItem[] = [
+  { to: '/employee-expenses', label: 'Frais à rembourser' },
+  { to: '/ledger', label: 'Grand livre' },
+  { to: '/adjustments', label: 'Ajustements' },
+]
+
+const morePaths = new Set(moreNav.map((l) => l.to))
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -46,14 +48,44 @@ function MenuIcon({ open }: { open: boolean }) {
   )
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+  )
+}
+
+function navLinkClass(isActive: boolean) {
+  return `block px-3 py-3 md:py-2 rounded-lg text-sm transition-colors min-h-[44px] md:min-h-0 flex items-center ${
+    isActive ? 'bg-yuzu-light text-ink font-medium' : 'text-muted hover:bg-stone-50 hover:text-ink active:bg-stone-100'
+  }`
+}
+
 export function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const onMoreRoute = useMemo(
+    () => morePaths.has(location.pathname) || location.pathname.startsWith('/sales-tax') || location.pathname.startsWith('/corporate-tax'),
+    [location.pathname]
+  )
+  const [moreOpen, setMoreOpen] = useState(onMoreRoute)
 
   useEffect(() => {
     setMenuOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    if (onMoreRoute) setMoreOpen(true)
+  }, [onMoreRoute])
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : ''
@@ -121,30 +153,91 @@ export function Layout() {
           </button>
         </div>
         <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-4">
-          {nav.map((group) => (
+          <div>
+            <NavLink
+              to="/"
+              end
+              onClick={() => setMenuOpen(false)}
+              className={({ isActive }) => navLinkClass(isActive)}
+            >
+              Tableau de bord
+            </NavLink>
+          </div>
+
+          {primaryNav.map((group) => (
             <div key={group.section}>
               <div className="px-3 text-[10px] uppercase tracking-wider text-muted mb-1">{group.section}</div>
               <div className="space-y-0.5">
-                {group.links.map((l) => (
+                {group.links.map((l) => {
+                  const fiscalActive =
+                    l.to === '/taxes' &&
+                    (location.pathname === '/taxes' ||
+                      location.pathname.startsWith('/sales-tax') ||
+                      location.pathname.startsWith('/corporate-tax'))
+                  if (l.to === '/taxes') {
+                    return (
+                      <NavLink
+                        key={l.to}
+                        to={l.to}
+                        end={l.end}
+                        onClick={() => setMenuOpen(false)}
+                        className={navLinkClass(fiscalActive)}
+                      >
+                        {l.label}
+                      </NavLink>
+                    )
+                  }
+                  return (
+                    <NavLink
+                      key={l.to}
+                      to={l.to}
+                      end={l.end}
+                      onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) => navLinkClass(isActive)}
+                    >
+                      {l.label}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setMoreOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[10px] uppercase tracking-wider text-muted hover:bg-stone-50 hover:text-ink min-h-[44px] md:min-h-0"
+              aria-expanded={moreOpen}
+            >
+              <span>Plus</span>
+              <Chevron open={moreOpen} />
+            </button>
+            {moreOpen && (
+              <div className="space-y-0.5 mt-0.5">
+                {moreNav.map((l) => (
                   <NavLink
                     key={l.to}
                     to={l.to}
                     end={l.end}
                     onClick={() => setMenuOpen(false)}
-                    className={({ isActive }) =>
-                      `block px-3 py-3 md:py-2 rounded-lg text-sm transition-colors min-h-[44px] md:min-h-0 flex items-center ${
-                        isActive ? 'bg-yuzu-light text-ink font-medium' : 'text-muted hover:bg-stone-50 hover:text-ink active:bg-stone-100'
-                      }`
-                    }
+                    className={({ isActive }) => navLinkClass(isActive)}
                   >
                     {l.label}
                   </NavLink>
                 ))}
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </nav>
-        <div className="p-3 border-t border-border safe-bottom shrink-0">
+        <div className="p-3 border-t border-border safe-bottom shrink-0 space-y-1">
+          <NavLink
+            to="/settings"
+            onClick={() => setMenuOpen(false)}
+            className={({ isActive }) => `${navLinkClass(isActive)} w-full`}
+          >
+            Paramètres
+          </NavLink>
           <Button variant="ghost" className="w-full text-xs" onClick={signOut}>
             Déconnexion
           </Button>

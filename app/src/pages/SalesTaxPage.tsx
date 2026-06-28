@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
@@ -115,7 +116,12 @@ export function SalesTaxPage() {
   return (
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Taxes de vente (TPS / TVQ)</h1>
+        <div>
+          <Link to="/taxes" className="text-sm text-yuzu-dark hover:underline">
+            ← Fiscalité
+          </Link>
+          <h1 className="text-2xl font-semibold mt-1">Taxes de vente (TPS / TVQ)</h1>
+        </div>
         <Button onClick={openNew}>Nouvelle période</Button>
       </div>
       {rows.length === 0 ? (

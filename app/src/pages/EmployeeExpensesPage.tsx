@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, ExpenseCategory, OrganizationSettings } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
@@ -171,7 +172,11 @@ export function EmployeeExpensesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Frais à rembourser</h1>
           <p className="text-sm text-muted mt-1">
-            Dépenses payées personnellement — à inclure lors d&apos;une paie.
+            Dépenses payées personnellement — à inclure lors d&apos;une{' '}
+            <Link to="/payroll" className="text-yuzu-dark hover:underline font-medium">
+              paie
+            </Link>
+            .
             {unreimbursedTotal > 0 && (
               <> En attente : <strong>{formatCad(unreimbursedTotal)}</strong></>
             )}

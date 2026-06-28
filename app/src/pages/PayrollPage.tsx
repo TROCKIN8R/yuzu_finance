@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
@@ -466,9 +467,17 @@ export function PayrollPage() {
               Coût total : {formatCad(ytdCost)}
             </p>
           </div>
-          <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
-            Nouvelle paie
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/employee-expenses"
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
+            >
+              Frais à rembourser
+            </Link>
+            <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
+              Nouvelle paie
+            </Button>
+          </div>
         </div>
         {rows.length === 0 ? (
           <EmptyState message="Aucune paie enregistrée." />

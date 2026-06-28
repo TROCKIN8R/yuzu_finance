@@ -14,6 +14,7 @@ import { PayrollPage } from './pages/PayrollPage'
 import { DividendsPage } from './pages/DividendsPage'
 import { SalesTaxPage } from './pages/SalesTaxPage'
 import { CorporateTaxPage } from './pages/CorporateTaxPage'
+import { TaxesHubPage } from './pages/TaxesHubPage'
 import { GeneralLedgerPage } from './pages/GeneralLedgerPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { BankPage } from './pages/BankPage'
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="employee-expenses" element={<EmployeeExpensesPage />} />
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="dividends" element={<DividendsPage />} />
+          <Route path="taxes" element={<TaxesHubPage />} />
           <Route path="sales-tax" element={<SalesTaxPage />} />
           <Route path="corporate-tax" element={<CorporateTaxPage />} />
           <Route path="ledger" element={<GeneralLedgerPage />} />

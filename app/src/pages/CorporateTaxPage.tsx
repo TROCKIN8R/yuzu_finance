@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { CorporateTaxRecord, CorpTaxStatus } from '../lib/types'
 import { formatCad, formatDate } from '../lib/format'
@@ -102,7 +103,10 @@ export function CorporateTaxPage() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold">Impôts société</h1>
+          <Link to="/taxes" className="text-sm text-yuzu-dark hover:underline">
+            ← Fiscalité
+          </Link>
+          <h1 className="text-2xl font-semibold mt-1">Impôts société</h1>
           <p className="text-sm text-muted mt-1">
             Solde dû{hasFilters ? ' (filtré)' : ''} : {formatCad(due)}
           </p>
