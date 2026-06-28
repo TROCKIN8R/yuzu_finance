@@ -932,32 +932,34 @@ export function BankPage() {
                   Aucun dividende déclaré en attente — déclarez une distribution dans Rémunération d&apos;abord.
                 </p>
               ) : (
-                <Field label="Dividende déclaré *">
-                  <select
-                    className={inputClass}
-                    required
-                    value={dividendForm.dividend_id}
-                    onChange={(e) => setDividendForm({ dividend_id: e.target.value })}
-                  >
-                    {declaredDividends.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {formatDate(d.declared_date)} · {formatCad(d.total_amount)}
-                        {Number(d.paid_amount) > 0 ? ` · payé ${formatCad(d.paid_amount)}` : ''}
-                        {d.description ? ` · ${d.description}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                {selectedDividend && assignTx && (
-                  <p className="text-xs text-muted">
-                    Ligne bancaire {formatCad(Math.abs(Number(assignTx.amount)))} · solde à payer{' '}
-                    {formatCad(Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))}
-                    {Math.abs(Math.abs(Number(assignTx.amount)) - (Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))) >
-                      0.01 && (
-                      <span className="text-amber-800"> · paiement partiel ou écart de montant</span>
-                    )}
-                  </p>
-                )}
+                <>
+                  <Field label="Dividende déclaré *">
+                    <select
+                      className={inputClass}
+                      required
+                      value={dividendForm.dividend_id}
+                      onChange={(e) => setDividendForm({ dividend_id: e.target.value })}
+                    >
+                      {declaredDividends.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {formatDate(d.declared_date)} · {formatCad(d.total_amount)}
+                          {Number(d.paid_amount) > 0 ? ` · payé ${formatCad(d.paid_amount)}` : ''}
+                          {d.description ? ` · ${d.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {selectedDividend && assignTx && (
+                    <p className="text-xs text-muted">
+                      Ligne bancaire {formatCad(Math.abs(Number(assignTx.amount)))} · solde à payer{' '}
+                      {formatCad(Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))}
+                      {Math.abs(Math.abs(Number(assignTx.amount)) - (Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))) >
+                        0.01 && (
+                        <span className="text-amber-800"> · paiement partiel ou écart de montant</span>
+                      )}
+                    </p>
+                  )}
+                </>
               )}
             </>
           ) : assignKind === 'sales_tax' ? (
