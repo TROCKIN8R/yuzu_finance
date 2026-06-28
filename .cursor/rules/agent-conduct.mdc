@@ -20,8 +20,7 @@ alwaysApply: true
 ## Tooling
 
 - CSV and Markdown for ledgers and reports (git-friendly).
-- Excel only when owner requests or template exists in `templates/`.
-- Scripts go in `scripts/` with a one-line README if non-obvious.
+- Prefer structured data in Supabase; export to Excel locally only when the owner requests it.
 
 ## Scope control
 

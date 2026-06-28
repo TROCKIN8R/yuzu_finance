@@ -1,6 +1,6 @@
 ---
 description: Bookkeeping standards for ledgers and reconciliations
-globs: bookkeeping/**,reports/**,banking/**
+globs: app/src/lib/financials.ts,app/src/pages/DashboardPage.tsx,app/src/pages/ExpensesPage.tsx
 alwaysApply: false
 ---
 
@@ -8,34 +8,26 @@ alwaysApply: false
 
 ## Method
 
-- Default: **accrual basis** per `company/profile.md`.
-- Double-entry implied: every debit has a matching credit in journal entries.
+- Default: **accrual basis** per company settings.
+- Double-entry implied in dashboard summaries (assets = liabilities + equity).
 
-## Chart of accounts
+## Financial snapshots
 
-- Use numeric ranges: 1000 assets, 2000 liabilities, 3000 equity, 4000 revenue, 5000–6000 COGS/expenses.
-- New accounts → add to `bookkeeping/chart-of-accounts/accounts.csv` before use.
-
-## Journal format (CSV)
-
-Required columns: `date,account_code,account_name,debit,credit,description,source_file,period`
-
-## Naming
-
-- Files: `YYYY-MM-DD_entity_short-description.ext`
-- Period folders: `YYYY-MM` under reports and reconciliations.
+- `app/src/lib/financials.ts` builds cash flow, balance sheet, and income detail from Supabase.
+- Payroll: separate employee withholdings from employer contributions.
 
 ## Reconciliation
 
-- Monthly bank rec in `banking/reconciliations/YYYY-MM.md` or `.csv`.
-- Match: statement ending balance = book balance ± outstanding items.
-- Unmatched items >30 days → flag in report notes.
+- Match invoice totals to payments monthly in the app.
+- Expenses: mark `paid` when cleared against bank.
+- Unmatched items >30 days → flag for owner review.
 
 ## Capitalization
 
-- Expense items under **$500** (unless `company/profile.md` says otherwise) unless part of a single asset or clear long-life item.
+- Expense items under **$500** unless part of a single asset or clear long-life item.
 - Ambiguous → log in `company/decision-log.md` and ask owner.
 
 ## Reports
 
-- P&L and balance sheet snapshots go in `reports/YYYY-MM/` with `generated_on` date in header.
+- Dashboard provides cumulative management P&L and balance sheet.
+- Export or snapshot externally for CPA packages; do not commit private exports to git.

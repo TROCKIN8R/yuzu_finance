@@ -2,13 +2,15 @@
 
 See [SECURITY.md](../SECURITY.md) for the public GitHub Pages + private Supabase model.
 
-Run **all** migrations in order:
+## Database setup
 
-1. `20260628000000_initial.sql`
-2. `20260628000001_seed_settings_example.sql` (optional, after signup)
-3. `20260628000002_security_hardening.sql`
-4. `20260629000000_v2_finance_modules.sql` — expenses, payroll, sales tax, corporate tax
-5. `20260630000000_employees_dividends.sql` — employees, dividends, time/payroll links
+### New project (recommended)
+
+Run **`supabase/setup.sql`** once in the Supabase **SQL Editor** on an empty project. It creates all tables, RLS policies, grants, triggers, and functions in one shot.
+
+### Existing project (already ran older migrations)
+
+Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/archive/`.
 
 ## Auth lockdown
 
@@ -22,3 +24,11 @@ Run **all** migrations in order:
 |-----|-------|-------------------|
 | anon (public) | GitHub Secret → build | Yes — RLS + login protect data |
 | service_role | Never in git / never in browser | **No** — full DB access |
+
+## Schema overview
+
+| Module | Tables |
+|--------|--------|
+| Core | `organization_settings`, `clients`, `projects`, `time_entries`, `invoices`, `payments` |
+| Finance v2 | `expenses`, `payroll_runs`, `sales_tax_periods`, `corporate_tax_records` |
+| HR | `employees`, `dividends`, `dividend_allocations` |

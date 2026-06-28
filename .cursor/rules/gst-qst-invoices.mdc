@@ -1,31 +1,30 @@
 ---
 description: GST/QST and invoice handling for Québec
-globs: invoices/**,taxes/gst-qst/**,clients/**,vendors/**
+globs: app/src/pages/InvoicesPage.tsx,app/src/pages/ExpensesPage.tsx,app/src/pages/SalesTaxPage.tsx,app/src/lib/invoice*.ts
 alwaysApply: false
 ---
 
 # Invoices, GST & QST
 
-## Issued invoices (`invoices/issued/`)
+## Issued invoices (Supabase `invoices`)
 
-Required fields: invoice #, date, client legal name, description, **subtotal, GST, QST, total**, payment terms, company GST/QST numbers from `company/profile.md`.
+Required fields: invoice #, date, client legal name, description, **subtotal, GST, QST, total**, payment terms, company GST/QST numbers from `organization_settings`.
 
 Numbering: sequential, no gaps without documented reason in `company/decision-log.md`.
 
-## Received invoices (`invoices/received/`)
+## Received invoices (Supabase `expenses`)
 
-- Match to vendor in `vendors/`; flag duplicates by invoice # + vendor + amount.
+- Flag duplicates by invoice # + vendor + amount.
 - Split GST and QST into separate columns for ITC/ITR tracking.
 
 ## GST/QST returns
 
-- Workpapers in `taxes/gst-qst/YYYY-QN/` (or monthly if applicable).
-- Reconcile: collected on sales − ITCs on purchases = net remittance (separate GST and QST).
+- Open periods in `sales_tax_periods`; reconcile collected on sales − ITCs on purchases = net remittance (separate GST and QST).
 
 ## Small supplier
 
-- If `company/profile.md` marks small supplier, do not charge GST/QST until registration threshold is met — confirm with owner before first charge.
+- If company settings mark small supplier, do not charge GST/QST until registration threshold is met — confirm with owner before first charge.
 
 ## Bilingual
 
-- Invoices may be French or English per owner preference in profile; stay consistent per client.
+- Invoices may be French or English per owner preference; stay consistent per client.

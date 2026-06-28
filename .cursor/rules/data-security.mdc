@@ -10,8 +10,8 @@ alwaysApply: true
 - Full bank account numbers, routing numbers, online banking passwords
 - Full SIN, full credit card numbers, API keys, `.env` contents
 - **Supabase service_role key** (bypasses all RLS)
-- Populated `clients/*.csv`, `projects/*.csv`, `invoices/issued/` (use Supabase)
-- `company/profile.local.md`, `company/legal-index.local.md`, `config/invoicing.local.json`
+- Client, project, time, invoice, or payment rows (Supabase only)
+- `company/profile.local.md`, `company/legal-index.local.md`, `app/.env.local`
 - Unredacted PDF statements (store locally; commit redacted extracts if needed)
 
 ## Redaction

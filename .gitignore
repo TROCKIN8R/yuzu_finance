@@ -4,25 +4,16 @@ app/dist/
 __pycache__/
 *.pyc
 
-# Local business data — never in public repo (use Supabase)
-clients/clients.csv
-projects/projects.csv
-projects/time-entries.csv
-invoices/invoice-registry.csv
-invoices/issued/*
-!invoices/issued/.gitkeep
-
 # Private company facts (templates *.example.* are OK to commit)
 company/profile.local.md
 company/legal-index.local.md
-config/invoicing.json
-config/invoicing.local.json
 
 # Secrets — never commit
 .env
 .env.*
 !.env.example
 !app/.env.example
+app/.env.local
 *.pem
 credentials.json
 **/secrets/

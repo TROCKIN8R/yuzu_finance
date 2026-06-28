@@ -14,7 +14,7 @@ This is normal for client-side apps. The anon key is **not** a secret in the tra
 | Clients, projects, time, invoices, payments | Supabase Postgres (your project) |
 | Login session | Browser + Supabase Auth |
 | Service role key | Supabase dashboard only / local `.env` (gitignored) |
-| Bank details, payroll, receipts | Local folders or future secure storage — **not** in this repo |
+| Bank details, payroll slips, receipts | Local machine only — **not** in this repo |
 
 ## How access is blocked
 
@@ -29,7 +29,7 @@ Without your email + password, a visitor cannot list, read, or modify your finan
 
 ### Supabase (one-time)
 
-1. Run all migrations in `supabase/migrations/`.
+1. Run `supabase/setup.sql` in the Supabase SQL Editor (fresh project), or the archived migrations in `supabase/migrations/archive/` if upgrading incrementally.
 2. **Authentication → Settings** → disable **Enable new user sign-ups**.
 3. Create your account once (before or right after disabling sign-ups).
 4. Use a strong unique password; enable MFA in Supabase if available on your plan.
@@ -52,7 +52,7 @@ Without your email + password, a visitor cannot list, read, or modify your finan
 - NEQ, BN, addresses, salaries, owner/shareholder names
 - Client, project, time, invoice, or payment rows (Supabase only)
 - Legal PDFs or minute book
-- `company/profile.local.md`, `config/invoicing.local.json`, `.env.local`
+- `company/profile.local.md`, `app/.env.local`
 
 Templates (`*.example.*`) may be committed empty only.
 

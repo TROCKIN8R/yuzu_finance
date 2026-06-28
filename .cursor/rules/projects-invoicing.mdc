@@ -1,6 +1,6 @@
 ---
 description: Project time tracking and invoice generation
-globs: projects/**,clients/**,invoices/issued/**,scripts/**,config/invoicing.example.json,templates/invoice.md
+globs: app/src/pages/ClientsPage.tsx,app/src/pages/ProjectsPage.tsx,app/src/pages/TimePage.tsx,app/src/pages/InvoicesPage.tsx,app/src/pages/PaymentsPage.tsx,app/src/lib/invoice*.ts
 alwaysApply: false
 ---
 
@@ -11,28 +11,11 @@ alwaysApply: false
 - Web app in `app/` — see `supabase/README.md`.
 - Tables: `clients`, `projects`, `time_entries`, `invoices`, `payments`, `organization_settings`.
 - Unbilled time: `time_entries.invoice_id IS NULL`.
-
-## Legacy CSV + CLI (bulk / agents)
-
-- `clients/clients.csv` — client master
-- `projects/projects.csv` — projects linked to `client_id`, with `default_hourly_rate`
-- `projects/time-entries.csv` — hours log; `invoiced=yes` after billing
-- `invoices/invoice-registry.csv` — issued invoice index
-- `config/invoicing.local.json` or Supabase `organization_settings` — company block, tax flags
-
-## CLI (from repo root)
-
-```bash
-python3 scripts/add_project.py client --name "..." --email "..."
-python3 scripts/add_project.py project --client CLIENT_ID --name "..." --rate 150
-python3 scripts/log_time.py --project PROJECT_ID --hours 2.5 --desc "..."
-python3 scripts/generate_invoice.py --project PROJECT_ID --dry-run
-python3 scripts/generate_invoice.py --project PROJECT_ID
-```
+- Company block and tax flags: `organization_settings` (or `company/profile.local.md` for agents).
 
 ## Rules
 
-- One line per time entry; never delete billed entries.
+- One row per time entry; never delete billed entries without owner approval.
 - `rate_override` on a row overrides project `default_hourly_rate` for that entry only.
-- Set `charge_gst` / `charge_qst` in `config/invoicing.json` when registered.
-- Generated invoices land in `invoices/issued/`; update registry `status` (draft → sent → paid).
+- Invoice PDF uses settings from Supabase `organization_settings`.
+- Mark invoice status (draft → sent → paid) and record payments in the app.

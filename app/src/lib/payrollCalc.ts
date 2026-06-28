@@ -152,3 +152,46 @@ export function splitDividendEqually(totalAmount: number, employeeCount: number)
 export function employeeDisplayName(e: { first_name: string; last_name: string }): string {
   return `${e.first_name} ${e.last_name}`.trim()
 }
+
+export const EMPLOYEE_DEDUCTION_FIELDS = [
+  { key: 'federal_tax' as const, label: 'Impôt fédéral (retenue)' },
+  { key: 'provincial_tax' as const, label: 'Impôt provincial (retenue)' },
+  { key: 'cpp_employee' as const, label: 'RPC — part employé' },
+  { key: 'ei_employee' as const, label: 'AE — part employé' },
+  { key: 'qpip_employee' as const, label: 'RQAP — part employé' },
+  { key: 'other_deductions' as const, label: 'Autres déductions' },
+]
+
+export const EMPLOYER_CONTRIBUTION_FIELDS = [
+  { key: 'cpp_employer' as const, label: 'RPC — part employeur' },
+  { key: 'ei_employer' as const, label: 'AE — part employeur' },
+  { key: 'qpip_employer' as const, label: 'RQAP — part employeur' },
+  { key: 'employer_benefits' as const, label: 'Avantages employeur' },
+]
+
+export function sumEmployeeDeductions(f: {
+  federal_tax: number
+  provincial_tax: number
+  cpp_employee: number
+  ei_employee: number
+  qpip_employee: number
+  other_deductions: number
+}): number {
+  return (
+    f.federal_tax +
+    f.provincial_tax +
+    f.cpp_employee +
+    f.ei_employee +
+    f.qpip_employee +
+    f.other_deductions
+  )
+}
+
+export function sumEmployerContributions(f: {
+  cpp_employer: number
+  ei_employer: number
+  qpip_employer: number
+  employer_benefits: number
+}): number {
+  return f.cpp_employer + f.ei_employer + f.qpip_employer + f.employer_benefits
+}

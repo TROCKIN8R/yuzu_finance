@@ -3,14 +3,18 @@ import { supabase } from '../lib/supabase'
 import type { Employee, PayFrequency, PayrollRun } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
-import { payrollEmployerTotal } from '../lib/financials'
+import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
 import {
   calculatePayrollDeductions,
   employeeDisplayName,
+  EMPLOYEE_DEDUCTION_FIELDS,
+  EMPLOYER_CONTRIBUTION_FIELDS,
   grossPerPeriod,
   payFrequencyLabel,
   payPeriodRange,
   periodsPerYear,
+  sumEmployeeDeductions,
+  sumEmployerContributions,
 } from '../lib/payrollCalc'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -277,6 +281,9 @@ export function PayrollPage() {
   }
 
   const ytdCost = filtered.reduce((s, p) => s + payrollEmployerTotal(p), 0)
+  const ytdEmployeeDeductions = filtered.reduce((s, p) => s + employeeDeductionsTotal(p), 0)
+  const ytdEmployerContributions = filtered.reduce((s, p) => s + employerContributionsTotal(p), 0)
+  const ytdGross = filtered.reduce((s, p) => s + Number(p.gross_pay), 0)
   const selectedEmp = form ? employees.find((e) => e.id === form.employee_id) : null
 
   return (
@@ -342,7 +349,13 @@ export function PayrollPage() {
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold">Paie</h1>
             <p className="text-sm text-muted mt-1">
-              Coût employeur total{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdCost)}
+              Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
+              {' · '}
+              Retenues employé : {formatCad(ytdEmployeeDeductions)}
+              {' · '}
+              Charges employeur : {formatCad(ytdEmployerContributions)}
+              {' · '}
+              Coût total : {formatCad(ytdCost)}
             </p>
           </div>
           <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
@@ -383,15 +396,17 @@ export function PayrollPage() {
             {filtered.length === 0 ? (
               <EmptyState message="Aucune paie ne correspond aux filtres." />
             ) : (
-              <DataTable>
+              <DataTable minWidth={1100}>
       
                   <thead className="bg-stone-50 text-muted text-left">
                     <tr>
                       <th className="px-4 py-3">Employé</th>
                       <th className="px-4 py-3">Période</th>
                       <th className="px-4 py-3">Brut</th>
+                      <th className="px-4 py-3">Retenues employé</th>
                       <th className="px-4 py-3">Net</th>
-                      <th className="px-4 py-3">Coût employeur</th>
+                      <th className="px-4 py-3">Charges employeur</th>
+                      <th className="px-4 py-3">Coût total</th>
                       <th className="px-4 py-3">Payé le</th>
                       <th className="px-4 py-3" />
                     </tr>
@@ -406,7 +421,9 @@ export function PayrollPage() {
                           {formatDate(p.pay_period_start)} – {formatDate(p.pay_period_end)}
                         </td>
                         <td className="px-4 py-3">{formatCad(p.gross_pay)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCad(employeeDeductionsTotal(p))}</td>
                         <td className="px-4 py-3">{formatCad(p.net_pay)}</td>
+                        <td className="px-4 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
                         <td className="px-4 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
                         <td className="px-4 py-3 text-muted">{formatDate(p.payment_date)}</td>
                         <td className="px-4 py-3 text-right space-x-1">
@@ -529,37 +546,56 @@ export function PayrollPage() {
             <Field label="Salaire brut *">
               <input type="number" step="0.01" className={inputClass} required value={form.gross_pay} onChange={(e) => setForm({ ...form, gross_pay: Number(e.target.value) })} />
             </Field>
-            <p className="text-xs text-muted font-medium">Déductions employé (estimées — ajustez si besoin)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(['federal_tax', 'provincial_tax', 'cpp_employee', 'ei_employee', 'qpip_employee', 'other_deductions'] as const).map((k) => (
-                <Field key={k} label={k.replace(/_/g, ' ')}>
-                  <input type="number" step="0.01" className={inputClass} value={form[k]} onChange={(e) => setForm({ ...form, [k]: Number(e.target.value) })} />
-                </Field>
-              ))}
+
+            <div className="rounded-xl border border-border overflow-hidden">
+              <div className="bg-stone-50 px-4 py-2 border-b border-border">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Part employé — retenues sur salaire</p>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {EMPLOYEE_DEDUCTION_FIELDS.map(({ key, label }) => (
+                  <Field key={key} label={label}>
+                    <input type="number" step="0.01" className={inputClass} value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} />
+                  </Field>
+                ))}
+              </div>
+              <div className="px-4 pb-3 text-sm text-right text-muted">
+                Total retenues employé : <strong className="text-ink">{formatCad(sumEmployeeDeductions(form))}</strong>
+              </div>
             </div>
-            <p className="text-xs text-muted font-medium">Charges employeur</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {(['cpp_employer', 'ei_employer', 'qpip_employer', 'employer_benefits'] as const).map((k) => (
-                <Field key={k} label={k.replace(/_/g, ' ')}>
-                  <input type="number" step="0.01" className={inputClass} value={form[k]} onChange={(e) => setForm({ ...form, [k]: Number(e.target.value) })} />
-                </Field>
-              ))}
+
+            <div className="rounded-xl border border-amber-200 overflow-hidden">
+              <div className="bg-amber-50 px-4 py-2 border-b border-amber-200">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Part employeur — cotisations et charges</p>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {EMPLOYER_CONTRIBUTION_FIELDS.map(({ key, label }) => (
+                  <Field key={key} label={label}>
+                    <input type="number" step="0.01" className={inputClass} value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} />
+                  </Field>
+                ))}
+              </div>
+              <div className="px-4 pb-3 text-sm text-right text-muted">
+                Total charges employeur : <strong className="text-ink">{formatCad(sumEmployerContributions(form))}</strong>
+              </div>
             </div>
-            <div className="bg-yuzu-light rounded-lg p-3 text-sm">
-              Net estimé : <strong>{formatCad(calcNet(form))}</strong>
-              {' · '}
-              Coût employeur :{' '}
-              <strong>
-                {formatCad(
-                  payrollEmployerTotal({
-                    gross_pay: form.gross_pay,
-                    cpp_employer: form.cpp_employer,
-                    ei_employer: form.ei_employer,
-                    qpip_employer: form.qpip_employer,
-                    employer_benefits: form.employer_benefits,
-                  })
-                )}
-              </strong>
+
+            <div className="bg-yuzu-light rounded-lg p-4 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted">Salaire net (versé à l&apos;employé)</span>
+                <strong>{formatCad(calcNet(form))}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Retenues à remettre (employé)</span>
+                <span>{formatCad(sumEmployeeDeductions(form))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Cotisations employeur</span>
+                <span>{formatCad(sumEmployerContributions(form))}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-yuzu/30 font-semibold">
+                <span>Coût total employeur</span>
+                <span>{formatCad(form.gross_pay + sumEmployerContributions(form))}</span>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setPayOpen(false)}>Annuler</Button>
