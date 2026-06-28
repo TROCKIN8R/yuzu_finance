@@ -218,7 +218,7 @@ export function BankPage() {
 
   function onExpenseTotalChange(total: number) {
     const taxes = recalcExpenseTaxes(total, expForm.applyTax)
-    setExpForm({ ...expForm, total, ...taxes })
+    setExpForm({ ...expForm, ...taxes })
   }
 
   function onExpenseTaxToggle(applyTax: boolean) {
