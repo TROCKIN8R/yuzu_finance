@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatCad, effectiveRate, lineAmount } from '../lib/format'
+import { formatCad, effectiveRate, lineAmount, relationOne } from '../lib/format'
 import { invoiceBalance } from '../lib/invoice'
 
 export function DashboardPage() {
@@ -33,7 +33,7 @@ export function DashboardPage() {
     let unbilledHours = 0
     let unbilledAmount = 0
     for (const e of entries.data ?? []) {
-      const p = e.projects as { default_hourly_rate: number } | null
+      const p = relationOne<{ default_hourly_rate: number }>(e.projects)
       if (!p) continue
       unbilledHours += Number(e.hours)
       unbilledAmount += lineAmount(Number(e.hours), effectiveRate(e, p))

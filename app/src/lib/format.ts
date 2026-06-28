@@ -26,3 +26,9 @@ export function effectiveRate(entry: { rate_override: number | null }, project: 
 export function lineAmount(hours: number, rate: number): number {
   return Math.round(hours * rate * 100) / 100
 }
+
+/** Supabase nested selects may type as T or T[] depending on inference. */
+export function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
