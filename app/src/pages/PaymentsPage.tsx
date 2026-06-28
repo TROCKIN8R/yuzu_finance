@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Invoice, Payment } from '../lib/types'
-import { formatCad, formatDate, todayIso } from '../lib/format'
+import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { deriveInvoiceStatus, invoiceBalance } from '../lib/invoice'
 import { deletePayment } from '../lib/invoiceActions'
 import { Badge } from '../components/Badge'
@@ -9,6 +10,7 @@ import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, DateRangeFilter, ListToolbar } from '../components/ListToolbar'
 
 interface InvoiceWithPaid extends Invoice {
   paid: number
@@ -27,6 +29,10 @@ export function PaymentsPage() {
     reference: '',
     notes: '',
   })
+  const [outstandingSearch, setOutstandingSearch] = useState('')
+  const [paymentSearch, setPaymentSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
     load()
@@ -99,7 +105,24 @@ export function PaymentsPage() {
     }
   }
 
-  const outstanding = invoices.filter((i) => i.balance > 0)
+  const outstanding = useMemo(
+    () =>
+      invoices.filter((i) => {
+        if (i.balance <= 0) return false
+        return matchesSearch(outstandingSearch, i.invoice_number, i.clients?.legal_name, i.status)
+      }),
+    [invoices, outstandingSearch]
+  )
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
+      if (!inDateRange(p.payment_date, dateFrom, dateTo)) return false
+      const inv = relationOne(p.invoices)
+      return matchesSearch(paymentSearch, inv?.invoice_number, p.method, p.reference, p.notes, p.amount)
+    })
+  }, [payments, paymentSearch, dateFrom, dateTo])
+
+  const hasPaymentFilters = !!(paymentSearch || dateFrom || dateTo)
 
   return (
     <div>
@@ -111,9 +134,20 @@ export function PaymentsPage() {
       </div>
 
       <h2 className="text-sm font-medium text-muted mb-3">Réconciliation — factures ouvertes</h2>
-      {outstanding.length === 0 ? (
+      {invoices.filter((i) => i.balance > 0).length === 0 ? (
         <EmptyState message="Aucun solde en attente." />
       ) : (
+        <>
+          <ListToolbar
+            search={outstandingSearch}
+            onSearchChange={setOutstandingSearch}
+            searchPlaceholder="Facture, client…"
+            resultCount={outstanding.length}
+            totalCount={invoices.filter((i) => i.balance > 0).length}
+          />
+          {outstanding.length === 0 ? (
+            <EmptyState message="Aucune facture ouverte ne correspond à la recherche." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden mb-8">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -148,12 +182,35 @@ export function PaymentsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
 
       <h2 className="text-sm font-medium text-muted mb-3">Historique des paiements</h2>
       {payments.length === 0 ? (
         <EmptyState message="Aucun paiement enregistré." />
       ) : (
+        <>
+          <ListToolbar
+            search={paymentSearch}
+            onSearchChange={setPaymentSearch}
+            searchPlaceholder="Facture, référence, méthode…"
+            resultCount={filteredPayments.length}
+            totalCount={payments.length}
+          >
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <ClearFiltersButton
+              visible={hasPaymentFilters}
+              onClick={() => {
+                setPaymentSearch('')
+                setDateFrom('')
+                setDateTo('')
+              }}
+            />
+          </ListToolbar>
+          {filteredPayments.length === 0 ? (
+            <EmptyState message="Aucun paiement ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -167,10 +224,10 @@ export function PaymentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {payments.map((p) => (
+              {filteredPayments.map((p) => (
                 <tr key={p.id}>
                   <td className="px-4 py-3">{formatDate(p.payment_date)}</td>
-                  <td className="px-4 py-3 font-medium">{p.invoices?.invoice_number}</td>
+                  <td className="px-4 py-3 font-medium">{relationOne(p.invoices)?.invoice_number}</td>
                   <td className="px-4 py-3">{formatCad(p.amount)}</td>
                   <td className="px-4 py-3 text-muted">{p.method ?? '—'}</td>
                   <td className="px-4 py-3 text-muted">{p.reference ?? '—'}</td>
@@ -182,6 +239,8 @@ export function PaymentsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
 
       <Modal title="Enregistrer un paiement" open={open} onClose={() => setOpen(false)}>

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { CorporateTaxRecord, CorpTaxStatus } from '../lib/types'
 import { formatCad, formatDate } from '../lib/format'
+import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 const empty = {
   fiscal_year: '2025-2026',
@@ -25,6 +27,24 @@ export function CorporateTaxPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [fiscalYearFilter, setFiscalYearFilter] = useState('')
+
+  const fiscalYears = useMemo(
+    () => [...new Set(rows.map((r) => r.fiscal_year))].sort().reverse(),
+    [rows]
+  )
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false
+      if (fiscalYearFilter && r.fiscal_year !== fiscalYearFilter) return false
+      return matchesSearch(search, r.fiscal_year, r.label, r.tax_authority, r.status, r.amount, r.notes)
+    })
+  }, [rows, search, statusFilter, fiscalYearFilter])
+
+  const hasFilters = !!(search || statusFilter || fiscalYearFilter)
 
   useEffect(() => { load() }, [])
 
@@ -75,20 +95,59 @@ export function CorporateTaxPage() {
     load()
   }
 
-  const due = rows.filter((r) => r.status !== 'paid').reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
+  const due = filtered.filter((r) => r.status !== 'paid').reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Impôts société</h1>
-          <p className="text-sm text-muted mt-1">Solde dû : {formatCad(due)}</p>
+          <p className="text-sm text-muted mt-1">
+            Solde dû{hasFilters ? ' (filtré)' : ''} : {formatCad(due)}
+          </p>
         </div>
         <Button onClick={openNew}>Nouveau</Button>
       </div>
       {rows.length === 0 ? (
         <EmptyState message="Aucun impôt société enregistré (T2, CO-17, acomptes)." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Description, autorité…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterSelect
+              label="Année fiscale"
+              value={fiscalYearFilter}
+              onChange={setFiscalYearFilter}
+              options={[{ value: '', label: 'Toutes' }, ...fiscalYears.map((y) => ({ value: y, label: y }))]}
+            />
+            <FilterSelect
+              label="Statut"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                { value: 'estimated', label: 'estimated' },
+                { value: 'due', label: 'due' },
+                { value: 'paid', label: 'paid' },
+              ]}
+            />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setStatusFilter('')
+                setFiscalYearFilter('')
+              }}
+            />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucun enregistrement ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -103,7 +162,7 @@ export function CorporateTaxPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-3">{r.fiscal_year}</td>
                   <td className="px-4 py-3 font-medium">{r.label}</td>
@@ -120,6 +179,8 @@ export function CorporateTaxPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title="Impôt société" open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">

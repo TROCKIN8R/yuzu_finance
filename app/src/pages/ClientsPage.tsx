@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Client } from '../lib/types'
+import { matchesSearch } from '../lib/filters'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, ListToolbar } from '../components/ListToolbar'
 
 const empty: Partial<Client> = {
   legal_name: '',
@@ -24,6 +26,15 @@ export function ClientsPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<Partial<Client>>(empty)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+
+  const filtered = useMemo(
+    () =>
+      rows.filter((c) =>
+        matchesSearch(search, c.legal_name, c.contact_name, c.email, c.city, c.province, c.notes)
+      ),
+    [rows, search]
+  )
 
   useEffect(() => {
     load()
@@ -84,6 +95,19 @@ export function ClientsPage() {
       {rows.length === 0 ? (
         <EmptyState message="Aucun client — ajoutez votre premier client." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Nom, contact, courriel, ville…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <ClearFiltersButton visible={!!search} onClick={() => setSearch('')} />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucun client ne correspond à votre recherche." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -96,7 +120,7 @@ export function ClientsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((c) => (
+              {filtered.map((c) => (
                 <tr key={c.id} className="hover:bg-stone-50/50">
                   <td className="px-4 py-3 font-medium">{c.legal_name}</td>
                   <td className="px-4 py-3 text-muted">{c.contact_name ?? '—'}</td>
@@ -115,6 +139,8 @@ export function ClientsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title={editingId ? 'Modifier le client' : 'Nouveau client'} open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">

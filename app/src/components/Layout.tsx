@@ -2,7 +2,9 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
 
-const nav = [
+type NavItem = { to: string; label: string; end?: boolean }
+
+const nav: { section: string; links: NavItem[] }[] = [
   { section: 'Vue d\'ensemble', links: [{ to: '/', label: 'Tableau de bord', end: true }] },
   {
     section: 'Opérations',

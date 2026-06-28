@@ -1,19 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Project, TimeEntry } from '../lib/types'
-import { effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
+import { effectiveRate, formatCad, formatDate, lineAmount, relationOne, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 type Filter = 'all' | 'unbilled' | 'invoiced'
 
 export function TimePage() {
   const [rows, setRows] = useState<TimeEntry[]>([])
+  const [allProjects, setAllProjects] = useState<Project[]>([])
   const [projects, setProjects] = useState<Project[]>([])
-  const [filter, setFilter] = useState<Filter>('all')
+  const [billingFilter, setBillingFilter] = useState<Filter>('all')
+  const [search, setSearch] = useState('')
+  const [projectFilter, setProjectFilter] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
     project_id: '',
@@ -25,24 +33,44 @@ export function TimePage() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
 
+  const clientOptions = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const p of allProjects) {
+      if (p.clients?.legal_name) names.set(p.client_id, p.clients.legal_name)
+    }
+    return [...names.entries()].map(([id, label]) => ({ value: id, label }))
+  }, [allProjects])
+
+  const filtered = useMemo(() => {
+    return rows.filter((t) => {
+      const proj = relationOne(t.projects)
+      if (billingFilter === 'unbilled' && t.invoice_id) return false
+      if (billingFilter === 'invoiced' && !t.invoice_id) return false
+      if (projectFilter && t.project_id !== projectFilter) return false
+      if (clientFilter && proj?.client_id !== clientFilter) return false
+      if (!inDateRange(t.entry_date, dateFrom, dateTo)) return false
+      const inv = relationOne((t as TimeEntry & { invoices?: { invoice_number: string } | { invoice_number: string }[] }).invoices)
+      return matchesSearch(search, t.description, proj?.name, proj?.clients?.legal_name, inv?.invoice_number)
+    })
+  }, [rows, billingFilter, projectFilter, clientFilter, dateFrom, dateTo, search])
+
+  const hasFilters = !!(search || projectFilter || clientFilter || dateFrom || dateTo || billingFilter !== 'all')
+
   useEffect(() => {
     load()
-  }, [filter])
+  }, [])
 
   async function load() {
-    const [p] = await Promise.all([supabase.from('projects').select('*, clients(legal_name)').eq('status', 'active')])
-    setProjects((p.data as Project[]) ?? [])
-
-    let q = supabase
-      .from('time_entries')
-      .select('*, projects(name, default_hourly_rate, clients(legal_name)), invoices(invoice_number)')
-      .order('entry_date', { ascending: false })
-
-    if (filter === 'unbilled') q = q.is('invoice_id', null)
-    if (filter === 'invoiced') q = q.not('invoice_id', 'is', null)
-
-    const { data } = await q
-    setRows((data as TimeEntry[]) ?? [])
+    const [p, entries] = await Promise.all([
+      supabase.from('projects').select('*, clients(legal_name)').order('name'),
+      supabase
+        .from('time_entries')
+        .select('*, projects(name, default_hourly_rate, client_id, clients(legal_name)), invoices(invoice_number)')
+        .order('entry_date', { ascending: false }),
+    ])
+    setAllProjects((p.data as Project[]) ?? [])
+    setProjects(((p.data as Project[]) ?? []).filter((x) => x.status === 'active'))
+    setRows((entries.data as TimeEntry[]) ?? [])
   }
 
   function openNew() {
@@ -112,22 +140,54 @@ export function TimePage() {
           Logger du temps
         </Button>
       </div>
-      <div className="flex gap-2 mb-6">
-        {(['all', 'unbilled', 'invoiced'] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm ${
-              filter === f ? 'bg-yuzu-light font-medium' : 'text-muted hover:bg-stone-100'
-            }`}
-          >
-            {f === 'all' ? 'Tout' : f === 'unbilled' ? 'Non facturé' : 'Facturé'}
-          </button>
-        ))}
-      </div>
       {rows.length === 0 ? (
         <EmptyState message="Aucune entrée de temps." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Description, projet, client, facture…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterChips
+              value={billingFilter}
+              onChange={setBillingFilter}
+              options={[
+                { value: 'all', label: 'Tout' },
+                { value: 'unbilled', label: 'Non facturé' },
+                { value: 'invoiced', label: 'Facturé' },
+              ]}
+            />
+            <FilterSelect
+              label="Projet"
+              value={projectFilter}
+              onChange={setProjectFilter}
+              options={[{ value: '', label: 'Tous' }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
+            />
+            <FilterSelect
+              label="Client"
+              value={clientFilter}
+              onChange={setClientFilter}
+              options={[{ value: '', label: 'Tous' }, ...clientOptions]}
+            />
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setProjectFilter('')
+                setClientFilter('')
+                setDateFrom('')
+                setDateTo('')
+                setBillingFilter('all')
+              }}
+            />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucune entrée ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -142,11 +202,11 @@ export function TimePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((t) => {
-                const proj = t.projects
+              {filtered.map((t) => {
+                const proj = relationOne(t.projects)
                 const rate = proj ? effectiveRate(t, proj) : 0
                 const amt = t.billable && proj ? lineAmount(Number(t.hours), rate) : 0
-                const inv = (t as TimeEntry & { invoices?: { invoice_number: string } }).invoices
+                const inv = relationOne((t as TimeEntry & { invoices?: { invoice_number: string } | { invoice_number: string }[] }).invoices)
                 return (
                   <tr key={t.id} className="hover:bg-stone-50/50">
                     <td className="px-4 py-3">{formatDate(t.entry_date)}</td>
@@ -178,6 +238,8 @@ export function TimePage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title={editingId ? 'Modifier le temps' : 'Logger du temps'} open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">

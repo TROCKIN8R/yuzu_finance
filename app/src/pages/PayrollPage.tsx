@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { PayrollRun } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal } from '../lib/financials'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, DateRangeFilter, ListToolbar } from '../components/ListToolbar'
 
 type PayrollForm = {
   pay_period_start: string
@@ -61,6 +63,26 @@ export function PayrollPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const filtered = useMemo(() => {
+    return rows.filter((p) => {
+      if (!inDateRange(p.payment_date, dateFrom, dateTo)) return false
+      return matchesSearch(
+        search,
+        p.notes,
+        p.gross_pay,
+        p.net_pay,
+        p.pay_period_start,
+        p.pay_period_end,
+        p.payment_date
+      )
+    })
+  }, [rows, search, dateFrom, dateTo])
+
+  const hasFilters = !!(search || dateFrom || dateTo)
 
   useEffect(() => { load() }, [])
 
@@ -112,20 +134,43 @@ export function PayrollPage() {
     load()
   }
 
-  const ytdCost = rows.reduce((s, p) => s + payrollEmployerTotal(p), 0)
+  const ytdCost = filtered.reduce((s, p) => s + payrollEmployerTotal(p), 0)
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Paie — employé</h1>
-          <p className="text-sm text-muted mt-1">Coût employeur total : {formatCad(ytdCost)}</p>
+          <p className="text-sm text-muted mt-1">
+            Coût employeur total{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdCost)}
+          </p>
         </div>
         <Button onClick={openNew}>Nouvelle paie</Button>
       </div>
       {rows.length === 0 ? (
         <EmptyState message="Aucune paie enregistrée." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Période, montants, notes…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setDateFrom('')
+                setDateTo('')
+              }}
+            />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucune paie ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -139,7 +184,7 @@ export function PayrollPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((p) => (
+              {filtered.map((p) => (
                 <tr key={p.id}>
                   <td className="px-4 py-3">{formatDate(p.pay_period_start)} – {formatDate(p.pay_period_end)}</td>
                   <td className="px-4 py-3">{formatCad(p.gross_pay)}</td>
@@ -155,6 +200,8 @@ export function PayrollPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title={editingId ? 'Modifier paie' : 'Nouvelle paie'} open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3 text-sm">

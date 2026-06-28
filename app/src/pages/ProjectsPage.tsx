@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Client, Project, ProjectStatus } from '../lib/types'
 import { formatCad } from '../lib/format'
+import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 export function ProjectsPage() {
   const [rows, setRows] = useState<Project[]>([])
@@ -20,6 +22,19 @@ export function ProjectsPage() {
     notes: '',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+
+  const filtered = useMemo(() => {
+    return rows.filter((p) => {
+      if (clientFilter && p.client_id !== clientFilter) return false
+      if (statusFilter && p.status !== statusFilter) return false
+      return matchesSearch(search, p.name, p.clients?.legal_name, p.notes, p.default_hourly_rate)
+    })
+  }, [rows, search, clientFilter, statusFilter])
+
+  const hasFilters = !!(search || clientFilter || statusFilter)
 
   useEffect(() => {
     load()
@@ -88,6 +103,37 @@ export function ProjectsPage() {
       {rows.length === 0 ? (
         <EmptyState message="Aucun projet." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Projet, client…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterSelect
+              label="Client"
+              value={clientFilter}
+              onChange={setClientFilter}
+              options={[{ value: '', label: 'Tous' }, ...clients.map((c) => ({ value: c.id, label: c.legal_name }))]}
+            />
+            <FilterSelect
+              label="Statut"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                { value: 'active', label: 'active' },
+                { value: 'on_hold', label: 'on_hold' },
+                { value: 'completed', label: 'completed' },
+                { value: 'archived', label: 'archived' },
+              ]}
+            />
+            <ClearFiltersButton visible={hasFilters} onClick={() => { setSearch(''); setClientFilter(''); setStatusFilter('') }} />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucun projet ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -100,7 +146,7 @@ export function ProjectsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((p) => (
+              {filtered.map((p) => (
                 <tr key={p.id} className="hover:bg-stone-50/50">
                   <td className="px-4 py-3 font-medium">{p.name}</td>
                   <td className="px-4 py-3 text-muted">{p.clients?.legal_name ?? '—'}</td>
@@ -121,6 +167,8 @@ export function ProjectsPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title={editingId ? 'Modifier le projet' : 'Nouveau projet'} open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">

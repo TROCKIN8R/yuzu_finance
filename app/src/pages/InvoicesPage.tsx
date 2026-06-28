@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Client, Invoice, InvoiceStatus, OrganizationSettings, TimeEntry } from '../lib/types'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { computeInvoiceTotals } from '../lib/invoice'
 import { deleteInvoice } from '../lib/invoiceActions'
 import { downloadInvoicePdf } from '../lib/invoicePdf'
@@ -10,6 +11,7 @@ import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 export function InvoicesPage() {
   const [rows, setRows] = useState<Invoice[]>([])
@@ -22,6 +24,22 @@ export function InvoicesPage() {
   const [createClientId, setCreateClientId] = useState('')
   const [unbilled, setUnbilled] = useState<TimeEntry[]>([])
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const filtered = useMemo(() => {
+    return rows.filter((inv) => {
+      if (clientFilter && inv.client_id !== clientFilter) return false
+      if (statusFilter && inv.status !== statusFilter) return false
+      if (!inDateRange(inv.invoice_date, dateFrom, dateTo)) return false
+      return matchesSearch(search, inv.invoice_number, inv.clients?.legal_name, inv.status, inv.total)
+    })
+  }, [rows, search, clientFilter, statusFilter, dateFrom, dateTo])
+
+  const hasFilters = !!(search || clientFilter || statusFilter || dateFrom || dateTo)
 
   useEffect(() => {
     load()
@@ -164,6 +182,49 @@ export function InvoicesPage() {
       {rows.length === 0 ? (
         <EmptyState message="Aucune facture — créez-en une à partir du temps non facturé." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="N° facture, client, montant…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterSelect
+              label="Client"
+              value={clientFilter}
+              onChange={setClientFilter}
+              options={[{ value: '', label: 'Tous' }, ...clients.map((c) => ({ value: c.id, label: c.legal_name }))]}
+            />
+            <FilterSelect
+              label="Statut"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                { value: 'draft', label: 'draft' },
+                { value: 'sent', label: 'sent' },
+                { value: 'paid', label: 'paid' },
+                { value: 'partial', label: 'partial' },
+                { value: 'overdue', label: 'overdue' },
+                { value: 'void', label: 'void' },
+              ]}
+            />
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setClientFilter('')
+                setStatusFilter('')
+                setDateFrom('')
+                setDateTo('')
+              }}
+            />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucune facture ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -177,7 +238,7 @@ export function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((inv) => (
+              {filtered.map((inv) => (
                 <tr key={inv.id} className="hover:bg-stone-50/50">
                   <td className="px-4 py-3 font-medium">{inv.invoice_number}</td>
                   <td className="px-4 py-3">{inv.clients?.legal_name}</td>
@@ -199,6 +260,8 @@ export function InvoicesPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
 
       <Modal title="Créer une facture" open={createOpen} onClose={() => setCreateOpen(false)} wide>

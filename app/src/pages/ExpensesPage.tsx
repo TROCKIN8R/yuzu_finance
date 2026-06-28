@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Expense, ExpenseCategory } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
 
@@ -27,6 +29,23 @@ export function ExpensesPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [paidFilter, setPaidFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  const filtered = useMemo(() => {
+    return rows.filter((e) => {
+      if (categoryFilter && e.category !== categoryFilter) return false
+      if (paidFilter === 'yes' && !e.paid) return false
+      if (paidFilter === 'no' && e.paid) return false
+      if (!inDateRange(e.expense_date, dateFrom, dateTo)) return false
+      return matchesSearch(search, e.vendor, e.description, e.category, e.notes, e.total)
+    })
+  }, [rows, search, categoryFilter, paidFilter, dateFrom, dateTo])
+
+  const hasFilters = !!(search || categoryFilter || paidFilter || dateFrom || dateTo)
 
   useEffect(() => { load() }, [])
 
@@ -84,20 +103,61 @@ export function ExpensesPage() {
     load()
   }
 
-  const total = rows.reduce((s, e) => s + Number(e.total), 0)
+  const total = filtered.reduce((s, e) => s + Number(e.total), 0)
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Dépenses</h1>
-          <p className="text-sm text-muted mt-1">Total : {formatCad(total)}</p>
+          <p className="text-sm text-muted mt-1">
+            Total{hasFilters ? ' (filtré)' : ''} : {formatCad(total)}
+          </p>
         </div>
         <Button onClick={openNew}>Nouvelle dépense</Button>
       </div>
       {rows.length === 0 ? (
         <EmptyState message="Aucune dépense enregistrée." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Fournisseur, description…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterSelect
+              label="Catégorie"
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              options={[{ value: '', label: 'Toutes' }, ...CATEGORIES.map((c) => ({ value: c, label: c }))]}
+            />
+            <FilterSelect
+              label="Payé"
+              value={paidFilter}
+              onChange={setPaidFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                { value: 'yes', label: 'Oui' },
+                { value: 'no', label: 'Non' },
+              ]}
+            />
+            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+            <ClearFiltersButton
+              visible={hasFilters}
+              onClick={() => {
+                setSearch('')
+                setCategoryFilter('')
+                setPaidFilter('')
+                setDateFrom('')
+                setDateTo('')
+              }}
+            />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucune dépense ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -112,7 +172,7 @@ export function ExpensesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((e) => (
+              {filtered.map((e) => (
                 <tr key={e.id}>
                   <td className="px-4 py-3">{formatDate(e.expense_date)}</td>
                   <td className="px-4 py-3 font-medium">{e.vendor}</td>
@@ -129,6 +189,8 @@ export function ExpensesPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title={editingId ? 'Modifier dépense' : 'Nouvelle dépense'} open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">

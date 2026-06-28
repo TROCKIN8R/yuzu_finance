@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
+import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 const empty = {
   period_start: todayIso().slice(0, 8) + '01',
@@ -29,6 +31,17 @@ export function SalesTaxPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false
+      return matchesSearch(search, r.period_start, r.period_end, r.status, r.gst_net, r.qst_net, r.notes)
+    })
+  }, [rows, search, statusFilter])
+
+  const hasFilters = !!(search || statusFilter)
 
   useEffect(() => { load() }, [])
 
@@ -103,6 +116,30 @@ export function SalesTaxPage() {
       {rows.length === 0 ? (
         <EmptyState message="Aucune déclaration TPS/TVQ." />
       ) : (
+        <>
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Période, montants…"
+            resultCount={filtered.length}
+            totalCount={rows.length}
+          >
+            <FilterSelect
+              label="Statut"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                { value: 'open', label: 'open' },
+                { value: 'filed', label: 'filed' },
+                { value: 'paid', label: 'paid' },
+              ]}
+            />
+            <ClearFiltersButton visible={hasFilters} onClick={() => { setSearch(''); setStatusFilter('') }} />
+          </ListToolbar>
+          {filtered.length === 0 ? (
+            <EmptyState message="Aucune période ne correspond aux filtres." />
+          ) : (
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-stone-50 text-muted text-left">
@@ -115,7 +152,7 @@ export function SalesTaxPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-3">{formatDate(r.period_start)} – {formatDate(r.period_end)}</td>
                   <td className="px-4 py-3">{formatCad(r.gst_net)}</td>
@@ -130,6 +167,8 @@ export function SalesTaxPage() {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
       <Modal title="Période TPS/TVQ" open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">
