@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install
         working-directory: app
@@ -61,5 +61,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Wait for prior Pages deployment
+        run: |
+          for attempt in $(seq 1 20); do
+            status=$(gh api "repos/${{ github.repository }}/pages/builds/latest" --jq '.status' 2>/dev/null || echo "unknown")
+            echo "Latest Pages build status: $status (attempt $attempt/20)"
+            if [ "$status" != "building" ] && [ "$status" != "queued" ]; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Timed out waiting for in-progress Pages deployment"
+          exit 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - id: deployment
         uses: actions/deploy-pages@v4
