@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Client, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
+import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
+import { customerPartners } from '../lib/partners'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import {
@@ -69,34 +70,36 @@ function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | Return
 
 export function InvoicesPage() {
   const [rows, setRows] = useState<Invoice[]>([])
-  const [clients, setClients] = useState<Client[]>([])
+  const [partners, setPartners] = useState<Partner[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selected, setSelected] = useState<Invoice | null>(null)
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([])
-  const [createClientId, setCreateClientId] = useState('')
+  const [createPartnerId, setCreatePartnerId] = useState('')
   const [unbilled, setUnbilled] = useState<TimeEntry[]>([])
   const [unbilledFixed, setUnbilledFixed] = useState<Project[]>([])
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set())
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set())
   const [includeSalesTax, setIncludeSalesTax] = useState(false)
   const [search, setSearch] = useState('')
-  const [clientFilter, setClientFilter] = useState('')
+  const [partnerFilter, setPartnerFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
+  const billablePartners = useMemo(() => customerPartners(partners), [partners])
+
   const filtered = useMemo(() => {
     return rows.filter((inv) => {
-      if (clientFilter && inv.client_id !== clientFilter) return false
+      if (partnerFilter && inv.partner_id !== partnerFilter) return false
       if (statusFilter && inv.status !== statusFilter) return false
       if (!inDateRange(inv.invoice_date, dateFrom, dateTo)) return false
-      return matchesSearch(search, inv.invoice_number, inv.clients?.legal_name, inv.status, inv.total)
+      return matchesSearch(search, inv.invoice_number, inv.partners?.legal_name, inv.status, inv.total)
     })
-  }, [rows, search, clientFilter, statusFilter, dateFrom, dateTo])
+  }, [rows, search, partnerFilter, statusFilter, dateFrom, dateTo])
 
-  const hasFilters = !!(search || clientFilter || statusFilter || dateFrom || dateTo)
+  const hasFilters = !!(search || partnerFilter || statusFilter || dateFrom || dateTo)
 
   useEffect(() => {
     load()
@@ -104,23 +107,24 @@ export function InvoicesPage() {
 
   async function load() {
     const [inv, cli, set] = await Promise.all([
-      supabase.from('invoices').select('*, clients(legal_name)').order('invoice_date', { ascending: false }),
-      supabase.from('clients').select('*').order('legal_name'),
+      supabase.from('invoices').select('*, partners(legal_name)').order('invoice_date', { ascending: false }),
+      supabase.from('partners').select('*').order('legal_name'),
       supabase.from('organization_settings').select('*').maybeSingle(),
     ])
     setRows((inv.data as Invoice[]) ?? [])
-    setClients(cli.data ?? [])
+    setPartners(cli.data ?? [])
     setSettings(set.data)
-    if (cli.data?.[0]) setCreateClientId(cli.data[0].id)
+    const billable = customerPartners(cli.data ?? [])
+    if (billable[0]) setCreatePartnerId(billable[0].id)
   }
 
-  async function loadUnbilled(clientId: string) {
+  async function loadUnbilled(partnerId: string) {
     const [{ data: projects }, { data: timeData }] = await Promise.all([
-      supabase.from('projects').select('*').eq('client_id', clientId),
+      supabase.from('projects').select('*').eq('partner_id', partnerId),
       supabase
         .from('projects')
         .select('id')
-        .eq('client_id', clientId)
+        .eq('partner_id', partnerId)
         .eq('billing_type', 'hourly'),
     ])
     const hourlyIds = (timeData ?? []).map((p) => p.id)
@@ -149,7 +153,7 @@ export function InvoicesPage() {
   async function openCreate() {
     setIncludeSalesTax(false)
     setCreateOpen(true)
-    if (createClientId) await loadUnbilled(createClientId)
+    if (createPartnerId) await loadUnbilled(createPartnerId)
   }
 
   async function viewDetail(inv: Invoice) {
@@ -205,8 +209,8 @@ export function InvoicesPage() {
     if (!settings) return
     const lines = previewLines()
     if (lines.length === 0) return
-    const client = clients.find((c) => c.id === createClientId)
-    if (!client) return
+    const partner = partners.find((p) => p.id === createPartnerId)
+    if (!partner) return
 
     const { data: num, error: numErr } = await supabase.rpc('next_invoice_number')
     if (numErr || !num) {
@@ -216,12 +220,12 @@ export function InvoicesPage() {
 
     const totals = sumInvoiceLines(lines)
     const invoiceDate = todayIso()
-    const dueDate = addDays(invoiceDate, client.payment_terms_days ?? settings.payment_terms_days)
+    const dueDate = addDays(invoiceDate, partner.payment_terms_days ?? settings.payment_terms_days)
 
     const { data: inv, error } = await supabase
       .from('invoices')
       .insert({
-        client_id: createClientId,
+        partner_id: createPartnerId,
         invoice_number: num,
         invoice_date: invoiceDate,
         due_date: dueDate,
@@ -296,9 +300,9 @@ export function InvoicesPage() {
 
   function handlePdf() {
     if (!selected || !settings) return
-    const client = clients.find((c) => c.id === selected.client_id)
-    if (!client) return
-    downloadInvoicePdf({ invoice: selected, client, settings, lines: lineItems })
+    const partner = partners.find((p) => p.id === selected.partner_id)
+    if (!partner) return
+    downloadInvoicePdf({ invoice: selected, partner, settings, lines: lineItems })
   }
 
   const preview = previewTotals()
@@ -311,7 +315,7 @@ export function InvoicesPage() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Factures</h1>
-        <Button onClick={openCreate} disabled={clients.length === 0}>
+        <Button onClick={openCreate} disabled={billablePartners.length === 0}>
           Créer une facture
         </Button>
       </div>
@@ -322,15 +326,15 @@ export function InvoicesPage() {
           <ListToolbar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="N° facture, client, montant…"
+            searchPlaceholder="N° facture, partenaire, montant…"
             resultCount={filtered.length}
             totalCount={rows.length}
           >
             <FilterSelect
-              label="Client"
-              value={clientFilter}
-              onChange={setClientFilter}
-              options={[{ value: '', label: 'Tous' }, ...clients.map((c) => ({ value: c.id, label: c.legal_name }))]}
+              label="Partenaire"
+              value={partnerFilter}
+              onChange={setPartnerFilter}
+              options={[{ value: '', label: 'Tous' }, ...billablePartners.map((p) => ({ value: p.id, label: p.legal_name }))]}
             />
             <FilterSelect
               label="Statut"
@@ -350,7 +354,7 @@ export function InvoicesPage() {
               visible={hasFilters}
               onClick={() => {
                 setSearch('')
-                setClientFilter('')
+                setPartnerFilter('')
                 setStatusFilter('')
                 setDateFrom('')
                 setDateTo('')
@@ -364,7 +368,7 @@ export function InvoicesPage() {
               <thead className="bg-stone-50 text-muted text-left">
                 <tr>
                   <th className="px-4 py-3 font-medium">N°</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
+                  <th className="px-4 py-3 font-medium">Partenaire</th>
                   <th className="px-4 py-3 font-medium">Date</th>
                   <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Statut</th>
@@ -375,7 +379,7 @@ export function InvoicesPage() {
                 {filtered.map((inv) => (
                   <tr key={inv.id} className="hover:bg-stone-50/50">
                     <td className="px-4 py-3 font-medium">{inv.invoice_number}</td>
-                    <td className="px-4 py-3">{inv.clients?.legal_name}</td>
+                    <td className="px-4 py-3">{inv.partners?.legal_name}</td>
                     <td className="px-4 py-3 text-muted">{formatDate(inv.invoice_date)}</td>
                     <td className="px-4 py-3">{formatCad(inv.total)}</td>
                     <td className="px-4 py-3">
@@ -399,18 +403,18 @@ export function InvoicesPage() {
 
       <Modal title="Créer une facture" open={createOpen} onClose={() => setCreateOpen(false)} wide>
         <div className="space-y-4">
-          <Field label="Client">
+          <Field label="Partenaire (client)">
             <select
               className={inputClass}
-              value={createClientId}
+              value={createPartnerId}
               onChange={async (e) => {
-                setCreateClientId(e.target.value)
+                setCreatePartnerId(e.target.value)
                 await loadUnbilled(e.target.value)
               }}
             >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.legal_name}
+              {billablePartners.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.legal_name}
                 </option>
               ))}
             </select>
@@ -438,7 +442,7 @@ export function InvoicesPage() {
           )}
 
           {nothingToBill ? (
-            <p className="text-sm text-muted">Aucun temps ni forfait non facturé pour ce client.</p>
+            <p className="text-sm text-muted">Aucun temps ni forfait non facturé pour ce partenaire.</p>
           ) : (
             <>
               {unbilledFixed.length > 0 && (
@@ -571,8 +575,8 @@ export function InvoicesPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="text-muted text-xs">Client</div>
-                <div className="font-medium">{selected.clients?.legal_name}</div>
+                <div className="text-muted text-xs">Partenaire</div>
+                <div className="font-medium">{selected.partners?.legal_name}</div>
               </div>
               <div>
                 <div className="text-muted text-xs">Échéance</div>

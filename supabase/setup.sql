@@ -50,6 +50,7 @@ create type public.expense_category as enum (
 create type public.tax_period_status as enum ('open', 'filed', 'paid');
 create type public.corp_tax_status as enum ('estimated', 'due', 'paid');
 create type public.pay_frequency as enum ('weekly', 'biweekly', 'semimonthly', 'monthly');
+create type public.partner_kind as enum ('customer', 'provider', 'both');
 
 -- ---------------------------------------------------------------------------
 -- Organization settings (one row per authenticated user)
@@ -91,13 +92,14 @@ create trigger organization_settings_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Clients
+-- Partners (clients, suppliers, or both)
 -- ---------------------------------------------------------------------------
 
-create table public.clients (
+create table public.partners (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   legal_name text not null,
+  kind public.partner_kind not null default 'customer',
   contact_name text,
   email text,
   address_line1 text,
@@ -112,14 +114,14 @@ create table public.clients (
   updated_at timestamptz not null default now()
 );
 
-create index clients_user_id_idx on public.clients (user_id);
+create index partners_user_id_idx on public.partners (user_id);
 
-create trigger clients_set_user_id
-  before insert on public.clients
+create trigger partners_set_user_id
+  before insert on public.partners
   for each row execute function public.set_user_id();
 
-create trigger clients_updated_at
-  before update on public.clients
+create trigger partners_updated_at
+  before update on public.partners
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
@@ -129,7 +131,7 @@ create trigger clients_updated_at
 create table public.projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  client_id uuid not null references public.clients (id) on delete cascade,
+  partner_id uuid not null references public.partners (id) on delete cascade,
   name text not null,
   status public.project_status not null default 'active',
   default_hourly_rate numeric(10, 2) not null,
@@ -142,7 +144,7 @@ create table public.projects (
 );
 
 create index projects_user_id_idx on public.projects (user_id);
-create index projects_client_id_idx on public.projects (client_id);
+create index projects_partner_id_idx on public.projects (partner_id);
 
 create trigger projects_set_user_id
   before insert on public.projects
@@ -222,7 +224,7 @@ create trigger time_entries_updated_at
 create table public.invoices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  client_id uuid not null references public.clients (id) on delete restrict,
+  partner_id uuid not null references public.partners (id) on delete restrict,
   invoice_number text not null,
   invoice_date date not null default current_date,
   due_date date not null,
@@ -239,7 +241,7 @@ create table public.invoices (
 );
 
 create index invoices_user_id_idx on public.invoices (user_id);
-create index invoices_client_id_idx on public.invoices (client_id);
+create index invoices_partner_id_idx on public.invoices (partner_id);
 
 create trigger invoices_set_user_id
   before insert on public.invoices
@@ -555,6 +557,11 @@ create table public.bank_transactions (
     'payment', 'expense', 'payroll', 'dividend', 'sales_tax', 'corporate_tax', 'manual'
   )),
   match_id uuid,
+  source_format text check (
+    source_format is null or source_format in ('chequing', 'credit_card', 'manual')
+  ),
+  transaction_code text,
+  import_key text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -562,6 +569,9 @@ create table public.bank_transactions (
 
 create index bank_transactions_user_id_idx on public.bank_transactions (user_id);
 create index bank_transactions_date_idx on public.bank_transactions (transaction_date);
+create unique index bank_transactions_user_import_key_idx
+  on public.bank_transactions (user_id, import_key)
+  where import_key is not null;
 
 create trigger bank_transactions_set_user_id
   before insert on public.bank_transactions
@@ -607,7 +617,7 @@ create trigger accounting_adjustments_updated_at
 -- ---------------------------------------------------------------------------
 
 alter table public.organization_settings enable row level security;
-alter table public.clients enable row level security;
+alter table public.partners enable row level security;
 alter table public.projects enable row level security;
 alter table public.employees enable row level security;
 alter table public.time_entries enable row level security;
@@ -631,7 +641,7 @@ create policy "settings_insert_own" on public.organization_settings
 create policy "settings_update_own" on public.organization_settings
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
-create policy "clients_all_own" on public.clients
+create policy "partners_all_own" on public.partners
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "projects_all_own" on public.projects
@@ -684,7 +694,7 @@ create policy "accounting_adjustments_all_own" on public.accounting_adjustments
 -- ---------------------------------------------------------------------------
 
 revoke all on table public.organization_settings from anon, public;
-revoke all on table public.clients from anon, public;
+revoke all on table public.partners from anon, public;
 revoke all on table public.projects from anon, public;
 revoke all on table public.employees from anon, public;
 revoke all on table public.time_entries from anon, public;
@@ -702,7 +712,7 @@ revoke all on table public.bank_transactions from anon, public;
 revoke all on table public.accounting_adjustments from anon, public;
 
 grant select, insert, update, delete on table public.organization_settings to authenticated;
-grant select, insert, update, delete on table public.clients to authenticated;
+grant select, insert, update, delete on table public.partners to authenticated;
 grant select, insert, update, delete on table public.projects to authenticated;
 grant select, insert, update, delete on table public.employees to authenticated;
 grant select, insert, update, delete on table public.time_entries to authenticated;

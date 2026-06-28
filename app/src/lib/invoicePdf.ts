@@ -1,17 +1,17 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import type { Client, Invoice, InvoiceLineItem, OrganizationSettings } from './types'
+import type { Partner, Invoice, InvoiceLineItem, OrganizationSettings } from './types'
 import { formatDate } from './format'
 import type { InvoiceLineDraft } from './invoice'
 
 interface PdfInput {
   invoice: Invoice
-  client: Client
+  partner: Partner
   settings: OrganizationSettings | null
   lines: (InvoiceLineItem | InvoiceLineDraft)[]
 }
 
-export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInput) {
+export function downloadInvoicePdf({ invoice, partner, settings, lines }: PdfInput) {
   const doc = new jsPDF()
   const company = settings?.company_legal_name || 'Facture'
   const margin = 14
@@ -48,15 +48,15 @@ export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInpu
   doc.text('Facturer à :', margin, y)
   y += 5
   doc.setFontSize(9)
-  doc.text(client.legal_name, margin, y)
+  doc.text(partner.legal_name, margin, y)
   y += 4
-  if (client.address_line1) {
-    doc.text(client.address_line1, margin, y)
+  if (partner.address_line1) {
+    doc.text(partner.address_line1, margin, y)
     y += 4
   }
-  const clientCity = [client.city, client.province, client.postal_code].filter(Boolean).join(' ')
-  if (clientCity) {
-    doc.text(clientCity, margin, y)
+  const partnerCity = [partner.city, partner.province, partner.postal_code].filter(Boolean).join(' ')
+  if (partnerCity) {
+    doc.text(partnerCity, margin, y)
     y += 4
   }
   y += 6

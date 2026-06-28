@@ -3,12 +3,10 @@ import { useAuth } from './hooks/useAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
-import { ClientsPage } from './pages/ClientsPage'
+import { PartnersPage } from './pages/PartnersPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { TimePage } from './pages/TimePage'
 import { InvoicesPage } from './pages/InvoicesPage'
-import { PaymentsPage } from './pages/PaymentsPage'
-import { ExpensesPage } from './pages/ExpensesPage'
 import { EmployeeExpensesPage } from './pages/EmployeeExpensesPage'
 import { PayrollPage } from './pages/PayrollPage'
 import { DividendsPage } from './pages/DividendsPage'
@@ -34,12 +32,13 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<DashboardPage />} />
-          <Route path="clients" element={<ClientsPage />} />
+          <Route path="partners" element={<PartnersPage />} />
+          <Route path="clients" element={<Navigate to="/partners" replace />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="time" element={<TimePage />} />
           <Route path="invoices" element={<InvoicesPage />} />
-          <Route path="payments" element={<PaymentsPage />} />
-          <Route path="expenses" element={<ExpensesPage />} />
+          <Route path="payments" element={<Navigate to="/bank" replace />} />
+          <Route path="expenses" element={<Navigate to="/bank" replace />} />
           <Route path="employee-expenses" element={<EmployeeExpensesPage />} />
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="dividends" element={<DividendsPage />} />

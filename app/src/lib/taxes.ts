@@ -28,6 +28,20 @@ export function computePurchaseTaxes(amount: number, settings: TaxSettings) {
   return computeSalesTaxes(amount, settings)
 }
 
+/** Back-calculate HT + TPS/TVQ from a TTC purchase total (Québec compound). */
+export function computePurchaseTaxesFromTotal(totalInclTax: number, settings: TaxSettings) {
+  const total = round2(Math.abs(totalInclTax))
+  if (!settings.charge_gst && !settings.charge_qst) {
+    return { subtotal: total, gst: 0, qst: 0, total }
+  }
+  const gstRate = settings.charge_gst ? settings.gst_rate : 0
+  const qstRate = settings.charge_qst ? settings.qst_rate : 0
+  const divisor = (1 + gstRate) * (1 + qstRate)
+  const subtotal = round2(total / divisor)
+  const taxes = computeSalesTaxes(subtotal, settings)
+  return { ...taxes, total: round2(taxes.subtotal + taxes.gst + taxes.qst) }
+}
+
 export function isRevenueInvoice(status: string): boolean {
   return status !== 'void' && status !== 'draft'
 }

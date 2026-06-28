@@ -10,7 +10,7 @@ Run **`supabase/setup.sql`** once in the Supabase **SQL Editor** on an empty pro
 
 ### Existing project (already ran older migrations)
 
-Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/archive/` in filename order. Latest: `20260703000000_invoice_include_sales_tax.sql` (per-invoice sales tax toggle).
+Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/` in filename order. Latest: `20260629000000_partners.sql` (clients → partners with customer/provider/both roles).
 
 ## Auth lockdown
 
@@ -29,7 +29,7 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 
 | Module | Tables |
 |--------|--------|
-| Core | `organization_settings`, `clients`, `projects`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
+| Core | `organization_settings`, `partners`, `projects`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
 | Finance v2 | `expenses`, `payroll_runs`, `sales_tax_periods`, `corporate_tax_records` |
 | Accounting v3 | `bank_transactions`, `accounting_adjustments` (+ extended `organization_settings`, `payroll_runs`) |
 | HR | `employees`, `employee_expenses`, `dividends`, `dividend_allocations` |

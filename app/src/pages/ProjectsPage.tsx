@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { BillingType, Client, Project, ProjectStatus } from '../lib/types'
+import type { BillingType, Partner, Project, ProjectStatus } from '../lib/types'
 import { matchesSearch } from '../lib/filters'
+import { customerPartners } from '../lib/partners'
 import { billingTypeLabel, projectAmountLabel } from '../lib/invoice'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -13,10 +14,10 @@ import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/Lis
 
 export function ProjectsPage() {
   const [rows, setRows] = useState<Project[]>([])
-  const [clients, setClients] = useState<Client[]>([])
+  const [partners, setPartners] = useState<Partner[]>([])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({
-    client_id: '',
+    partner_id: '',
     name: '',
     status: 'active' as ProjectStatus,
     billing_type: 'hourly' as BillingType,
@@ -26,26 +27,28 @@ export function ProjectsPage() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [clientFilter, setClientFilter] = useState('')
+  const [partnerFilter, setPartnerFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+
+  const billablePartners = useMemo(() => customerPartners(partners), [partners])
 
   const filtered = useMemo(() => {
     return rows.filter((p) => {
-      if (clientFilter && p.client_id !== clientFilter) return false
+      if (partnerFilter && p.partner_id !== partnerFilter) return false
       if (statusFilter && p.status !== statusFilter) return false
       return matchesSearch(
         search,
         p.name,
-        p.clients?.legal_name,
+        p.partners?.legal_name,
         p.notes,
         p.default_hourly_rate,
         p.fixed_price,
         p.billing_type
       )
     })
-  }, [rows, search, clientFilter, statusFilter])
+  }, [rows, search, partnerFilter, statusFilter])
 
-  const hasFilters = !!(search || clientFilter || statusFilter)
+  const hasFilters = !!(search || partnerFilter || statusFilter)
 
   useEffect(() => {
     load()
@@ -53,16 +56,16 @@ export function ProjectsPage() {
 
   async function load() {
     const [p, c] = await Promise.all([
-      supabase.from('projects').select('*, clients(legal_name)').order('name'),
-      supabase.from('clients').select('*').order('legal_name'),
+      supabase.from('projects').select('*, partners(legal_name, kind)').order('name'),
+      supabase.from('partners').select('*').order('legal_name'),
     ])
     setRows((p.data as Project[]) ?? [])
-    setClients(c.data ?? [])
+    setPartners(c.data ?? [])
   }
 
   function openNew() {
     setForm({
-      client_id: clients[0]?.id ?? '',
+      partner_id: billablePartners[0]?.id ?? '',
       name: '',
       status: 'active',
       billing_type: 'hourly',
@@ -76,7 +79,7 @@ export function ProjectsPage() {
 
   function openEdit(p: Project) {
     setForm({
-      client_id: p.client_id,
+      partner_id: p.partner_id,
       name: p.name,
       status: p.status,
       billing_type: p.billing_type === 'fixed' ? 'fixed' : 'hourly',
@@ -91,7 +94,7 @@ export function ProjectsPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault()
     const payload = {
-      client_id: form.client_id,
+      partner_id: form.partner_id,
       name: form.name,
       status: form.status,
       billing_type: form.billing_type,
@@ -118,11 +121,15 @@ export function ProjectsPage() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Projets</h1>
-        <Button onClick={openNew} disabled={clients.length === 0}>
+        <Button onClick={openNew} disabled={billablePartners.length === 0}>
           Nouveau projet
         </Button>
       </div>
-      {clients.length === 0 && <p className="text-sm text-muted mb-4">Ajoutez un client avant de créer un projet.</p>}
+      {billablePartners.length === 0 && (
+        <p className="text-sm text-muted mb-4">
+          Ajoutez un partenaire avec le rôle Client ou Client et fournisseur avant de créer un projet.
+        </p>
+      )}
       {rows.length === 0 ? (
         <EmptyState message="Aucun projet." />
       ) : (
@@ -130,15 +137,18 @@ export function ProjectsPage() {
           <ListToolbar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Projet, client…"
+            searchPlaceholder="Projet, partenaire…"
             resultCount={filtered.length}
             totalCount={rows.length}
           >
             <FilterSelect
-              label="Client"
-              value={clientFilter}
-              onChange={setClientFilter}
-              options={[{ value: '', label: 'Tous' }, ...clients.map((c) => ({ value: c.id, label: c.legal_name }))]}
+              label="Partenaire"
+              value={partnerFilter}
+              onChange={setPartnerFilter}
+              options={[
+                { value: '', label: 'Tous' },
+                ...billablePartners.map((p) => ({ value: p.id, label: p.legal_name })),
+              ]}
             />
             <FilterSelect
               label="Statut"
@@ -156,7 +166,7 @@ export function ProjectsPage() {
               visible={hasFilters}
               onClick={() => {
                 setSearch('')
-                setClientFilter('')
+                setPartnerFilter('')
                 setStatusFilter('')
               }}
             />
@@ -168,7 +178,7 @@ export function ProjectsPage() {
               <thead className="bg-stone-50 text-muted text-left">
                 <tr>
                   <th className="px-4 py-3 font-medium">Projet</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
+                  <th className="px-4 py-3 font-medium">Partenaire</th>
                   <th className="px-4 py-3 font-medium">Facturation</th>
                   <th className="px-4 py-3 font-medium">Montant</th>
                   <th className="px-4 py-3 font-medium">Statut</th>
@@ -179,7 +189,7 @@ export function ProjectsPage() {
                 {filtered.map((p) => (
                   <tr key={p.id} className="hover:bg-stone-50/50">
                     <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 text-muted">{p.clients?.legal_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted">{p.partners?.legal_name ?? '—'}</td>
                     <td className="px-4 py-3">
                       <Badge label={billingTypeLabel(p.billing_type)} tone={p.billing_type === 'fixed' ? 'sent' : 'active'} />
                     </td>
@@ -207,16 +217,16 @@ export function ProjectsPage() {
       )}
       <Modal title={editingId ? 'Modifier le projet' : 'Nouveau projet'} open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">
-          <Field label="Client *">
+          <Field label="Partenaire (client) *">
             <select
               className={inputClass}
               required
-              value={form.client_id}
-              onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+              value={form.partner_id}
+              onChange={(e) => setForm({ ...form, partner_id: e.target.value })}
             >
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.legal_name}
+              {billablePartners.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.legal_name}
                 </option>
               ))}
             </select>

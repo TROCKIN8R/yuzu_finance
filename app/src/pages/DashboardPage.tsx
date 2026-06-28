@@ -54,7 +54,7 @@ function StmtSection({ title }: { title: string }) {
 
 export function DashboardPage() {
   const [fin, setFin] = useState<FinancialSnapshot | null>(null)
-  const [ops, setOps] = useState({ clients: 0, unbilledHours: 0, unbilledAmount: 0, pendingReimbursement: 0 })
+  const [ops, setOps] = useState({ partners: 0, unbilledHours: 0, unbilledAmount: 0, pendingReimbursement: 0 })
   const [period, setPeriod] = useState<DateRange | null>(null)
   const [presets, setPresets] = useState<DateRange[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
@@ -109,8 +109,8 @@ export function DashboardPage() {
   }
 
   async function loadOps() {
-    const [clients, entries, employeeExpenses] = await Promise.all([
-      supabase.from('clients').select('id', { count: 'exact', head: true }),
+    const [partners, entries, employeeExpenses] = await Promise.all([
+      supabase.from('partners').select('id', { count: 'exact', head: true }),
       supabase
         .from('time_entries')
         .select('hours, rate_override, billable, invoice_id, projects(default_hourly_rate)')
@@ -132,7 +132,7 @@ export function DashboardPage() {
     const pendingReimbursement = (employeeExpenses.data ?? []).reduce((s, e) => s + Number(e.total), 0)
 
     setOps({
-      clients: clients.count ?? 0,
+      partners: partners.count ?? 0,
       unbilledHours: Math.round(unbilledHours * 10) / 10,
       unbilledAmount,
       pendingReimbursement,
@@ -230,7 +230,7 @@ export function DashboardPage() {
       <section>
         <h2 className="text-sm font-medium text-muted mb-3">Opérations</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card label="Clients" value={String(ops.clients)} to="/clients" />
+          <Card label="Partenaires" value={String(ops.partners)} to="/partners" />
           <Card label="Heures non facturées" value={`${ops.unbilledHours} h`} to="/time" />
           <Card label="À facturer" value={formatCad(ops.unbilledAmount)} to="/invoices" />
           <Card label="À rembourser" value={formatCad(ops.pendingReimbursement)} to="/employee-expenses" />
@@ -259,7 +259,7 @@ export function DashboardPage() {
       <section>
         <h2 className="text-sm font-medium text-muted mb-3">Flux de trésorerie — {period.label}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <Card label="Encaissements" value={formatCad(fin.cashIn)} sub="Paiements clients" to="/payments" />
+          <Card label="Encaissements" value={formatCad(fin.cashIn)} sub="Paiements clients" to="/bank" />
           <Card label="Décaissements" value={formatCad(fin.cashOut)} sub="Voir détail ci-dessous" />
           <Card
             label="Trésorerie nette estimée"

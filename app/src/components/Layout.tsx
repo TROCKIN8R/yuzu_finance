@@ -9,20 +9,18 @@ const primaryNav: { section: string; links: NavItem[] }[] = [
   {
     section: 'Facturation',
     links: [
-      { to: '/clients', label: 'Clients' },
+      { to: '/partners', label: 'Partenaires' },
       { to: '/projects', label: 'Projets' },
       { to: '/time', label: 'Temps' },
       { to: '/invoices', label: 'Factures' },
-      { to: '/payments', label: 'Paiements' },
     ],
   },
   {
     section: 'Finances',
     links: [
-      { to: '/expenses', label: 'Dépenses' },
+      { to: '/bank', label: 'Banque' },
       { to: '/payroll', label: 'Paie' },
       { to: '/dividends', label: 'Dividendes' },
-      { to: '/bank', label: 'Banque' },
       { to: '/taxes', label: 'Fiscalité' },
     ],
   },

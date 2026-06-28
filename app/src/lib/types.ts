@@ -9,6 +9,8 @@ export type BankMatchSource =
   | 'corporate_tax'
   | 'manual'
 
+export type BankSourceFormat = 'chequing' | 'credit_card' | 'manual'
+
 export interface BankTransaction {
   id: string
   user_id: string
@@ -18,6 +20,9 @@ export interface BankTransaction {
   reconciled: boolean
   match_source: BankMatchSource | null
   match_id: string | null
+  source_format: BankSourceFormat | null
+  transaction_code: string | null
+  import_key: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -192,10 +197,13 @@ export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived'
 export type BillingType = 'hourly' | 'fixed'
 export type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'void'
 
-export interface Client {
+export type PartnerKind = 'customer' | 'provider' | 'both'
+
+export interface Partner {
   id: string
   user_id: string
   legal_name: string
+  kind: PartnerKind
   contact_name: string | null
   email: string | null
   address_line1: string | null
@@ -213,7 +221,7 @@ export interface Client {
 export interface Project {
   id: string
   user_id: string
-  client_id: string
+  partner_id: string
   name: string
   status: ProjectStatus
   default_hourly_rate: number
@@ -224,7 +232,7 @@ export interface Project {
   notes: string | null
   created_at: string
   updated_at: string
-  clients?: Pick<Client, 'legal_name'>
+  partners?: Pick<Partner, 'legal_name' | 'kind'>
 }
 
 export interface InvoiceLineItem {
@@ -260,8 +268,8 @@ export interface TimeEntry {
   invoice_id: string | null
   created_at: string
   updated_at: string
-  projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'client_id'> & {
-    clients?: Pick<Client, 'legal_name'>
+  projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'partner_id'> & {
+    partners?: Pick<Partner, 'legal_name'>
   }
   employees?: Pick<Employee, 'first_name' | 'last_name'>
   invoices?: Pick<Invoice, 'invoice_number'>
@@ -270,7 +278,7 @@ export interface TimeEntry {
 export interface Invoice {
   id: string
   user_id: string
-  client_id: string
+  partner_id: string
   invoice_number: string
   invoice_date: string
   due_date: string
@@ -283,7 +291,7 @@ export interface Invoice {
   notes: string | null
   created_at: string
   updated_at: string
-  clients?: Pick<Client, 'legal_name'>
+  partners?: Pick<Partner, 'legal_name'>
 }
 
 export interface Payment {
@@ -297,7 +305,7 @@ export interface Payment {
   notes: string | null
   created_at: string
   updated_at: string
-  invoices?: Pick<Invoice, 'invoice_number' | 'total' | 'client_id'>
+  invoices?: Pick<Invoice, 'invoice_number' | 'total' | 'partner_id'>
 }
 
 export interface OrganizationSettings {
@@ -334,10 +342,10 @@ type OmitSystemFields<T> = Omit<T, 'id' | 'user_id' | 'created_at' | 'updated_at
 export interface Database {
   public: {
     Tables: {
-      clients: {
-        Row: Client
-        Insert: OmitSystemFields<Client> & { id?: string; user_id?: string }
-        Update: Partial<OmitSystemFields<Client>>
+      partners: {
+        Row: Partner
+        Insert: OmitSystemFields<Partner> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<Partner>>
         Relationships: []
       }
       projects: {
@@ -392,6 +400,7 @@ export interface Database {
     Enums: {
       project_status: ProjectStatus
       invoice_status: InvoiceStatus
+      partner_kind: PartnerKind
     }
     CompositeTypes: Record<string, never>
   }

@@ -22,7 +22,7 @@ export function TimePage() {
   const [billingFilter, setBillingFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
-  const [clientFilter, setClientFilter] = useState('')
+  const [partnerFilter, setPartnerFilter] = useState('')
   const [employeeFilter, setEmployeeFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -38,10 +38,10 @@ export function TimePage() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const clientOptions = useMemo(() => {
+  const partnerOptions = useMemo(() => {
     const names = new Map<string, string>()
     for (const p of allProjects) {
-      if (p.clients?.legal_name) names.set(p.client_id, p.clients.legal_name)
+      if (p.partners?.legal_name) names.set(p.partner_id, p.partners.legal_name)
     }
     return [...names.entries()].map(([id, label]) => ({ value: id, label }))
   }, [allProjects])
@@ -53,15 +53,15 @@ export function TimePage() {
       if (billingFilter === 'invoiced' && !t.invoice_id) return false
       if (employeeFilter && t.employee_id !== employeeFilter) return false
       if (projectFilter && t.project_id !== projectFilter) return false
-      if (clientFilter && proj?.client_id !== clientFilter) return false
+      if (partnerFilter && proj?.partner_id !== partnerFilter) return false
       if (!inDateRange(t.entry_date, dateFrom, dateTo)) return false
       const inv = relationOne((t as TimeEntry & { invoices?: { invoice_number: string } | { invoice_number: string }[] }).invoices)
       const emp = relationOne(t.employees)
-      return matchesSearch(search, t.description, proj?.name, proj?.clients?.legal_name, inv?.invoice_number, emp ? employeeDisplayName(emp) : '')
+      return matchesSearch(search, t.description, proj?.name, proj?.partners?.legal_name, inv?.invoice_number, emp ? employeeDisplayName(emp) : '')
     })
-  }, [rows, billingFilter, projectFilter, clientFilter, employeeFilter, dateFrom, dateTo, search])
+  }, [rows, billingFilter, projectFilter, partnerFilter, employeeFilter, dateFrom, dateTo, search])
 
-  const hasFilters = !!(search || projectFilter || clientFilter || employeeFilter || dateFrom || dateTo || billingFilter !== 'all')
+  const hasFilters = !!(search || projectFilter || partnerFilter || employeeFilter || dateFrom || dateTo || billingFilter !== 'all')
 
   useEffect(() => {
     load()
@@ -69,10 +69,10 @@ export function TimePage() {
 
   async function load() {
     const [p, entries, emp] = await Promise.all([
-      supabase.from('projects').select('*, clients(legal_name)').order('name'),
+      supabase.from('projects').select('*, partners(legal_name)').order('name'),
       supabase
         .from('time_entries')
-        .select('*, projects(name, default_hourly_rate, client_id, clients(legal_name)), employees(first_name, last_name), invoices(invoice_number)')
+        .select('*, projects(name, default_hourly_rate, partner_id, partners(legal_name)), employees(first_name, last_name), invoices(invoice_number)')
         .order('entry_date', { ascending: false }),
       supabase.from('employees').select('*').eq('active', true).order('last_name').order('first_name'),
     ])
@@ -166,7 +166,7 @@ export function TimePage() {
           <ListToolbar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Description, projet, client, facture…"
+            searchPlaceholder="Description, projet, partenaire, facture…"
             resultCount={filtered.length}
             totalCount={rows.length}
           >
@@ -192,10 +192,10 @@ export function TimePage() {
               options={[{ value: '', label: 'Tous' }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
             />
             <FilterSelect
-              label="Client"
-              value={clientFilter}
-              onChange={setClientFilter}
-              options={[{ value: '', label: 'Tous' }, ...clientOptions]}
+              label="Partenaire"
+              value={partnerFilter}
+              onChange={setPartnerFilter}
+              options={[{ value: '', label: 'Tous' }, ...partnerOptions]}
             />
             <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
             <ClearFiltersButton
@@ -203,7 +203,7 @@ export function TimePage() {
               onClick={() => {
                 setSearch('')
                 setProjectFilter('')
-                setClientFilter('')
+                setPartnerFilter('')
                 setEmployeeFilter('')
                 setDateFrom('')
                 setDateTo('')
@@ -241,7 +241,7 @@ export function TimePage() {
                     <td className="px-4 py-3">{formatDate(t.entry_date)}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{proj?.name ?? '—'}</div>
-                      <div className="text-xs text-muted">{proj?.clients?.legal_name}</div>
+                      <div className="text-xs text-muted">{proj?.partners?.legal_name}</div>
                     </td>
                     <td className="px-4 py-3 text-muted max-w-xs truncate">{t.description}</td>
                     <td className="px-4 py-3">{Number(t.hours).toFixed(2)}</td>
@@ -282,7 +282,7 @@ export function TimePage() {
             <select className={inputClass} required value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.clients?.legal_name})
+                  {p.name} ({p.partners?.legal_name})
                 </option>
               ))}
             </select>
