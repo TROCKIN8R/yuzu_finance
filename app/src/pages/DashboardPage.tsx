@@ -231,8 +231,8 @@ export function DashboardPage() {
         <h2 className="text-sm font-medium text-muted mb-3">Opérations</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card label="Partenaires" value={String(ops.partners)} to="/partners" />
-          <Card label="Heures non facturées" value={`${ops.unbilledHours} h`} to="/time" />
-          <Card label="À facturer" value={formatCad(ops.unbilledAmount)} to="/invoices" />
+          <Card label="Heures non facturées" value={`${ops.unbilledHours} h`} to="/billing/time" />
+          <Card label="À facturer" value={formatCad(ops.unbilledAmount)} to="/billing/invoices" />
           <Card label="À rembourser" value={formatCad(ops.pendingReimbursement)} to="/employee-expenses" />
         </div>
       </section>

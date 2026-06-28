@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { BillingType, Partner, Project, ProjectStatus } from '../lib/types'
 import { matchesSearch } from '../lib/filters'
@@ -11,8 +12,14 @@ import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { SectionHeader } from '../components/PageHeader'
+
+type BillingOutletContext = { refreshMetrics?: () => void }
 
 export function ProjectsPage() {
+  const location = useLocation()
+  const embedded = location.pathname.startsWith('/billing')
+  const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [rows, setRows] = useState<Project[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [open, setOpen] = useState(false)
@@ -61,6 +68,7 @@ export function ProjectsPage() {
     ])
     setRows((p.data as Project[]) ?? [])
     setPartners(c.data ?? [])
+    refreshMetrics?.()
   }
 
   function openNew() {
@@ -119,12 +127,24 @@ export function ProjectsPage() {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Projets</h1>
-        <Button onClick={openNew} disabled={billablePartners.length === 0}>
-          Nouveau projet
-        </Button>
-      </div>
+      {embedded ? (
+        <SectionHeader
+          title="Étape 1 — Projets"
+          actions={
+            <Button onClick={openNew} disabled={billablePartners.length === 0}>
+              Nouveau projet
+            </Button>
+          }
+          className="mb-4"
+        />
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <h1 className="text-2xl font-semibold">Projets</h1>
+          <Button onClick={openNew} disabled={billablePartners.length === 0}>
+            Nouveau projet
+          </Button>
+        </div>
+      )}
       {billablePartners.length === 0 && (
         <p className="text-sm text-muted mb-4">
           Ajoutez un partenaire avec le rôle Client ou Client et fournisseur avant de créer un projet.
@@ -290,7 +310,7 @@ export function ProjectsPage() {
           </div>
           {form.billing_type === 'fixed' && (
             <p className="text-xs text-muted">
-              Les projets forfaitaires apparaissent dans Factures → Créer une facture. Le temps ne s&apos;y applique pas.
+              Les projets forfaitaires se facturent à l&apos;étape Factures. Le temps ne s&apos;y applique pas.
             </p>
           )}
           <div className="flex justify-end gap-2 pt-2">
@@ -301,6 +321,14 @@ export function ProjectsPage() {
           </div>
         </form>
       </Modal>
+      {embedded && rows.some((p) => p.status === 'active' && p.billing_type === 'hourly') && (
+        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
+          Projet horaire actif ?{' '}
+          <Link to="/billing/time" className="text-yuzu-dark font-medium hover:underline">
+            Enregistrer du temps →
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

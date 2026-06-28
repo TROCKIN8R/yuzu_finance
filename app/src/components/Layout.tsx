@@ -10,9 +10,7 @@ const primaryNav: { section: string; links: NavItem[] }[] = [
     section: 'Facturation',
     links: [
       { to: '/partners', label: 'Partenaires' },
-      { to: '/projects', label: 'Projets' },
-      { to: '/time', label: 'Temps' },
-      { to: '/invoices', label: 'Factures' },
+      { to: '/billing/projects', label: 'Prestation → Encaissement' },
     ],
   },
   {
@@ -172,6 +170,20 @@ export function Layout() {
                     (location.pathname === '/taxes' ||
                       location.pathname.startsWith('/sales-tax') ||
                       location.pathname.startsWith('/corporate-tax'))
+                  const billingActive = location.pathname.startsWith('/billing')
+                  if (l.to === '/billing/projects') {
+                    return (
+                      <NavLink
+                        key={l.to}
+                        to={l.to}
+                        end={l.end}
+                        onClick={() => setMenuOpen(false)}
+                        className={navLinkClass(billingActive)}
+                      >
+                        {l.label}
+                      </NavLink>
+                    )
+                  }
                   if (l.to === '/taxes') {
                     return (
                       <NavLink

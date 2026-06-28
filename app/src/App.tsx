@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PartnersPage } from './pages/PartnersPage'
+import { BillingPage } from './pages/BillingPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { TimePage } from './pages/TimePage'
 import { InvoicesPage } from './pages/InvoicesPage'
@@ -34,9 +35,15 @@ export default function App() {
           <Route index element={<DashboardPage />} />
           <Route path="partners" element={<PartnersPage />} />
           <Route path="clients" element={<Navigate to="/partners" replace />} />
-          <Route path="projects" element={<ProjectsPage />} />
-          <Route path="time" element={<TimePage />} />
-          <Route path="invoices" element={<InvoicesPage />} />
+          <Route path="billing" element={<BillingPage />}>
+            <Route index element={<Navigate to="projects" replace />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="time" element={<TimePage />} />
+            <Route path="invoices" element={<InvoicesPage />} />
+          </Route>
+          <Route path="projects" element={<Navigate to="/billing/projects" replace />} />
+          <Route path="time" element={<Navigate to="/billing/time" replace />} />
+          <Route path="invoices" element={<Navigate to="/billing/invoices" replace />} />
           <Route path="payments" element={<Navigate to="/bank" replace />} />
           <Route path="expenses" element={<Navigate to="/bank" replace />} />
           <Route path="employee-expenses" element={<EmployeeExpensesPage />} />

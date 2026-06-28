@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, Project, TimeEntry } from '../lib/types'
 import { effectiveRate, formatCad, formatDate, lineAmount, relationOne, todayIso } from '../lib/format'
@@ -11,10 +12,15 @@ import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { SectionHeader } from '../components/PageHeader'
 
 type Filter = 'all' | 'unbilled' | 'invoiced'
+type BillingOutletContext = { refreshMetrics?: () => void }
 
 export function TimePage() {
+  const location = useLocation()
+  const embedded = location.pathname.startsWith('/billing')
+  const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [rows, setRows] = useState<TimeEntry[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [allProjects, setAllProjects] = useState<Project[]>([])
@@ -80,6 +86,7 @@ export function TimePage() {
     setProjects(((p.data as Project[]) ?? []).filter((x) => x.status === 'active' && x.billing_type !== 'fixed'))
     setRows((entries.data as TimeEntry[]) ?? [])
     setEmployees((emp.data as Employee[]) ?? [])
+    refreshMetrics?.()
   }
 
   const defaultEmployeeId = employees[0]?.id ?? ''
@@ -146,14 +153,28 @@ export function TimePage() {
     load()
   }
 
+  const unbilledCount = useMemo(() => rows.filter((t) => !t.invoice_id && t.billable).length, [rows])
+
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Suivi du temps</h1>
-        <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
-          Logger du temps
-        </Button>
-      </div>
+      {embedded ? (
+        <SectionHeader
+          title="Étape 2 — Temps"
+          actions={
+            <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
+              Logger du temps
+            </Button>
+          }
+          className="mb-4"
+        />
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <h1 className="text-2xl font-semibold">Suivi du temps</h1>
+          <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
+            Logger du temps
+          </Button>
+        </div>
+      )}
       {employees.length === 0 && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
           Ajoutez un employé dans la section Paie avant de logger du temps.
@@ -315,6 +336,14 @@ export function TimePage() {
           </div>
         </form>
       </Modal>
+      {embedded && unbilledCount > 0 && (
+        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
+          {unbilledCount} entrée{unbilledCount > 1 ? 's' : ''} prête{unbilledCount > 1 ? 's' : ''} à facturer.{' '}
+          <Link to="/billing/invoices" className="text-yuzu-dark font-medium hover:underline">
+            Créer une facture →
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

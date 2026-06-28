@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
 import { customerPartners } from '../lib/partners'
@@ -20,6 +21,9 @@ import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { SectionHeader } from '../components/PageHeader'
+
+type BillingOutletContext = { refreshMetrics?: () => void }
 
 function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | ReturnType<typeof buildLineFromTimeEntry>)[]; showTaxes: boolean }) {
   return (
@@ -69,6 +73,9 @@ function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | Return
 }
 
 export function InvoicesPage() {
+  const location = useLocation()
+  const embedded = location.pathname.startsWith('/billing')
+  const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [rows, setRows] = useState<Invoice[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
@@ -116,6 +123,7 @@ export function InvoicesPage() {
     setSettings(set.data)
     const billable = customerPartners(cli.data ?? [])
     if (billable[0]) setCreatePartnerId(billable[0].id)
+    refreshMetrics?.()
   }
 
   async function loadUnbilled(partnerId: string) {
@@ -313,12 +321,24 @@ export function InvoicesPage() {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Factures</h1>
-        <Button onClick={openCreate} disabled={billablePartners.length === 0}>
-          Créer une facture
-        </Button>
-      </div>
+      {embedded ? (
+        <SectionHeader
+          title="Étape 3 — Factures"
+          actions={
+            <Button onClick={openCreate} disabled={billablePartners.length === 0}>
+              Créer une facture
+            </Button>
+          }
+          className="mb-6"
+        />
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <h1 className="text-2xl font-semibold">Factures</h1>
+          <Button onClick={openCreate} disabled={billablePartners.length === 0}>
+            Créer une facture
+          </Button>
+        </div>
+      )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune facture — créez-en une à partir du temps ou d'un projet forfaitaire." />
       ) : (
@@ -628,6 +648,14 @@ export function InvoicesPage() {
           </div>
         )}
       </Modal>
+      {embedded && (
+        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
+          Facture envoyée ?{' '}
+          <Link to="/bank" className="text-yuzu-dark font-medium hover:underline">
+            Encaisser le paiement dans Banque →
+          </Link>
+        </p>
+      )}
     </div>
   )
 }
