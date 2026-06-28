@@ -17,6 +17,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '1500', name: 'Amortissement cumulé', type: 'asset' },
   { code: '2000', name: 'Comptes fournisseurs', type: 'liability' },
   { code: '2050', name: 'Charges à payer', type: 'liability' },
+  { code: '2060', name: 'Remboursements dus à l\'employé', type: 'liability' },
   { code: '2100', name: 'TPS à remettre', type: 'liability' },
   { code: '2110', name: 'TVQ à remettre', type: 'liability' },
   { code: '2200', name: 'Retenues à la source — impôts', type: 'liability' },

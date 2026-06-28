@@ -30,14 +30,15 @@ export function GeneralLedgerPage() {
 
   async function load() {
     setLoading(true)
-    const [invoices, payments, expenses, payroll, dividends, corpTax, salesTax, adjustments] = await Promise.all([
+    const [invoices, payments, expenses, employeeExpenses, payroll, dividends, corpTax, salesTax, adjustments] = await Promise.all([
       supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
       supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number)'),
       supabase.from('expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, paid, payroll_run_id'),
+      supabase.from('employee_expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, taxable, payroll_run_id'),
       supabase
         .from('payroll_runs')
         .select(
-          'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
+          'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
         ),
       supabase.from('dividends').select('id, payment_date, total_amount, description'),
       supabase.from('corporate_tax_records').select('id, paid_date, paid_amount, label, fiscal_year'),
@@ -50,6 +51,7 @@ export function GeneralLedgerPage() {
         invoices: invoices.data ?? [],
         payments: payments.data ?? [],
         expenses: expenses.data ?? [],
+        employeeExpenses: employeeExpenses.data ?? [],
         payrollRuns: payroll.data ?? [],
         dividends: dividends.data ?? [],
         corporateTax: corpTax.data ?? [],

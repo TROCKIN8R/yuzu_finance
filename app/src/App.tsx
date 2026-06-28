@@ -9,6 +9,7 @@ import { TimePage } from './pages/TimePage'
 import { InvoicesPage } from './pages/InvoicesPage'
 import { PaymentsPage } from './pages/PaymentsPage'
 import { ExpensesPage } from './pages/ExpensesPage'
+import { EmployeeExpensesPage } from './pages/EmployeeExpensesPage'
 import { PayrollPage } from './pages/PayrollPage'
 import { DividendsPage } from './pages/DividendsPage'
 import { SalesTaxPage } from './pages/SalesTaxPage'
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="expenses" element={<ExpensesPage />} />
+          <Route path="employee-expenses" element={<EmployeeExpensesPage />} />
           <Route path="payroll" element={<PayrollPage />} />
           <Route path="dividends" element={<DividendsPage />} />
           <Route path="sales-tax" element={<SalesTaxPage />} />

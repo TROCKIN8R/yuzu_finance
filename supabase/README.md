@@ -32,4 +32,4 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 | Core | `organization_settings`, `clients`, `projects`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
 | Finance v2 | `expenses`, `payroll_runs`, `sales_tax_periods`, `corporate_tax_records` |
 | Accounting v3 | `bank_transactions`, `accounting_adjustments` (+ extended `organization_settings`, `payroll_runs`) |
-| HR | `employees`, `dividends`, `dividend_allocations` |
+| HR | `employees`, `employee_expenses`, `dividends`, `dividend_allocations` |

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Employee, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
+import type { Employee, EmployeeExpense, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
@@ -16,6 +16,13 @@ import {
   sumEmployeeDeductions,
   sumEmployerContributions,
 } from '../lib/payrollCalc'
+import { deletePayrollRun, linkReimbursements } from '../lib/payrollActions'
+import {
+  grossWithTaxableReimbursement,
+  netPayWithReimbursement,
+  reimbursementTotals,
+} from '../lib/reimbursement'
+import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -113,6 +120,9 @@ export function PayrollPage() {
   const [employeeFilter, setEmployeeFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [reimbursableExpenses, setReimbursableExpenses] = useState<EmployeeExpense[]>([])
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set())
+  const [salaryGrossBase, setSalaryGrossBase] = useState(0)
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
 
@@ -150,6 +160,42 @@ export function PayrollPage() {
     ])
     setEmployees((emp.data as Employee[]) ?? [])
     setRows((pay.data as PayrollRun[]) ?? [])
+  }
+
+  async function loadReimbursableExpenses(employeeId: string, payrollRunId?: string | null) {
+    const { data: unreimbursed } = await supabase
+      .from('employee_expenses')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .is('payroll_run_id', null)
+      .order('expense_date')
+
+    let linked: EmployeeExpense[] = []
+    if (payrollRunId) {
+      const { data } = await supabase
+        .from('employee_expenses')
+        .select('*')
+        .eq('payroll_run_id', payrollRunId)
+        .order('expense_date')
+      linked = (data as EmployeeExpense[]) ?? []
+    }
+
+    const all = [...linked, ...((unreimbursed as EmployeeExpense[]) ?? [])]
+    setReimbursableExpenses(all)
+    return all
+  }
+
+  function syncGrossWithReimbursements(base: number, expenses: EmployeeExpense[], selected: Set<string>, current: PayrollForm) {
+    const { taxable } = reimbursementTotals(expenses, selected)
+    return { ...current, gross_pay: grossWithTaxableReimbursement(base, taxable) }
+  }
+
+  function toggleExpenseSelection(id: string) {
+    const next = new Set(selectedExpenseIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedExpenseIds(next)
+    if (form) setForm(syncGrossWithReimbursements(salaryGrossBase, reimbursableExpenses, next, form))
   }
 
   function openNewEmployee() {
@@ -199,24 +245,29 @@ export function PayrollPage() {
     load()
   }
 
-  function openNewPayroll(emp?: Employee) {
+  async function openNewPayroll(emp?: Employee) {
     const target = emp ?? activeEmployees[0]
     if (!target) {
       alert('Ajoutez un employé actif avant de créer une paie.')
       return
     }
-    setForm(payrollFormFromEmployee(target))
+    const initial = payrollFormFromEmployee(target)
+    setSalaryGrossBase(initial.gross_pay)
+    setForm(initial)
+    setSelectedExpenseIds(new Set())
     setPayEditingId(null)
+    await loadReimbursableExpenses(target.id)
     setPayOpen(true)
   }
 
-  function openEditPayroll(p: PayrollRun) {
+  async function openEditPayroll(p: PayrollRun) {
+    const gross = Number(p.gross_pay)
     setForm({
       employee_id: p.employee_id ?? '',
       pay_period_start: p.pay_period_start,
       pay_period_end: p.pay_period_end,
       payment_date: p.payment_date,
-      gross_pay: Number(p.gross_pay),
+      gross_pay: gross,
       federal_tax: Number(p.federal_tax),
       provincial_tax: Number(p.provincial_tax),
       cpp_employee: Number(p.cpp_employee),
@@ -233,6 +284,17 @@ export function PayrollPage() {
       remittance_reference: p.remittance_reference ?? '',
     })
     setPayEditingId(p.id)
+    if (p.employee_id) {
+      const expenses = await loadReimbursableExpenses(p.employee_id, p.id)
+      const selected = new Set(expenses.filter((e) => e.payroll_run_id === p.id).map((e) => e.id))
+      setSelectedExpenseIds(selected)
+      const { taxable } = reimbursementTotals(expenses, selected)
+      setSalaryGrossBase(gross - taxable)
+    } else {
+      setReimbursableExpenses([])
+      setSelectedExpenseIds(new Set())
+      setSalaryGrossBase(gross)
+    }
     setPayOpen(true)
   }
 
@@ -251,15 +313,21 @@ export function PayrollPage() {
       pay_period_start: range.start,
       pay_period_end: range.end,
       ...calc,
+      gross_pay: grossWithTaxableReimbursement(calc.gross_pay, reimbursementTotals(reimbursableExpenses, selectedExpenseIds).taxable),
       other_deductions: form.other_deductions,
       employer_benefits: form.employer_benefits,
     })
+    setSalaryGrossBase(calc.gross_pay)
   }
 
-  function onPayrollEmployeeChange(employeeId: string) {
+  async function onPayrollEmployeeChange(employeeId: string) {
     const emp = employees.find((e) => e.id === employeeId)
     if (!emp || !form) return
-    setForm(payrollFormFromEmployee(emp, form.payment_date))
+    const initial = payrollFormFromEmployee(emp, form.payment_date)
+    setSalaryGrossBase(initial.gross_pay)
+    setForm(initial)
+    setSelectedExpenseIds(new Set())
+    await loadReimbursableExpenses(employeeId)
   }
 
   function onPaymentDateChange(paymentDate: string) {
@@ -276,22 +344,44 @@ export function PayrollPage() {
   async function savePayroll(ev: React.FormEvent) {
     ev.preventDefault()
     if (!form || !form.employee_id) return
+    const reimb = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
+    const gross_pay = grossWithTaxableReimbursement(salaryGrossBase, reimb.taxable)
+    const formWithGross = { ...form, gross_pay }
+    const salaryNet = calcNet(formWithGross)
+    const net_pay = netPayWithReimbursement(salaryNet, reimb.nonTaxable)
     const payload = {
       ...form,
-      net_pay: calcNet(form),
+      gross_pay,
+      net_pay,
+      reimbursement_total: reimb.total,
       employee_id: form.employee_id,
       remittance_date: form.remittance_date || null,
       remittance_reference: form.remittance_reference || null,
     }
-    if (payEditingId) await supabase.from('payroll_runs').update(payload).eq('id', payEditingId)
-    else await supabase.from('payroll_runs').insert(payload)
+    const selectedIds = [...selectedExpenseIds]
+    if (payEditingId) {
+      await supabase.from('payroll_runs').update(payload).eq('id', payEditingId)
+      await linkReimbursements(payEditingId, selectedIds, payEditingId)
+    } else {
+      const { data, error } = await supabase.from('payroll_runs').insert(payload).select('id').single()
+      if (error || !data) {
+        alert(error?.message ?? 'Erreur lors de la création de la paie')
+        return
+      }
+      await linkReimbursements(data.id, selectedIds)
+    }
     setPayOpen(false)
     load()
   }
 
   async function removePayroll(id: string) {
     if (!confirm('Supprimer cette paie ?')) return
-    await supabase.from('payroll_runs').delete().eq('id', id)
+    try {
+      await deletePayrollRun(id)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur lors de la suppression')
+      return
+    }
     load()
   }
 
@@ -300,6 +390,9 @@ export function PayrollPage() {
   const ytdEmployerContributions = filtered.reduce((s, p) => s + employerContributionsTotal(p), 0)
   const ytdGross = filtered.reduce((s, p) => s + Number(p.gross_pay), 0)
   const selectedEmp = form ? employees.find((e) => e.id === form.employee_id) : null
+  const reimbPreview = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
+  const previewSalaryNet = form ? calcNet(form) : 0
+  const previewNetPay = netPayWithReimbursement(previewSalaryNet, reimbPreview.nonTaxable)
 
   return (
     <div className="space-y-10">
@@ -438,7 +531,12 @@ export function PayrollPage() {
                         </td>
                         <td className="px-4 py-3">{formatCad(p.gross_pay)}</td>
                         <td className="px-4 py-3 text-muted">{formatCad(employeeDeductionsTotal(p))}</td>
-                        <td className="px-4 py-3">{formatCad(p.net_pay)}</td>
+                        <td className="px-4 py-3">
+                          {formatCad(p.net_pay)}
+                          {Number(p.reimbursement_total) > 0 && (
+                            <span className="block text-xs text-muted">+ {formatCad(p.reimbursement_total)} remb.</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
                         <td className="px-4 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
                         <td className="px-4 py-3 text-muted">{formatDate(p.payment_date)}</td>
@@ -601,10 +699,63 @@ export function PayrollPage() {
               </div>
             </div>
 
+            {reimbursableExpenses.length > 0 && (
+              <div className="rounded-xl border border-border overflow-hidden">
+                <div className="bg-stone-50 px-4 py-2 border-b border-border flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Frais à rembourser</p>
+                  <span className="text-xs text-muted">{selectedExpenseIds.size} sélectionné(s)</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto divide-y divide-border">
+                  {reimbursableExpenses.map((e) => (
+                    <label key={e.id} className="flex items-start gap-3 px-4 py-2 text-sm cursor-pointer hover:bg-stone-50">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={selectedExpenseIds.has(e.id)}
+                        onChange={() => toggleExpenseSelection(e.id)}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="font-medium">{e.vendor}</span>
+                        <span className="text-muted"> — {formatDate(e.expense_date)}</span>
+                        <span className="block text-xs text-muted truncate">
+                          {EXPENSE_CATEGORY_LABELS[e.category] ?? e.category}
+                          {e.description ? ` · ${e.description}` : ''}
+                          {e.taxable ? ' · imposable' : ' · non imposable'}
+                        </span>
+                      </span>
+                      <span className="font-medium shrink-0">{formatCad(e.total)}</span>
+                    </label>
+                  ))}
+                </div>
+                {reimbPreview.total > 0 && (
+                  <div className="px-4 py-2 text-xs text-muted border-t border-border space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>Non imposable (ajouté au net)</span>
+                      <span>{formatCad(reimbPreview.nonTaxable)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Imposable (ajouté au brut)</span>
+                      <span>{formatCad(reimbPreview.taxable)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-yuzu-light rounded-lg p-4 text-sm space-y-1">
               <div className="flex justify-between">
-                <span className="text-muted">Salaire net (versé à l&apos;employé)</span>
-                <strong>{formatCad(calcNet(form))}</strong>
+                <span className="text-muted">Salaire net (retenues déduites)</span>
+                <strong>{formatCad(previewSalaryNet)}</strong>
+              </div>
+              {reimbPreview.nonTaxable > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted">Remboursements non imposables</span>
+                  <span>+ {formatCad(reimbPreview.nonTaxable)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold">
+                <span>Net versé à l&apos;employé</span>
+                <strong>{formatCad(previewNetPay)}</strong>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Retenues à remettre (employé)</span>

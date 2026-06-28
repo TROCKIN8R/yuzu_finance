@@ -85,6 +85,7 @@ type PayrollRow = {
   other_deductions: number
   employer_benefits: number
   net_pay: number
+  reimbursement_total?: number
   remittance_status?: string
   remittance_date?: string | null
 }
@@ -125,6 +126,19 @@ export function buildGeneralLedger(data: {
     qst: number
     total: number
     paid: boolean
+    payroll_run_id?: string | null
+  }[]
+  employeeExpenses?: {
+    id: string
+    expense_date: string
+    vendor: string
+    category: string
+    description: string | null
+    amount: number
+    gst: number
+    qst: number
+    total: number
+    taxable: boolean
     payroll_run_id?: string | null
   }[]
   payrollRuns: PayrollRow[]
@@ -203,7 +217,33 @@ export function buildGeneralLedger(data: {
     )
   }
 
+  for (const e of data.employeeExpenses ?? []) {
+    if (e.payroll_run_id || e.taxable) continue
+    const cat = EXPENSE_CATEGORY_LABELS[e.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? e.category
+    const desc = e.description ? `${e.vendor} — ${e.description}` : e.vendor
+    const expenseAccount = expenseCategoryAccount(e.category)
+    const lines: JournalLine[] = [
+      jl(expenseAccount, Number(e.amount), 0),
+      jl('1200', Number(e.gst), 0),
+      jl('1210', Number(e.qst), 0),
+      jl('2060', 0, Number(e.total)),
+    ]
+    entries.push(
+      entry(
+        `ee-${e.id}`,
+        e.expense_date,
+        'employee_expense',
+        e.id,
+        e.vendor,
+        `Frais employé — ${cat}: ${desc}`,
+        lines
+      )
+    )
+  }
+
   for (const pr of data.payrollRuns) {
+    const linked = (data.employeeExpenses ?? []).filter((e) => e.payroll_run_id === pr.id && !e.taxable)
+    const nonTaxReimb = linked.reduce((s, e) => s + Number(e.total), 0)
     const employerContrib = employerContributionsTotal(pr)
     const incomeTax = Number(pr.federal_tax) + Number(pr.provincial_tax) + Number(pr.other_deductions)
     const statutory =
@@ -215,6 +255,15 @@ export function buildGeneralLedger(data: {
       Number(pr.qpip_employer) +
       Number(pr.employer_benefits)
 
+    const payrollLines: JournalLine[] = [
+      jl('5100', Number(pr.gross_pay), 0),
+      jl('5110', employerContrib, 0),
+      jl('1010', 0, Number(pr.net_pay)),
+      jl('2200', 0, incomeTax),
+      jl('2210', 0, statutory),
+    ]
+    if (nonTaxReimb > 0) payrollLines.push(jl('2060', nonTaxReimb, 0))
+
     entries.push(
       entry(
         `payroll-${pr.id}`,
@@ -223,13 +272,7 @@ export function buildGeneralLedger(data: {
         pr.id,
         pr.payment_date,
         `Paie du ${pr.payment_date}`,
-        [
-          jl('5100', Number(pr.gross_pay), 0),
-          jl('5110', employerContrib, 0),
-          jl('1010', 0, Number(pr.net_pay)),
-          jl('2200', 0, incomeTax),
-          jl('2210', 0, statutory),
-        ]
+        payrollLines
       )
     )
 

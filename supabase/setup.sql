@@ -343,6 +343,7 @@ create table public.payroll_runs (
   qpip_employer numeric(12, 2) not null default 0,
   other_deductions numeric(12, 2) not null default 0,
   net_pay numeric(12, 2) not null,
+  reimbursement_total numeric(12, 2) not null default 0,
   employer_benefits numeric(12, 2) not null default 0,
   remittance_status text not null default 'pending'
     check (remittance_status in ('pending', 'remitted')),
@@ -395,6 +396,42 @@ create trigger expenses_set_user_id
 
 create trigger expenses_updated_at
   before update on public.expenses
+  for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Employee expenses (out-of-pocket, reimbursed via payroll)
+-- ---------------------------------------------------------------------------
+
+create table public.employee_expenses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  employee_id uuid not null references public.employees (id) on delete restrict,
+  expense_date date not null default current_date,
+  vendor text not null,
+  category public.expense_category not null default 'other',
+  description text,
+  amount numeric(12, 2) not null check (amount >= 0),
+  gst numeric(12, 2) not null default 0,
+  qst numeric(12, 2) not null default 0,
+  total numeric(12, 2) not null,
+  taxable boolean not null default false,
+  payroll_run_id uuid references public.payroll_runs (id) on delete set null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index employee_expenses_user_id_idx on public.employee_expenses (user_id);
+create index employee_expenses_employee_id_idx on public.employee_expenses (employee_id);
+create index employee_expenses_unreimbursed_idx on public.employee_expenses (user_id, employee_id)
+  where payroll_run_id is null;
+
+create trigger employee_expenses_set_user_id
+  before insert on public.employee_expenses
+  for each row execute function public.set_user_id();
+
+create trigger employee_expenses_updated_at
+  before update on public.employee_expenses
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
@@ -579,6 +616,7 @@ alter table public.invoice_line_items enable row level security;
 alter table public.payments enable row level security;
 alter table public.payroll_runs enable row level security;
 alter table public.expenses enable row level security;
+alter table public.employee_expenses enable row level security;
 alter table public.sales_tax_periods enable row level security;
 alter table public.corporate_tax_records enable row level security;
 alter table public.dividends enable row level security;
@@ -620,6 +658,9 @@ create policy "payroll_runs_all_own" on public.payroll_runs
 create policy "expenses_all_own" on public.expenses
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+create policy "employee_expenses_all_own" on public.employee_expenses
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 create policy "sales_tax_periods_all_own" on public.sales_tax_periods
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -652,6 +693,7 @@ revoke all on table public.invoice_line_items from anon, public;
 revoke all on table public.payments from anon, public;
 revoke all on table public.payroll_runs from anon, public;
 revoke all on table public.expenses from anon, public;
+revoke all on table public.employee_expenses from anon, public;
 revoke all on table public.sales_tax_periods from anon, public;
 revoke all on table public.corporate_tax_records from anon, public;
 revoke all on table public.dividends from anon, public;
@@ -669,6 +711,7 @@ grant select, insert, update, delete on table public.invoice_line_items to authe
 grant select, insert, update, delete on table public.payments to authenticated;
 grant select, insert, update, delete on table public.payroll_runs to authenticated;
 grant select, insert, update, delete on table public.expenses to authenticated;
+grant select, insert, update, delete on table public.employee_expenses to authenticated;
 grant select, insert, update, delete on table public.sales_tax_periods to authenticated;
 grant select, insert, update, delete on table public.corporate_tax_records to authenticated;
 grant select, insert, update, delete on table public.dividends to authenticated;

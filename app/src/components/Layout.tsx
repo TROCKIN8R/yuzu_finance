@@ -24,6 +24,7 @@ const nav: { section: string; links: NavItem[] }[] = [
       { to: '/bank', label: 'Banque' },
       { to: '/adjustments', label: 'Ajustements' },
       { to: '/expenses', label: 'Dépenses' },
+      { to: '/employee-expenses', label: 'Frais à rembourser' },
       { to: '/payroll', label: 'Paie' },
       { to: '/dividends', label: 'Dividendes' },
       { to: '/sales-tax', label: 'TPS / TVQ' },

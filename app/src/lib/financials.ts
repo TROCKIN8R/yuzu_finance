@@ -34,6 +34,7 @@ export interface BalanceSheetDetail {
   gstPayable: number
   qstPayable: number
   payrollRemittancesPending: number
+  employeeReimbursementsPending: number
   corporateTaxDue: number
   corpTaxProvision: number
   totalLiabilities: number
@@ -149,6 +150,16 @@ export function buildFinancialSnapshot(
       payroll_run_id?: string | null
       expense_date: string
     }[]
+    employeeExpenses?: {
+      amount: number
+      total: number
+      gst: number
+      qst: number
+      category?: string
+      taxable: boolean
+      payroll_run_id?: string | null
+      expense_date: string
+    }[]
     payrollRuns: PayrollRunRow[]
     invoices: {
       id: string
@@ -226,8 +237,15 @@ export function buildFinancialSnapshot(
   }
 
   const operatingExpensesList = data.expenses.filter((e) => isOperatingExpense(e, period))
-  const gstItc = operatingExpensesList.reduce((s, e) => s + Number(e.gst), 0)
-  const qstItr = operatingExpensesList.reduce((s, e) => s + Number(e.qst), 0)
+  const employeeExpensesInPeriod = (data.employeeExpenses ?? []).filter(
+    (e) => inPeriod(e.expense_date, period) && !e.payroll_run_id && !e.taxable
+  )
+  const gstItc =
+    operatingExpensesList.reduce((s, e) => s + Number(e.gst), 0) +
+    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.gst), 0)
+  const qstItr =
+    operatingExpensesList.reduce((s, e) => s + Number(e.qst), 0) +
+    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.qst), 0)
 
   const accountsPayable = expensesInPeriod.filter((e) => !e.paid).reduce((s, e) => s + Number(e.total), 0)
   const gstPayable = round2(Math.max(0, gstCollected - gstItc))
@@ -240,7 +258,13 @@ export function buildFinancialSnapshot(
     .filter((r) => r.status !== 'paid')
     .reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
 
-  const expensesYtd = operatingExpensesList.reduce((s, e) => s + Number(e.amount), 0)
+  const expensesYtd =
+    operatingExpensesList.reduce((s, e) => s + Number(e.amount), 0) +
+    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.amount), 0)
+
+  const employeeReimbursementsPending = (data.employeeExpenses ?? [])
+    .filter((e) => !e.payroll_run_id && !e.taxable)
+    .reduce((s, e) => s + Number(e.total), 0)
   const payrollGross = payrollInPeriod.reduce((s, p) => s + Number(p.gross_pay), 0)
   const payrollYtd = payrollGross + employerPayrollContributions
   const operatingIncome = revenueYtd - expensesYtd - payrollYtd
@@ -263,7 +287,13 @@ export function buildFinancialSnapshot(
 
   const totalAssets = bookCash + accountsReceivable + gstReceivable + qstReceivable
   const totalLiabilities =
-    accountsPayable + gstPayable + qstPayable + payrollRemittancesPending + corporateTaxDue + corpTaxProvision
+    accountsPayable +
+    gstPayable +
+    qstPayable +
+    payrollRemittancesPending +
+    employeeReimbursementsPending +
+    corporateTaxDue +
+    corpTaxProvision
 
   return {
     period,
@@ -301,6 +331,7 @@ export function buildFinancialSnapshot(
       gstPayable,
       qstPayable,
       payrollRemittancesPending,
+      employeeReimbursementsPending,
       corporateTaxDue,
       corpTaxProvision,
       totalLiabilities,

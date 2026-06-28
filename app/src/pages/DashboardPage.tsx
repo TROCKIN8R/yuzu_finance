@@ -54,7 +54,7 @@ function StmtSection({ title }: { title: string }) {
 
 export function DashboardPage() {
   const [fin, setFin] = useState<FinancialSnapshot | null>(null)
-  const [ops, setOps] = useState({ clients: 0, unbilledHours: 0, unbilledAmount: 0 })
+  const [ops, setOps] = useState({ clients: 0, unbilledHours: 0, unbilledAmount: 0, pendingReimbursement: 0 })
   const [period, setPeriod] = useState<DateRange | null>(null)
   const [presets, setPresets] = useState<DateRange[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
@@ -109,13 +109,14 @@ export function DashboardPage() {
   }
 
   async function loadOps() {
-    const [clients, entries] = await Promise.all([
+    const [clients, entries, employeeExpenses] = await Promise.all([
       supabase.from('clients').select('id', { count: 'exact', head: true }),
       supabase
         .from('time_entries')
         .select('hours, rate_override, billable, invoice_id, projects(default_hourly_rate)')
         .is('invoice_id', null)
         .eq('billable', true),
+      supabase.from('employee_expenses').select('total, payroll_run_id').is('payroll_run_id', null),
     ])
 
     let unbilledHours = 0
@@ -128,11 +129,18 @@ export function DashboardPage() {
       unbilledAmount += Number(e.hours) * Number(rate)
     }
 
-    setOps({ clients: clients.count ?? 0, unbilledHours: Math.round(unbilledHours * 10) / 10, unbilledAmount })
+    const pendingReimbursement = (employeeExpenses.data ?? []).reduce((s, e) => s + Number(e.total), 0)
+
+    setOps({
+      clients: clients.count ?? 0,
+      unbilledHours: Math.round(unbilledHours * 10) / 10,
+      unbilledAmount,
+      pendingReimbursement,
+    })
   }
 
   async function reloadFinancials(range: DateRange, settings?: OrganizationSettings) {
-    const [settingsRow, payments, expenses, payroll, invoices, dividends, corpTax, salesTaxPaid, bank] =
+    const [settingsRow, payments, expenses, employeeExpenses, payroll, invoices, dividends, corpTax, salesTaxPaid, bank] =
       await Promise.all([
         settings ? Promise.resolve({ data: settings }) : supabase.from('organization_settings').select('*').maybeSingle(),
         supabase.from('payments').select('invoice_id, amount, payment_date'),
@@ -140,9 +148,12 @@ export function DashboardPage() {
           .from('expenses')
           .select('amount, total, paid, gst, qst, category, payroll_run_id, expense_date'),
         supabase
+          .from('employee_expenses')
+          .select('amount, total, gst, qst, category, taxable, payroll_run_id, expense_date'),
+        supabase
           .from('payroll_runs')
           .select(
-            'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
+            'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
           ),
         supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date').neq('status', 'void'),
         supabase.from('dividends').select('total_amount, payment_date'),
@@ -159,6 +170,7 @@ export function DashboardPage() {
         {
           payments: payments.data ?? [],
           expenses: expenses.data ?? [],
+          employeeExpenses: employeeExpenses.data ?? [],
           payrollRuns: payroll.data ?? [],
           invoices: (invoices.data ?? []) as {
             id: string
@@ -217,10 +229,11 @@ export function DashboardPage() {
 
       <section>
         <h2 className="text-sm font-medium text-muted mb-3">Opérations</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card label="Clients" value={String(ops.clients)} to="/clients" />
           <Card label="Heures non facturées" value={`${ops.unbilledHours} h`} to="/time" />
           <Card label="À facturer" value={formatCad(ops.unbilledAmount)} to="/invoices" />
+          <Card label="À rembourser" value={formatCad(ops.pendingReimbursement)} to="/employee-expenses" />
         </div>
       </section>
 
@@ -288,6 +301,9 @@ export function DashboardPage() {
 
           <StmtSection title="Passif" />
           <StmtRow label="Comptes fournisseurs" value={formatCad(bs.accountsPayable)} />
+          {bs.employeeReimbursementsPending > 0 && (
+            <StmtRow label="Remboursements employé dus" value={formatCad(bs.employeeReimbursementsPending)} indent />
+          )}
           <StmtRow label="TPS à remettre" value={formatCad(bs.gstPayable)} indent />
           <StmtRow label="TVQ à remettre" value={formatCad(bs.qstPayable)} indent />
           <StmtRow label="Remises paie en attente" value={formatCad(bs.payrollRemittancesPending)} />

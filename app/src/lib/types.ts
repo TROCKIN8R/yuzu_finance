@@ -102,6 +102,27 @@ export interface Expense {
   updated_at: string
 }
 
+export interface EmployeeExpense {
+  id: string
+  user_id: string
+  employee_id: string
+  expense_date: string
+  vendor: string
+  category: ExpenseCategory
+  description: string | null
+  amount: number
+  gst: number
+  qst: number
+  total: number
+  taxable: boolean
+  payroll_run_id: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  employees?: Pick<Employee, 'first_name' | 'last_name'>
+  payroll_runs?: Pick<PayrollRun, 'payment_date'>
+}
+
 export interface PayrollRun {
   id: string
   user_id: string
@@ -120,6 +141,7 @@ export interface PayrollRun {
   qpip_employer: number
   other_deductions: number
   net_pay: number
+  reimbursement_total: number
   employer_benefits: number
   notes: string | null
   remittance_status: RemittanceStatus
