@@ -9,6 +9,8 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { TimePage } from './pages/TimePage'
 import { InvoicesPage } from './pages/InvoicesPage'
 import { EmployeeExpensesPage } from './pages/EmployeeExpensesPage'
+import { CompensationPage } from './pages/CompensationPage'
+import { EmployeesPage } from './pages/EmployeesPage'
 import { PayrollPage } from './pages/PayrollPage'
 import { DividendsPage } from './pages/DividendsPage'
 import { SalesTaxPage } from './pages/SalesTaxPage'
@@ -47,8 +49,14 @@ export default function App() {
           <Route path="payments" element={<Navigate to="/bank" replace />} />
           <Route path="expenses" element={<Navigate to="/bank" replace />} />
           <Route path="employee-expenses" element={<EmployeeExpensesPage />} />
-          <Route path="payroll" element={<PayrollPage />} />
-          <Route path="dividends" element={<DividendsPage />} />
+          <Route path="compensation" element={<CompensationPage />}>
+            <Route index element={<Navigate to="payroll" replace />} />
+            <Route path="payroll" element={<PayrollPage />} />
+            <Route path="dividends" element={<DividendsPage />} />
+            <Route path="employees" element={<EmployeesPage />} />
+          </Route>
+          <Route path="payroll" element={<Navigate to="/compensation/payroll" replace />} />
+          <Route path="dividends" element={<Navigate to="/compensation/dividends" replace />} />
           <Route path="taxes" element={<TaxesHubPage />} />
           <Route path="sales-tax" element={<SalesTaxPage />} />
           <Route path="corporate-tax" element={<CorporateTaxPage />} />

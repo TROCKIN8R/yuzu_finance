@@ -173,7 +173,7 @@ export function EmployeeExpensesPage() {
           <h1 className="text-2xl font-semibold">Frais à rembourser</h1>
           <p className="text-sm text-muted mt-1">
             Dépenses payées personnellement — à inclure lors d&apos;une{' '}
-            <Link to="/payroll" className="text-yuzu-dark hover:underline font-medium">
+            <Link to="/compensation/employees" className="text-yuzu-dark hover:underline font-medium">
               paie
             </Link>
             .

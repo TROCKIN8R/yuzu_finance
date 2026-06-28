@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Dividend, Employee } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
@@ -10,6 +11,9 @@ import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, DateRangeFilter, ListToolbar } from '../components/ListToolbar'
+import { SectionHeader } from '../components/PageHeader'
+
+type CompensationOutletContext = { refreshMetrics?: () => void }
 
 const emptyForm = {
   payment_date: todayIso(),
@@ -19,6 +23,9 @@ const emptyForm = {
 }
 
 export function DividendsPage() {
+  const location = useLocation()
+  const embedded = location.pathname.startsWith('/compensation')
+  const { refreshMetrics } = useOutletContext<CompensationOutletContext>() ?? {}
   const [rows, setRows] = useState<Dividend[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [open, setOpen] = useState(false)
@@ -58,6 +65,7 @@ export function DividendsPage() {
     ])
     setRows((div.data as Dividend[]) ?? [])
     setEmployees((emp.data as Employee[]) ?? [])
+    refreshMetrics?.()
   }
 
   function openNew() {
@@ -126,22 +134,44 @@ export function DividendsPage() {
 
   return (
     <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Dividendes</h1>
-          <p className="text-sm text-muted mt-1">
-            Répartis également entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
-            {hasFilters ? ` · Total filtré : ${formatCad(totalDistributed)}` : rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
-          </p>
+      {embedded ? (
+        <SectionHeader
+          title="Étape 2 — Dividendes"
+          actions={
+            <Button onClick={openNew} disabled={activeCount === 0}>
+              Nouvelle distribution
+            </Button>
+          }
+          className="mb-6"
+        />
+      ) : (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold">Dividendes</h1>
+            <p className="text-sm text-muted mt-1">
+              Répartis également entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
+              {hasFilters ? ` · Total filtré : ${formatCad(totalDistributed)}` : rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
+            </p>
+          </div>
+          <Button onClick={openNew} disabled={activeCount === 0}>
+            Nouvelle distribution
+          </Button>
         </div>
-        <Button onClick={openNew} disabled={activeCount === 0}>
-          Nouvelle distribution
-        </Button>
-      </div>
+      )}
+      {embedded && (
+        <p className="text-sm text-muted mb-4">
+          Répartis entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
+          {rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
+        </p>
+      )}
 
       {activeCount === 0 && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
-          Aucun employé actif — ajoutez des employés dans la section Paie pour distribuer des dividendes.
+          Aucun employé actif —{' '}
+          <Link to="/compensation/employees" className="font-medium underline">
+            ajoutez un employé
+          </Link>{' '}
+          avant de distribuer des dividendes.
         </p>
       )}
 
@@ -269,6 +299,14 @@ export function DividendsPage() {
           </div>
         )}
       </Modal>
+      {embedded && (
+        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
+          Encaissez le paiement dans{' '}
+          <Link to="/bank" className="text-yuzu-dark font-medium hover:underline">
+            Banque →
+          </Link>
+        </p>
+      )}
     </div>
   )
 }

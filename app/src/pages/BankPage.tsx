@@ -1,21 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { BankTransaction, Expense, ExpenseCategory, Invoice, OrganizationSettings, Partner, Payment } from '../lib/types'
+import type {
+  BankTransaction,
+  CorporateTaxRecord,
+  Dividend,
+  Expense,
+  ExpenseCategory,
+  Invoice,
+  OrganizationSettings,
+  Partner,
+  Payment,
+  PayrollRun,
+  SalesTaxPeriod,
+} from '../lib/types'
 import { formatCad, formatDate, relationOne } from '../lib/format'
-import { buildFinancialSnapshot } from '../lib/financials'
+import { buildFinancialSnapshot, payrollRemittancesTotal } from '../lib/financials'
 import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
+import { employeeDisplayName } from '../lib/payrollCalc'
 import { computePurchaseTaxesFromTotal } from '../lib/taxes'
 import {
+  assignBankCorporateTax,
+  assignBankDividend,
   assignBankExpense,
   assignBankPayment,
+  assignBankPayroll,
+  assignBankSalesTax,
   deleteBankTransaction,
   ignoreBankTransaction,
   importBankRows,
   unassignBankTransaction,
+  type PayrollBankMatchKind,
 } from '../lib/bankActions'
 import { parseWealthsimpleCsv, wealthsimpleFormatLabel } from '../lib/wealthsimpleCsv'
+import { bankImportSetupHint, errorMessage } from '../lib/errors'
 import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -27,8 +46,26 @@ import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/Lis
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
 
-type AssignmentFilter = 'unassigned' | 'all' | 'payment' | 'expense' | 'ignored'
-type AssignKind = 'payment' | 'expense'
+type AssignmentFilter =
+  | 'unassigned'
+  | 'all'
+  | 'payment'
+  | 'expense'
+  | 'payroll'
+  | 'dividend'
+  | 'sales_tax'
+  | 'corporate_tax'
+  | 'ignored'
+type AssignKind = 'payment' | 'expense' | 'payroll' | 'dividend' | 'sales_tax' | 'corporate_tax'
+
+const ASSIGN_KINDS: { id: AssignKind; label: string; outflow: boolean }[] = [
+  { id: 'payment', label: 'Paiement client', outflow: false },
+  { id: 'expense', label: 'Dépense', outflow: true },
+  { id: 'payroll', label: 'Paie', outflow: true },
+  { id: 'dividend', label: 'Dividende', outflow: true },
+  { id: 'sales_tax', label: 'TPS / TVQ', outflow: true },
+  { id: 'corporate_tax', label: 'Impôt société', outflow: true },
+]
 
 interface InvoiceWithPaid extends Invoice {
   paid: number
@@ -62,6 +99,10 @@ export function BankPage() {
   const [bookCash, setBookCash] = useState(0)
   const [paymentMap, setPaymentMap] = useState<Record<string, Payment>>({})
   const [expenseMap, setExpenseMap] = useState<Record<string, Expense>>({})
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([])
+  const [dividends, setDividends] = useState<Dividend[]>([])
+  const [salesTaxPeriods, setSalesTaxPeriods] = useState<SalesTaxPeriod[]>([])
+  const [corpTaxRecords, setCorpTaxRecords] = useState<CorporateTaxRecord[]>([])
 
   const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>('unassigned')
   const [search, setSearch] = useState('')
@@ -92,12 +133,29 @@ export function BankPage() {
     applyTax: true,
   })
 
+  const [payrollForm, setPayrollForm] = useState({
+    payroll_run_id: '',
+    kind: 'net_pay' as PayrollBankMatchKind,
+    remittance_date: '',
+    remittance_reference: '',
+  })
+
+  const [dividendForm, setDividendForm] = useState({ dividend_id: '' })
+
+  const [salesTaxForm, setSalesTaxForm] = useState({ period_id: '', payment_date: '' })
+
+  const [corpTaxForm, setCorpTaxForm] = useState({
+    record_id: '',
+    paid_amount: 0,
+    paid_date: '',
+  })
+
   useEffect(() => {
     load()
   }, [])
 
   async function load() {
-    const [bank, inv, pay, exp, part, set, payroll, dividends, corpTax, salesTax] = await Promise.all([
+    const [bank, inv, pay, exp, part, set, payroll, div, corpTax, salesTax] = await Promise.all([
       supabase.from('bank_transactions').select('*').order('transaction_date', { ascending: false }),
       supabase.from('invoices').select('*, partners(legal_name)').neq('status', 'void').order('invoice_date', { ascending: false }),
       supabase.from('payments').select('*, invoices(invoice_number, total, partner_id)'),
@@ -107,11 +165,12 @@ export function BankPage() {
       supabase
         .from('payroll_runs')
         .select(
-          'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
-        ),
-      supabase.from('dividends').select('total_amount, payment_date'),
-      supabase.from('corporate_tax_records').select('amount, paid_amount, status'),
-      supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
+          'id, payment_date, pay_period_start, pay_period_end, net_pay, remittance_status, remittance_date, remittance_reference, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, employees(first_name, last_name)'
+        )
+        .order('payment_date', { ascending: false }),
+      supabase.from('dividends').select('id, payment_date, total_amount, description').order('payment_date', { ascending: false }),
+      supabase.from('corporate_tax_records').select('*').order('due_date', { ascending: true }),
+      supabase.from('sales_tax_periods').select('*').order('period_end', { ascending: false }),
     ])
 
     const paidMap: Record<string, number> = {}
@@ -133,6 +192,10 @@ export function BankPage() {
     setSettings(set.data)
     setPaymentMap(Object.fromEntries(payments.map((p) => [p.id, p])))
     setExpenseMap(Object.fromEntries(expenses.map((e) => [e.id, e])))
+    setPayrollRuns((payroll.data as PayrollRun[]) ?? [])
+    setDividends((div.data as Dividend[]) ?? [])
+    setSalesTaxPeriods((salesTax.data as SalesTaxPeriod[]) ?? [])
+    setCorpTaxRecords((corpTax.data as CorporateTaxRecord[]) ?? [])
 
     const fin = buildFinancialSnapshot(
       {
@@ -141,9 +204,9 @@ export function BankPage() {
         payrollRuns: payroll.data ?? [],
         invoices: [],
         invoicePaidMap: {},
-        dividends: dividends.data ?? [],
+        dividends: div.data ?? [],
         corporateTax: corpTax.data ?? [],
-        salesTaxRemitted: salesTax.data ?? [],
+        salesTaxRemitted: (salesTax.data ?? []).filter((p) => p.status === 'paid'),
         bankTransactions: bank.data ?? [],
         settings: set.data ?? undefined,
       },
@@ -171,7 +234,7 @@ export function BankPage() {
       setImportMsg(parts.join(' · '))
       load()
     } catch (e) {
-      setImportMsg(e instanceof Error ? e.message : 'Erreur import')
+      setImportMsg(bankImportSetupHint(errorMessage(e, 'Erreur import')))
     }
   }
 
@@ -185,32 +248,56 @@ export function BankPage() {
 
   function openAssign(tx: BankTransaction) {
     setAssignTx(tx)
-    const kind: AssignKind = Number(tx.amount) > 0 ? 'payment' : 'expense'
+    const outflow = Number(tx.amount) < 0
+    const kind: AssignKind = outflow ? 'expense' : 'payment'
     setAssignKind(kind)
+    const absAmount = round2(Math.abs(Number(tx.amount)))
 
-    if (kind === 'payment') {
+    if (!outflow) {
       const defaultInv = invoices.find((i) => i.balance > 0)
       setPayForm({
         invoice_id: defaultInv?.id ?? '',
         payment_date: tx.transaction_date,
-        amount: round2(Math.abs(Number(tx.amount))),
+        amount: absAmount,
         method: inferPaymentMethod(tx.description),
         reference: tx.description.slice(0, 120),
       })
     } else {
-      const total = round2(Math.abs(Number(tx.amount)))
-      const taxes = recalcExpenseTaxes(total, true)
+      const taxes = recalcExpenseTaxes(absAmount, true)
       setExpForm({
         expense_date: tx.transaction_date,
         partner_id: '',
         vendor: '',
         category: 'other',
         description: tx.description,
-        total,
+        total: absAmount,
         amount: taxes.amount,
         gst: taxes.gst,
         qst: taxes.qst,
         applyTax: true,
+      })
+
+      const defaultPayroll = payrollRuns[0]
+      setPayrollForm({
+        payroll_run_id: defaultPayroll?.id ?? '',
+        kind: defaultPayroll?.remittance_status === 'remitted' ? 'net_pay' : 'net_pay',
+        remittance_date: tx.transaction_date,
+        remittance_reference: tx.description.slice(0, 120),
+      })
+
+      setDividendForm({ dividend_id: dividends[0]?.id ?? '' })
+
+      const openPeriod = salesTaxPeriods.find((p) => p.status !== 'paid') ?? salesTaxPeriods[0]
+      setSalesTaxForm({
+        period_id: openPeriod?.id ?? '',
+        payment_date: tx.transaction_date,
+      })
+
+      const dueRecord = corpTaxRecords.find((r) => r.status !== 'paid') ?? corpTaxRecords[0]
+      setCorpTaxForm({
+        record_id: dueRecord?.id ?? '',
+        paid_amount: absAmount,
+        paid_date: tx.transaction_date,
       })
     }
     setAssignOpen(true)
@@ -248,7 +335,7 @@ export function BankPage() {
           payForm.method || null,
           payForm.reference || null
         )
-      } else {
+      } else if (assignKind === 'expense') {
         const vendor = expForm.vendor.trim()
         if (!vendor) {
           alert('Indiquez un fournisseur.')
@@ -264,12 +351,47 @@ export function BankPage() {
           qst: expForm.qst,
           total: expForm.total,
         })
+      } else if (assignKind === 'payroll') {
+        if (!payrollForm.payroll_run_id) {
+          alert('Sélectionnez une paie.')
+          return
+        }
+        await assignBankPayroll(
+          assignTx.id,
+          payrollForm.payroll_run_id,
+          payrollForm.kind,
+          payrollForm.remittance_date,
+          payrollForm.remittance_reference || null
+        )
+      } else if (assignKind === 'dividend') {
+        if (!dividendForm.dividend_id) {
+          alert('Sélectionnez un dividende.')
+          return
+        }
+        await assignBankDividend(assignTx.id, dividendForm.dividend_id)
+      } else if (assignKind === 'sales_tax') {
+        if (!salesTaxForm.period_id) {
+          alert('Sélectionnez une période TPS/TVQ.')
+          return
+        }
+        await assignBankSalesTax(assignTx.id, salesTaxForm.period_id, salesTaxForm.payment_date)
+      } else if (assignKind === 'corporate_tax') {
+        if (!corpTaxForm.record_id) {
+          alert('Sélectionnez un impôt société.')
+          return
+        }
+        await assignBankCorporateTax(
+          assignTx.id,
+          corpTaxForm.record_id,
+          corpTaxForm.paid_amount,
+          corpTaxForm.paid_date
+        )
       }
       setAssignOpen(false)
       setAssignTx(null)
       load()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erreur')
+      alert(errorMessage(err, 'Erreur'))
     }
   }
 
@@ -280,12 +402,12 @@ export function BankPage() {
   }
 
   async function handleUnassign(tx: BankTransaction) {
-    if (!confirm('Retirer l\'affectation et supprimer le paiement/dépense lié ?')) return
+    if (!confirm('Retirer l\'affectation ? Les enregistrements liés seront annulés ou supprimés selon le type.')) return
     try {
       await unassignBankTransaction(tx.id, tx.match_source, tx.match_id)
       load()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erreur')
+      alert(errorMessage(err, 'Erreur'))
     }
   }
 
@@ -295,9 +417,18 @@ export function BankPage() {
       await deleteBankTransaction(tx.id, tx.match_source, tx.match_id)
       load()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erreur')
+      alert(errorMessage(err, 'Erreur'))
     }
   }
+
+  const payrollMap = useMemo(() => Object.fromEntries(payrollRuns.map((p) => [p.id, p])), [payrollRuns])
+  const dividendMap = useMemo(() => Object.fromEntries(dividends.map((d) => [d.id, d])), [dividends])
+  const salesTaxMap = useMemo(() => Object.fromEntries(salesTaxPeriods.map((p) => [p.id, p])), [salesTaxPeriods])
+  const corpTaxMap = useMemo(() => Object.fromEntries(corpTaxRecords.map((r) => [r.id, r])), [corpTaxRecords])
+
+  const selectedPayroll = payrollMap[payrollForm.payroll_run_id]
+  const selectedSalesTax = salesTaxMap[salesTaxForm.period_id]
+  const selectedCorpTax = corpTaxMap[corpTaxForm.record_id]
 
   const bankBalance = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows])
   const variance = round2(bookCash - bankBalance)
@@ -315,18 +446,54 @@ export function BankPage() {
       const ex = expenseMap[tx.match_id]
       return ex ? `Dépense · ${ex.vendor}` : 'Dépense'
     }
+    if (tx.match_source === 'payroll' && tx.match_id) {
+      const pr = payrollMap[tx.match_id]
+      const emp = relationOne(pr?.employees)
+      const suffix = tx.notes === 'payroll_match:remittance' ? ' · remise' : ' · net'
+      return pr
+        ? `Paie${suffix} · ${formatDate(pr.payment_date)}${emp ? ` · ${employeeDisplayName(emp)}` : ''}`
+        : 'Paie'
+    }
+    if (tx.match_source === 'dividend' && tx.match_id) {
+      const d = dividendMap[tx.match_id]
+      return d ? `Dividende · ${formatDate(d.payment_date)} · ${formatCad(d.total_amount)}` : 'Dividende'
+    }
+    if (tx.match_source === 'sales_tax' && tx.match_id) {
+      const p = salesTaxMap[tx.match_id]
+      return p ? `TPS/TVQ · ${formatDate(p.period_start)} → ${formatDate(p.period_end)}` : 'TPS/TVQ'
+    }
+    if (tx.match_source === 'corporate_tax' && tx.match_id) {
+      const r = corpTaxMap[tx.match_id]
+      return r ? `Impôt · ${r.label || r.fiscal_year}` : 'Impôt société'
+    }
     return tx.match_source
   }
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       if (assignmentFilter === 'unassigned' && r.match_source) return false
-      if (assignmentFilter === 'payment' && r.match_source !== 'payment') return false
-      if (assignmentFilter === 'expense' && r.match_source !== 'expense') return false
       if (assignmentFilter === 'ignored' && r.match_source !== 'manual') return false
+      if (
+        assignmentFilter !== 'all' &&
+        assignmentFilter !== 'unassigned' &&
+        assignmentFilter !== 'ignored' &&
+        r.match_source !== assignmentFilter
+      ) {
+        return false
+      }
       return matchesSearch(search, r.description, r.transaction_code, r.amount, sourceLabel(r), matchLabel(r))
     })
-  }, [rows, assignmentFilter, search, paymentMap, expenseMap])
+  }, [
+    rows,
+    assignmentFilter,
+    search,
+    paymentMap,
+    expenseMap,
+    payrollMap,
+    dividendMap,
+    salesTaxMap,
+    corpTaxMap,
+  ])
 
   const outstanding = invoices.filter((i) => i.balance > 0)
   const vendors = providerPartners(partners)
@@ -337,7 +504,7 @@ export function BankPage() {
         <div>
           <h1 className="text-2xl font-semibold">Banque</h1>
           <p className="text-sm text-muted mt-1">
-            Importez vos relevés Wealthsimple, puis affectez chaque transaction à une facture ou une dépense.
+            Importez vos relevés Wealthsimple, puis affectez chaque ligne (facture, dépense, paie, dividende, taxes).
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -403,6 +570,10 @@ export function BankPage() {
                 { value: 'all', label: 'Toutes' },
                 { value: 'payment', label: 'Paiements clients' },
                 { value: 'expense', label: 'Dépenses' },
+                { value: 'payroll', label: 'Paie' },
+                { value: 'dividend', label: 'Dividendes' },
+                { value: 'sales_tax', label: 'TPS / TVQ' },
+                { value: 'corporate_tax', label: 'Impôts société' },
                 { value: 'ignored', label: 'Ignorées' },
               ]}
             />
@@ -490,23 +661,22 @@ export function BankPage() {
           </div>
         )}
 
-        <div className="flex gap-2 mb-4">
-          <button
-            type="button"
-            className={`px-3 py-2 rounded-lg text-sm border ${assignKind === 'payment' ? 'bg-yuzu-light border-yuzu font-medium' : 'border-border'}`}
-            onClick={() => setAssignKind('payment')}
-            disabled={assignTx != null && Number(assignTx.amount) <= 0}
-          >
-            Paiement client
-          </button>
-          <button
-            type="button"
-            className={`px-3 py-2 rounded-lg text-sm border ${assignKind === 'expense' ? 'bg-yuzu-light border-yuzu font-medium' : 'border-border'}`}
-            onClick={() => setAssignKind('expense')}
-            disabled={assignTx != null && Number(assignTx.amount) >= 0}
-          >
-            Dépense
-          </button>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {ASSIGN_KINDS.map((k) => {
+            const outflow = assignTx != null && Number(assignTx.amount) < 0
+            const disabled = k.outflow ? !outflow : outflow
+            return (
+              <button
+                key={k.id}
+                type="button"
+                className={`px-3 py-2 rounded-lg text-sm border ${assignKind === k.id ? 'bg-yuzu-light border-yuzu font-medium' : 'border-border'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                onClick={() => !disabled && setAssignKind(k.id)}
+                disabled={disabled}
+              >
+                {k.label}
+              </button>
+            )
+          })}
         </div>
 
         <form onSubmit={saveAssignment} className="space-y-3">
@@ -569,7 +739,7 @@ export function BankPage() {
                 </>
               )}
             </>
-          ) : (
+          ) : assignKind === 'expense' ? (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Date de dépense *">
@@ -595,7 +765,7 @@ export function BankPage() {
               </div>
               {expForm.category === 'payroll' && (
                 <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  La catégorie « paie » est réservée aux ajustements — utilisez la page Paie pour les salaires.
+                  La catégorie « paie » est réservée aux ajustements — utilisez l&apos;onglet Paie pour les salaires.
                 </p>
               )}
               <Field label="Fournisseur (partenaire)">
@@ -671,13 +841,199 @@ export function BankPage() {
                 </p>
               )}
             </>
+          ) : assignKind === 'payroll' ? (
+            <>
+              {payrollRuns.length === 0 ? (
+                <p className="text-sm text-amber-800">Aucune paie — enregistrez une paie d&apos;abord.</p>
+              ) : (
+                <>
+                  <Field label="Paie *">
+                    <select
+                      className={inputClass}
+                      required
+                      value={payrollForm.payroll_run_id}
+                      onChange={(e) => setPayrollForm({ ...payrollForm, payroll_run_id: e.target.value })}
+                    >
+                      {payrollRuns.map((p) => {
+                        const emp = relationOne(p.employees)
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {formatDate(p.payment_date)} · {emp ? employeeDisplayName(emp) : 'Employé'} · net {formatCad(p.net_pay)}
+                            {p.remittance_status === 'remitted' ? ' · remise OK' : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </Field>
+                  <Field label="Type d&apos;affectation *">
+                    <select
+                      className={inputClass}
+                      value={payrollForm.kind}
+                      onChange={(e) => setPayrollForm({ ...payrollForm, kind: e.target.value as PayrollBankMatchKind })}
+                    >
+                      <option value="net_pay">Salaire net versé</option>
+                      <option value="remittance">Remise source deductions (RP/TPZ)</option>
+                    </select>
+                  </Field>
+                  {selectedPayroll && (
+                    <p className="text-xs text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+                      Net attendu : {formatCad(selectedPayroll.net_pay)} · Remise attendue :{' '}
+                      {formatCad(payrollRemittancesTotal(selectedPayroll))}
+                    </p>
+                  )}
+                  {payrollForm.kind === 'remittance' && (
+                    <>
+                      <Field label="Date de remise *">
+                        <input
+                          type="date"
+                          className={inputClass}
+                          required
+                          value={payrollForm.remittance_date}
+                          onChange={(e) => setPayrollForm({ ...payrollForm, remittance_date: e.target.value })}
+                        />
+                      </Field>
+                      <Field label="Référence">
+                        <input
+                          className={inputClass}
+                          value={payrollForm.remittance_reference}
+                          onChange={(e) => setPayrollForm({ ...payrollForm, remittance_reference: e.target.value })}
+                        />
+                      </Field>
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          ) : assignKind === 'dividend' ? (
+            <>
+              {dividends.length === 0 ? (
+                <p className="text-sm text-amber-800">Aucun dividende — enregistrez une distribution d&apos;abord.</p>
+              ) : (
+                <Field label="Distribution *">
+                  <select
+                    className={inputClass}
+                    required
+                    value={dividendForm.dividend_id}
+                    onChange={(e) => setDividendForm({ dividend_id: e.target.value })}
+                  >
+                    {dividends.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {formatDate(d.payment_date)} · {formatCad(d.total_amount)}
+                        {d.description ? ` · ${d.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+            </>
+          ) : assignKind === 'sales_tax' ? (
+            <>
+              {salesTaxPeriods.length === 0 ? (
+                <p className="text-sm text-amber-800">Aucune période TPS/TVQ — créez-en une dans Fiscalité.</p>
+              ) : (
+                <>
+                  <Field label="Période *">
+                    <select
+                      className={inputClass}
+                      required
+                      value={salesTaxForm.period_id}
+                      onChange={(e) => setSalesTaxForm({ ...salesTaxForm, period_id: e.target.value })}
+                    >
+                      {salesTaxPeriods.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {formatDate(p.period_start)} → {formatDate(p.period_end)} · net {formatCad(Number(p.gst_net) + Number(p.qst_net))} · {p.status}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Date de paiement *">
+                    <input
+                      type="date"
+                      className={inputClass}
+                      required
+                      value={salesTaxForm.payment_date}
+                      onChange={(e) => setSalesTaxForm({ ...salesTaxForm, payment_date: e.target.value })}
+                    />
+                  </Field>
+                  {selectedSalesTax && (
+                    <p className="text-xs text-muted">
+                      TPS net {formatCad(selectedSalesTax.gst_net)} · TVQ net {formatCad(selectedSalesTax.qst_net)}
+                    </p>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {corpTaxRecords.length === 0 ? (
+                <p className="text-sm text-amber-800">Aucun impôt société — enregistrez T2/CO-17 dans Fiscalité.</p>
+              ) : (
+                <>
+                  <Field label="Enregistrement *">
+                    <select
+                      className={inputClass}
+                      required
+                      value={corpTaxForm.record_id}
+                      onChange={(e) => {
+                        const r = corpTaxRecords.find((x) => x.id === e.target.value)
+                        const balance = r ? Number(r.amount) - Number(r.paid_amount) : 0
+                        setCorpTaxForm({
+                          ...corpTaxForm,
+                          record_id: e.target.value,
+                          paid_amount: balance > 0 ? round2(balance) : corpTaxForm.paid_amount,
+                        })
+                      }}
+                    >
+                      {corpTaxRecords.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.fiscal_year} · {r.label || r.tax_authority} · dû {formatCad(Number(r.amount) - Number(r.paid_amount))} · {r.status}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label="Montant payé *">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        className={inputClass}
+                        required
+                        value={corpTaxForm.paid_amount}
+                        onChange={(e) => setCorpTaxForm({ ...corpTaxForm, paid_amount: Number(e.target.value) })}
+                      />
+                    </Field>
+                    <Field label="Date de paiement *">
+                      <input
+                        type="date"
+                        className={inputClass}
+                        required
+                        value={corpTaxForm.paid_date}
+                        onChange={(e) => setCorpTaxForm({ ...corpTaxForm, paid_date: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                  {selectedCorpTax && (
+                    <p className="text-xs text-muted">
+                      Provision totale {formatCad(selectedCorpTax.amount)} · déjà payé {formatCad(selectedCorpTax.paid_amount)}
+                    </p>
+                  )}
+                </>
+              )}
+            </>
           )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setAssignOpen(false)}>Annuler</Button>
             <Button
               type="submit"
-              disabled={assignKind === 'payment' && outstanding.length === 0}
+              disabled={
+                (assignKind === 'payment' && outstanding.length === 0) ||
+                (assignKind === 'payroll' && payrollRuns.length === 0) ||
+                (assignKind === 'dividend' && dividends.length === 0) ||
+                (assignKind === 'sales_tax' && salesTaxPeriods.length === 0) ||
+                (assignKind === 'corporate_tax' && corpTaxRecords.length === 0)
+              }
             >
               Enregistrer
             </Button>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
@@ -10,10 +10,8 @@ import {
   employeeDisplayName,
   EMPLOYEE_DEDUCTION_FIELDS,
   EMPLOYER_CONTRIBUTION_FIELDS,
-  grossPerPeriod,
   payFrequencyLabel,
   payPeriodRange,
-  periodsPerYear,
   sumEmployeeDeductions,
   sumEmployerContributions,
 } from '../lib/payrollCalc'
@@ -31,6 +29,9 @@ import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { SectionHeader } from '../components/PageHeader'
+
+type CompensationOutletContext = { refreshMetrics?: () => void }
 
 type PayrollForm = {
   employee_id: string
@@ -52,18 +53,6 @@ type PayrollForm = {
   remittance_status: RemittanceStatus
   remittance_date: string
   remittance_reference: string
-}
-
-const emptyEmployee = {
-  first_name: '',
-  last_name: '',
-  email: '',
-  yearly_salary: 0,
-  pay_frequency: 'biweekly' as PayFrequency,
-  estimated_yearly_income: '',
-  active: true,
-  hire_date: '',
-  notes: '',
 }
 
 function calcNet(f: PayrollForm) {
@@ -109,11 +98,11 @@ function payrollFormFromEmployee(emp: Employee, paymentDate = todayIso()): Payro
 }
 
 export function PayrollPage() {
+  const location = useLocation()
+  const embedded = location.pathname.startsWith('/compensation')
+  const { refreshMetrics } = useOutletContext<CompensationOutletContext>() ?? {}
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rows, setRows] = useState<PayrollRun[]>([])
-  const [empOpen, setEmpOpen] = useState(false)
-  const [empForm, setEmpForm] = useState(emptyEmployee)
-  const [empEditingId, setEmpEditingId] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [form, setForm] = useState<PayrollForm | null>(null)
   const [payEditingId, setPayEditingId] = useState<string | null>(null)
@@ -161,6 +150,7 @@ export function PayrollPage() {
     ])
     setEmployees((emp.data as Employee[]) ?? [])
     setRows((pay.data as PayrollRun[]) ?? [])
+    refreshMetrics?.()
   }
 
   async function loadReimbursableExpenses(employeeId: string, payrollRunId?: string | null) {
@@ -197,53 +187,6 @@ export function PayrollPage() {
     else next.add(id)
     setSelectedExpenseIds(next)
     if (form) setForm(syncGrossWithReimbursements(salaryGrossBase, reimbursableExpenses, next, form))
-  }
-
-  function openNewEmployee() {
-    setEmpForm(emptyEmployee)
-    setEmpEditingId(null)
-    setEmpOpen(true)
-  }
-
-  function openEditEmployee(e: Employee) {
-    setEmpForm({
-      first_name: e.first_name,
-      last_name: e.last_name,
-      email: e.email ?? '',
-      yearly_salary: Number(e.yearly_salary),
-      pay_frequency: e.pay_frequency,
-      estimated_yearly_income: e.estimated_yearly_income != null ? String(e.estimated_yearly_income) : '',
-      active: e.active,
-      hire_date: e.hire_date ?? '',
-      notes: e.notes ?? '',
-    })
-    setEmpEditingId(e.id)
-    setEmpOpen(true)
-  }
-
-  async function saveEmployee(ev: React.FormEvent) {
-    ev.preventDefault()
-    const payload = {
-      first_name: empForm.first_name,
-      last_name: empForm.last_name,
-      email: empForm.email || null,
-      yearly_salary: empForm.yearly_salary,
-      pay_frequency: empForm.pay_frequency,
-      estimated_yearly_income: empForm.estimated_yearly_income ? Number(empForm.estimated_yearly_income) : null,
-      active: empForm.active,
-      hire_date: empForm.hire_date || null,
-      notes: empForm.notes || null,
-    }
-    if (empEditingId) await supabase.from('employees').update(payload).eq('id', empEditingId)
-    else await supabase.from('employees').insert(payload)
-    setEmpOpen(false)
-    load()
-  }
-
-  async function removeEmployee(id: string) {
-    if (!confirm('Supprimer cet employé ?')) return
-    await supabase.from('employees').delete().eq('id', id)
-    load()
   }
 
   async function openNewPayroll(emp?: Employee) {
@@ -396,89 +339,67 @@ export function PayrollPage() {
   const previewNetPay = netPayWithReimbursement(previewSalaryNet, reimbPreview.nonTaxable)
 
   return (
-    <div className="space-y-10">
+    <div className={embedded ? undefined : 'space-y-10'}>
       <section>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold">Employés</h2>
-            <p className="text-sm text-muted">Salaire annuel et fréquence de paie — déductions estimées (QC 2025).</p>
-          </div>
-          <Button onClick={openNewEmployee}>Nouvel employé</Button>
-        </div>
-        {employees.length === 0 ? (
-          <EmptyState message="Aucun employé — créez le premier pour gérer la paie et le temps." />
+        {embedded ? (
+          <SectionHeader
+            title="Étape 1 — Salaire"
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  to="/employee-expenses"
+                  className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
+                >
+                  Frais à rembourser
+                </Link>
+                <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
+                  Nouvelle paie
+                </Button>
+              </div>
+            }
+            className="mb-4"
+          />
         ) : (
-          <DataTable minWidth={960}>
-              <thead className="bg-stone-50 text-muted text-left">
-                <tr>
-                  <th className="px-4 py-3">Nom</th>
-                  <th className="px-4 py-3">Salaire annuel</th>
-                  <th className="px-4 py-3">Fréquence</th>
-                  <th className="px-4 py-3">Brut / période</th>
-                  <th className="px-4 py-3">Revenu estimé (impôts)</th>
-                  <th className="px-4 py-3">Statut</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {employees.map((e) => (
-                  <tr key={e.id}>
-                    <td className="px-4 py-3 font-medium">{employeeDisplayName(e)}</td>
-                    <td className="px-4 py-3">{formatCad(e.yearly_salary)}</td>
-                    <td className="px-4 py-3 text-muted">{payFrequencyLabel(e.pay_frequency)}</td>
-                    <td className="px-4 py-3">{formatCad(grossPerPeriod(Number(e.yearly_salary), e.pay_frequency))}</td>
-                    <td className="px-4 py-3 text-muted">
-                      {e.estimated_yearly_income != null ? formatCad(e.estimated_yearly_income) : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge label={e.active ? 'actif' : 'inactif'} tone={e.active ? 'active' : 'archived'} />
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1">
-                      {e.active && (
-                        <Button variant="ghost" className={tableActionClass} onClick={() => openNewPayroll(e)}>
-                          Paie
-                        </Button>
-                      )}
-                      <Button variant="ghost" className={tableActionClass} onClick={() => openEditEmployee(e)}>
-                        Mod.
-                      </Button>
-                      <Button variant="danger" className={tableActionClass} onClick={() => removeEmployee(e.id)}>
-                        Suppr.
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-          </DataTable>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-semibold">Paie</h1>
+              <p className="text-sm text-muted mt-1">
+                Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
+                {' · '}
+                Retenues employé : {formatCad(ytdEmployeeDeductions)}
+                {' · '}
+                Charges employeur : {formatCad(ytdEmployerContributions)}
+                {' · '}
+                Coût total : {formatCad(ytdCost)}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/employee-expenses"
+                className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
+              >
+                Frais à rembourser
+              </Link>
+              <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
+                Nouvelle paie
+              </Button>
+            </div>
+          </div>
         )}
-      </section>
-
-      <section>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-semibold">Paie</h1>
-            <p className="text-sm text-muted mt-1">
-              Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
-              {' · '}
-              Retenues employé : {formatCad(ytdEmployeeDeductions)}
-              {' · '}
-              Charges employeur : {formatCad(ytdEmployerContributions)}
-              {' · '}
-              Coût total : {formatCad(ytdCost)}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/employee-expenses"
-              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
-            >
-              Frais à rembourser
-            </Link>
-            <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
-              Nouvelle paie
-            </Button>
-          </div>
-        </div>
+        {activeEmployees.length === 0 && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
+            Aucun employé actif —{' '}
+            <Link to="/compensation/employees" className="font-medium underline">
+              ajoutez un employé
+            </Link>{' '}
+            avant de créer une paie.
+          </p>
+        )}
+        {embedded && (
+          <p className="text-sm text-muted mb-4">
+            Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)} · Coût total : {formatCad(ytdCost)}
+          </p>
+        )}
         {rows.length === 0 ? (
           <EmptyState message="Aucune paie enregistrée." />
         ) : (
@@ -572,71 +493,14 @@ export function PayrollPage() {
         )}
       </section>
 
-      <Modal title={empEditingId ? 'Modifier employé' : 'Nouvel employé'} open={empOpen} onClose={() => setEmpOpen(false)} wide>
-        <form onSubmit={saveEmployee} className="space-y-3 text-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Prénom *">
-              <input className={inputClass} required value={empForm.first_name} onChange={(e) => setEmpForm({ ...empForm, first_name: e.target.value })} />
-            </Field>
-            <Field label="Nom *">
-              <input className={inputClass} required value={empForm.last_name} onChange={(e) => setEmpForm({ ...empForm, last_name: e.target.value })} />
-            </Field>
-          </div>
-          <Field label="Courriel">
-            <input type="email" className={inputClass} value={empForm.email} onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })} />
-          </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Salaire annuel (CAD) *">
-              <input type="number" step="0.01" min="0" className={inputClass} required value={empForm.yearly_salary} onChange={(e) => setEmpForm({ ...empForm, yearly_salary: Number(e.target.value) })} />
-            </Field>
-            <Field label="Fréquence de paie">
-              <select className={inputClass} value={empForm.pay_frequency} onChange={(e) => setEmpForm({ ...empForm, pay_frequency: e.target.value as PayFrequency })}>
-                <option value="weekly">Hebdomadaire (52×)</option>
-                <option value="biweekly">Aux 2 semaines (26×)</option>
-                <option value="semimonthly">Bi-mensuel (24×)</option>
-                <option value="monthly">Mensuel (12×)</option>
-              </select>
-            </Field>
-          </div>
-          <Field label="Revenu annuel estimé pour impôts (optionnel)">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              className={inputClass}
-              placeholder="Laisser vide = salaire annuel"
-              value={empForm.estimated_yearly_income}
-              onChange={(e) => setEmpForm({ ...empForm, estimated_yearly_income: e.target.value })}
-            />
-            <p className="text-xs text-muted mt-1">
-              Utilisez ce champ si l&apos;employé a d&apos;autres revenus — améliore l&apos;estimation des retenues fédérales et provinciales.
-            </p>
-          </Field>
-          {empForm.yearly_salary > 0 && (
-            <div className="bg-stone-50 rounded-lg p-3 text-xs text-muted">
-              Brut par période :{' '}
-              <strong className="text-ink">{formatCad(grossPerPeriod(empForm.yearly_salary, empForm.pay_frequency))}</strong>
-              {' · '}
-              {periodsPerYear(empForm.pay_frequency)} paies / an
-            </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Date d'embauche">
-              <input type="date" className={inputClass} value={empForm.hire_date} onChange={(e) => setEmpForm({ ...empForm, hire_date: e.target.value })} />
-            </Field>
-            <Field label="Statut">
-              <select className={inputClass} value={empForm.active ? 'yes' : 'no'} onChange={(e) => setEmpForm({ ...empForm, active: e.target.value === 'yes' })}>
-                <option value="yes">Actif</option>
-                <option value="no">Inactif</option>
-              </select>
-            </Field>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setEmpOpen(false)}>Annuler</Button>
-            <Button type="submit">Enregistrer</Button>
-          </div>
-        </form>
-      </Modal>
+      {embedded && rows.length > 0 && (
+        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
+          Distribution aux actionnaires ?{' '}
+          <Link to="/compensation/dividends" className="text-yuzu-dark font-medium hover:underline">
+            Enregistrer un dividende →
+          </Link>
+        </p>
+      )}
 
       <Modal title={payEditingId ? 'Modifier paie' : 'Nouvelle paie'} open={payOpen} onClose={() => setPayOpen(false)} wide>
         {form && (

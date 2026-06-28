@@ -17,8 +17,7 @@ const primaryNav: { section: string; links: NavItem[] }[] = [
     section: 'Finances',
     links: [
       { to: '/bank', label: 'Banque' },
-      { to: '/payroll', label: 'Paie' },
-      { to: '/dividends', label: 'Dividendes' },
+      { to: '/compensation/payroll', label: 'Rémunération' },
       { to: '/taxes', label: 'Fiscalité' },
     ],
   },
@@ -179,6 +178,20 @@ export function Layout() {
                         end={l.end}
                         onClick={() => setMenuOpen(false)}
                         className={navLinkClass(billingActive)}
+                      >
+                        {l.label}
+                      </NavLink>
+                    )
+                  }
+                  const compensationActive = location.pathname.startsWith('/compensation')
+                  if (l.to === '/compensation/payroll') {
+                    return (
+                      <NavLink
+                        key={l.to}
+                        to={l.to}
+                        end={l.end}
+                        onClick={() => setMenuOpen(false)}
+                        className={navLinkClass(compensationActive)}
                       >
                         {l.label}
                       </NavLink>

@@ -117,7 +117,8 @@ export function parseWealthsimpleCsv(text: string): {
   format: WealthsimpleSourceFormat | null
   skipped: number
 } {
-  const records = parseCsv(text)
+  const normalized = text.replace(/^\uFEFF/, '').trim()
+  const records = parseCsv(normalized)
   if (records.length === 0) return { rows: [], format: null, skipped: 0 }
 
   const headers = Object.keys(records[0])

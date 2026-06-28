@@ -177,7 +177,10 @@ export function TimePage() {
       )}
       {employees.length === 0 && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
-          Ajoutez un employé dans la section Paie avant de logger du temps.
+          <Link to="/compensation/employees" className="font-medium underline">
+            Ajoutez un employé
+          </Link>{' '}
+          avant de logger du temps.
         </p>
       )}
       {rows.length === 0 ? (

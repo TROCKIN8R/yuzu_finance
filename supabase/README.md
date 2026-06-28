@@ -10,7 +10,14 @@ Run **`supabase/setup.sql`** once in the Supabase **SQL Editor** on an empty pro
 
 ### Existing project (already ran older migrations)
 
-Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/` in filename order. Latest: `20260629000000_partners.sql` (clients → partners with customer/provider/both roles).
+Do **not** run `setup.sql` — tables already exist. If you are missing a module, run only the relevant file from `supabase/migrations/` in filename order:
+
+| File | Purpose |
+|------|---------|
+| `20260629000000_partners.sql` | clients → partners |
+| `20260629100000_bank_import.sql` | **`bank_transactions` table** + Wealthsimple CSV import (creates table if missing) |
+
+If Banque import fails with `relation "bank_transactions" does not exist`, run **`20260629100000_bank_import.sql`** — it now creates the table, RLS, and import columns in one step.
 
 ## Auth lockdown
 
