@@ -45,6 +45,7 @@ const otherModulePaths = [
   '/corporate-tax',
   '/employee-expenses',
   '/ledger',
+  '/financial-reports',
   '/adjustments',
 ]
 

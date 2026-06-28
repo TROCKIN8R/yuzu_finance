@@ -25,33 +25,6 @@ function Card({ label, value, sub, to }: { label: string; value: string; sub?: s
   )
 }
 
-function StmtRow({
-  label,
-  value,
-  bold,
-  indent,
-  negative,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-  indent?: boolean
-  negative?: boolean
-}) {
-  return (
-    <div
-      className={`flex justify-between gap-4 py-2 border-b border-border text-sm ${bold ? 'font-semibold' : ''} ${indent ? 'pl-4' : ''}`}
-    >
-      <span className={bold ? 'text-ink' : 'text-muted'}>{label}</span>
-      <span className={`shrink-0 ${negative ? 'text-red-700' : ''}`}>{value}</span>
-    </div>
-  )
-}
-
-function StmtSection({ title }: { title: string }) {
-  return <p className="text-xs text-muted mb-2 mt-4 first:mt-0 uppercase tracking-wide font-medium">{title}</p>
-}
-
 export function DashboardPage() {
   const [fin, setFin] = useState<FinancialSnapshot | null>(null)
   const [ops, setOps] = useState({ partners: 0, unbilledHours: 0, unbilledAmount: 0, pendingReimbursement: 0 })
@@ -200,10 +173,7 @@ export function DashboardPage() {
 
   if (!fin || !period) return <div className="text-muted">Chargement…</div>
 
-  const cf = fin.cashFlow
-  const bs = fin.balanceSheet
-  const inc = fin.income
-  const eq = bs.equity
+  const eq = fin.balanceSheet.equity
 
   return (
     <div className="space-y-8">
@@ -221,8 +191,8 @@ export function DashboardPage() {
               </option>
             ))}
           </select>
-          <Link to="/ledger" className="text-sm text-yuzu-dark hover:underline font-medium">
-            Grand livre →
+          <Link to="/financial-reports" className="text-sm text-yuzu-dark hover:underline font-medium">
+            Rapports financiers →
           </Link>
         </div>
       </div>
@@ -255,91 +225,6 @@ export function DashboardPage() {
           </div>
         )}
       </section>
-
-      <section>
-        <h2 className="text-sm font-medium text-muted mb-3">Flux de trésorerie — {period.label}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-          <Card label="Encaissements" value={formatCad(fin.cashIn)} sub="Paiements clients" to="/bank" />
-          <Card label="Décaissements" value={formatCad(fin.cashOut)} sub="Voir détail ci-dessous" />
-          <Card
-            label="Trésorerie nette estimée"
-            value={formatCad(fin.netCash)}
-            sub={fin.netCash >= 0 ? 'Solde positif' : 'Solde négatif'}
-            to="/bank"
-          />
-        </div>
-        <div className="bg-white border border-border rounded-xl p-5">
-          <StmtSection title="Encaissements" />
-          <StmtRow label="Paiements clients reçus" value={formatCad(cf.clientPayments)} />
-
-          <StmtSection title="Décaissements" />
-          <StmtRow label="Dépenses payées (TTC)" value={formatCad(cf.expensesPaid)} indent negative />
-          <StmtRow label="Salaire net versé aux employés" value={formatCad(cf.payrollNetToEmployee)} indent negative />
-          <StmtRow label="Remises paie (retenues + cotisations)" value={formatCad(cf.payrollRemittancesPaid)} indent negative />
-          <StmtRow label="Cotisations employeur (cash)" value={formatCad(cf.employerPayrollContributions)} indent negative />
-          <StmtRow label="Remises TPS/TVQ" value={formatCad(cf.salesTaxRemitted)} indent negative />
-          <StmtRow label="Impôts société payés" value={formatCad(cf.corporateTaxPaid)} indent negative />
-          <StmtRow label="Dividendes payés" value={formatCad(cf.dividendsPaid)} indent negative />
-          <StmtRow label="Total décaissements" value={formatCad(fin.cashOut)} bold negative />
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white border border-border rounded-xl p-5">
-          <h2 className="font-semibold mb-1">Bilan simplifié</h2>
-          <p className="text-xs text-muted mb-4">{period.label}</p>
-
-          <StmtSection title="Actif" />
-          <StmtRow label="Trésorerie comptable" value={formatCad(bs.cash)} />
-          {bs.bankStatementBalance != null && (
-            <StmtRow label="Solde relevé bancaire" value={formatCad(bs.bankStatementBalance)} indent />
-          )}
-          <StmtRow label="Comptes clients (CC)" value={formatCad(bs.accountsReceivable)} />
-          <StmtRow label="TPS à recevoir (CTI)" value={formatCad(bs.gstReceivable)} indent />
-          <StmtRow label="TVQ à recevoir (RTI)" value={formatCad(bs.qstReceivable)} indent />
-          <StmtRow label="Total actif" value={formatCad(bs.totalAssets)} bold />
-
-          <StmtSection title="Passif" />
-          <StmtRow label="Comptes fournisseurs" value={formatCad(bs.accountsPayable)} />
-          {bs.employeeReimbursementsPending > 0 && (
-            <StmtRow label="Remboursements employé dus" value={formatCad(bs.employeeReimbursementsPending)} indent />
-          )}
-          <StmtRow label="TPS à remettre" value={formatCad(bs.gstPayable)} indent />
-          <StmtRow label="TVQ à remettre" value={formatCad(bs.qstPayable)} indent />
-          <StmtRow label="Remises paie en attente" value={formatCad(bs.payrollRemittancesPending)} />
-          {bs.dividendsPayable > 0 && (
-            <StmtRow label="Dividendes à payer" value={formatCad(bs.dividendsPayable)} indent />
-          )}
-          <StmtRow label="Impôts société dus" value={formatCad(bs.corporateTaxDue)} />
-          <StmtRow label="Provision impôt société" value={formatCad(bs.corpTaxProvision)} indent />
-          <StmtRow label="Total passif" value={formatCad(bs.totalLiabilities)} bold />
-
-          <StmtSection title="Avoir" />
-          <StmtRow label="Capital-actions" value={formatCad(eq.shareCapital)} indent />
-          <StmtRow label="BNR d'ouverture" value={formatCad(eq.openingRetainedEarnings)} indent />
-          <StmtRow label="Résultat de la période" value={formatCad(eq.operatingIncome)} indent />
-          <StmtRow label="Dividendes déclarés (période)" value={formatCad(eq.dividendsDistributed)} indent negative />
-          <StmtRow label="BNR cumulé" value={formatCad(eq.retainedEarnings)} indent />
-          <StmtRow label="Total avoir" value={formatCad(eq.totalEquity)} bold />
-        </section>
-
-        <section className="bg-white border border-border rounded-xl p-5">
-          <h2 className="font-semibold mb-1">État des résultats</h2>
-          <p className="text-xs text-muted mb-4">{period.label} — revenus HT, dépenses HT, paie employeur</p>
-
-          <StmtSection title="Revenus" />
-          <StmtRow label="Revenus de services (HT)" value={formatCad(inc.revenueSubtotal)} />
-
-          <StmtSection title="Charges d'exploitation" />
-          <StmtRow label="Dépenses d'exploitation (HT)" value={formatCad(inc.operatingExpenses)} indent negative />
-          <StmtRow label="Salaires bruts" value={formatCad(inc.payrollGross)} indent negative />
-          <StmtRow label="Cotisations employeur" value={formatCad(inc.employerPayrollContributions)} indent negative />
-          <StmtRow label="Résultat d'exploitation" value={formatCad(inc.operatingIncome)} bold />
-
-          <StmtSection title="Distributions (avoir)" />
-          <StmtRow label="Dividendes payés (hors P&L)" value={formatCad(inc.dividendsDistributed)} indent />
-        </section>
-      </div>
     </div>
   )
 }

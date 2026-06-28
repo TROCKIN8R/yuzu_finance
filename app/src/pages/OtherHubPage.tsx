@@ -27,6 +27,11 @@ export function OtherHubPage() {
           title="Frais à rembourser"
           description="Dépenses employé payées personnellement, remboursées via la paie."
         />
+        <HubCard
+          to="/financial-reports"
+          title="Rapports financiers"
+          description="État des résultats, bilan et flux de trésorerie — export PDF."
+        />
         <HubCard to="/ledger" title="Grand livre" description="Journal des écritures et balance de vérification." />
         <HubCard
           to="/adjustments"

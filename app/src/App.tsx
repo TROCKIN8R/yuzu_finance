@@ -16,6 +16,7 @@ import { DividendsPage } from './pages/DividendsPage'
 import { SalesTaxPage } from './pages/SalesTaxPage'
 import { CorporateTaxPage } from './pages/CorporateTaxPage'
 import { OtherHubPage } from './pages/OtherHubPage'
+import { FinancialReportsPage } from './pages/FinancialReportsPage'
 import { GeneralLedgerPage } from './pages/GeneralLedgerPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { BankPage } from './pages/BankPage'
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="taxes" element={<Navigate to="/other" replace />} />
           <Route path="sales-tax" element={<SalesTaxPage />} />
           <Route path="corporate-tax" element={<CorporateTaxPage />} />
+          <Route path="financial-reports" element={<FinancialReportsPage />} />
           <Route path="ledger" element={<GeneralLedgerPage />} />
           <Route path="bank" element={<BankPage />} />
           <Route path="adjustments" element={<AdjustmentsPage />} />
