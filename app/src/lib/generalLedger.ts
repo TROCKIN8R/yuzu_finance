@@ -358,6 +358,3 @@ export function journalTotals(entries: JournalEntry[]) {
     credit: round2(flat.reduce((s, l) => s + l.credit, 0)),
   }
 }
-
-// Re-export payroll helpers used by ledger from financials
-export { payrollEmployerTotal, payrollRemittancesTotal }

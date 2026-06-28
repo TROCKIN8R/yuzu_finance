@@ -1,4 +1,4 @@
-import type { OrganizationSettings, Project, TimeEntry } from './types'
+import type { Project, TimeEntry } from './types'
 import { effectiveRate, formatCad, lineAmount } from './format'
 import { computeSalesTaxes, type TaxSettings } from './taxes'
 
