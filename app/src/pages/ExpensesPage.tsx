@@ -4,7 +4,8 @@ import type { Expense, ExpenseCategory } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -107,7 +108,7 @@ export function ExpensesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Dépenses</h1>
           <p className="text-sm text-muted mt-1">
@@ -158,8 +159,8 @@ export function ExpensesPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucune dépense ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3">Date</th>
@@ -181,20 +182,19 @@ export function ExpensesPage() {
                   <td className="px-4 py-3 text-muted text-xs">{formatCad(e.gst)} / {formatCad(e.qst)}</td>
                   <td className="px-4 py-3">{e.paid ? 'Oui' : 'Non'}</td>
                   <td className="px-4 py-3 text-right space-x-1">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(e)}>Mod.</Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(e.id)}>Suppr.</Button>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(e)}>Mod.</Button>
+                    <Button variant="danger" className={tableActionClass} onClick={() => remove(e.id)}>Suppr.</Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
       <Modal title={editingId ? 'Modifier dépense' : 'Nouvelle dépense'} open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date *"><input type="date" className={inputClass} required value={form.expense_date} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} /></Field>
             <Field label="Fournisseur *"><input className={inputClass} required value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} /></Field>
           </div>
@@ -204,7 +204,7 @@ export function ExpensesPage() {
             </select>
           </Field>
           <Field label="Description"><input className={inputClass} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Montant HT *"><input type="number" step="0.01" min="0" className={inputClass} required value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></Field>
             <Field label="TPS"><input type="number" step="0.01" min="0" className={inputClass} value={form.gst} onChange={(e) => setForm({ ...form, gst: Number(e.target.value) })} /></Field>
             <Field label="TVQ"><input type="number" step="0.01" min="0" className={inputClass} value={form.qst} onChange={(e) => setForm({ ...form, qst: Number(e.target.value) })} /></Field>

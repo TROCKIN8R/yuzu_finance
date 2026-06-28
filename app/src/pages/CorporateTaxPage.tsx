@@ -4,7 +4,8 @@ import type { CorporateTaxRecord, CorpTaxStatus } from '../lib/types'
 import { formatCad, formatDate } from '../lib/format'
 import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -99,7 +100,7 @@ export function CorporateTaxPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Impôts société</h1>
           <p className="text-sm text-muted mt-1">
@@ -148,8 +149,8 @@ export function CorporateTaxPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucun enregistrement ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3">Année fiscale</th>
@@ -171,25 +172,24 @@ export function CorporateTaxPage() {
                   <td className="px-4 py-3">{formatCad(r.amount)}</td>
                   <td className="px-4 py-3"><Badge label={r.status} tone={r.status === 'paid' ? 'paid' : 'draft'} /></td>
                   <td className="px-4 py-3 text-right space-x-1">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(r)}>Mod.</Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(r.id)}>Suppr.</Button>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(r)}>Mod.</Button>
+                    <Button variant="danger" className={tableActionClass} onClick={() => remove(r.id)}>Suppr.</Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
       <Modal title="Impôt société" open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Année fiscale *"><input className={inputClass} required value={form.fiscal_year} onChange={(e) => setForm({ ...form, fiscal_year: e.target.value })} placeholder="2025-2026" /></Field>
             <Field label="Autorité"><select className={inputClass} value={form.tax_authority} onChange={(e) => setForm({ ...form, tax_authority: e.target.value })}><option>CRA</option><option>RQ</option></select></Field>
           </div>
           <Field label="Description *"><input className={inputClass} required value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Acompte T2 Q1" /></Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Échéance"><input type="date" className={inputClass} value={form.due_date} onChange={(e) => setForm({ ...form, due_date: e.target.value })} /></Field>
             <Field label="Montant *"><input type="number" step="0.01" className={inputClass} required value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></Field>
             <Field label="Payé"><input type="number" step="0.01" className={inputClass} value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: Number(e.target.value) })} /></Field>

@@ -13,7 +13,8 @@ import {
   periodsPerYear,
 } from '../lib/payrollCalc'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -281,7 +282,7 @@ export function PayrollPage() {
   return (
     <div className="space-y-10">
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold">Employés</h2>
             <p className="text-sm text-muted">Salaire annuel et fréquence de paie — déductions estimées (QC 2025).</p>
@@ -291,8 +292,7 @@ export function PayrollPage() {
         {employees.length === 0 ? (
           <EmptyState message="Aucun employé — créez le premier pour gérer la paie et le temps." />
         ) : (
-          <div className="bg-white border border-border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
+          <DataTable minWidth={960}>
               <thead className="bg-stone-50 text-muted text-left">
                 <tr>
                   <th className="px-4 py-3">Nom</th>
@@ -319,29 +319,28 @@ export function PayrollPage() {
                     </td>
                     <td className="px-4 py-3 text-right space-x-1">
                       {e.active && (
-                        <Button variant="ghost" className="!px-2 !py-1" onClick={() => openNewPayroll(e)}>
+                        <Button variant="ghost" className={tableActionClass} onClick={() => openNewPayroll(e)}>
                           Paie
                         </Button>
                       )}
-                      <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEditEmployee(e)}>
+                      <Button variant="ghost" className={tableActionClass} onClick={() => openEditEmployee(e)}>
                         Mod.
                       </Button>
-                      <Button variant="danger" className="!px-2 !py-1" onClick={() => removeEmployee(e.id)}>
+                      <Button variant="danger" className={tableActionClass} onClick={() => removeEmployee(e.id)}>
                         Suppr.
                       </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+          </DataTable>
         )}
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-semibold">Paie</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold">Paie</h1>
             <p className="text-sm text-muted mt-1">
               Coût employeur total{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdCost)}
             </p>
@@ -384,8 +383,8 @@ export function PayrollPage() {
             {filtered.length === 0 ? (
               <EmptyState message="Aucune paie ne correspond aux filtres." />
             ) : (
-              <div className="bg-white border border-border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+              <DataTable>
+      
                   <thead className="bg-stone-50 text-muted text-left">
                     <tr>
                       <th className="px-4 py-3">Employé</th>
@@ -411,18 +410,17 @@ export function PayrollPage() {
                         <td className="px-4 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
                         <td className="px-4 py-3 text-muted">{formatDate(p.payment_date)}</td>
                         <td className="px-4 py-3 text-right space-x-1">
-                          <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEditPayroll(p)}>
+                          <Button variant="ghost" className={tableActionClass} onClick={() => openEditPayroll(p)}>
                             Mod.
                           </Button>
-                          <Button variant="danger" className="!px-2 !py-1" onClick={() => removePayroll(p.id)}>
+                          <Button variant="danger" className={tableActionClass} onClick={() => removePayroll(p.id)}>
                             Suppr.
                           </Button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+              </DataTable>
             )}
           </>
         )}
@@ -430,7 +428,7 @@ export function PayrollPage() {
 
       <Modal title={empEditingId ? 'Modifier employé' : 'Nouvel employé'} open={empOpen} onClose={() => setEmpOpen(false)} wide>
         <form onSubmit={saveEmployee} className="space-y-3 text-sm">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Prénom *">
               <input className={inputClass} required value={empForm.first_name} onChange={(e) => setEmpForm({ ...empForm, first_name: e.target.value })} />
             </Field>
@@ -441,7 +439,7 @@ export function PayrollPage() {
           <Field label="Courriel">
             <input type="email" className={inputClass} value={empForm.email} onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Salaire annuel (CAD) *">
               <input type="number" step="0.01" min="0" className={inputClass} required value={empForm.yearly_salary} onChange={(e) => setEmpForm({ ...empForm, yearly_salary: Number(e.target.value) })} />
             </Field>
@@ -476,7 +474,7 @@ export function PayrollPage() {
               {periodsPerYear(empForm.pay_frequency)} paies / an
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date d'embauche">
               <input type="date" className={inputClass} value={empForm.hire_date} onChange={(e) => setEmpForm({ ...empForm, hire_date: e.target.value })} />
             </Field>
@@ -517,7 +515,7 @@ export function PayrollPage() {
                 )}
               </p>
             )}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Début période">
                 <input type="date" className={inputClass} required value={form.pay_period_start} onChange={(e) => setForm({ ...form, pay_period_start: e.target.value })} />
               </Field>
@@ -532,7 +530,7 @@ export function PayrollPage() {
               <input type="number" step="0.01" className={inputClass} required value={form.gross_pay} onChange={(e) => setForm({ ...form, gross_pay: Number(e.target.value) })} />
             </Field>
             <p className="text-xs text-muted font-medium">Déductions employé (estimées — ajustez si besoin)</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {(['federal_tax', 'provincial_tax', 'cpp_employee', 'ei_employee', 'qpip_employee', 'other_deductions'] as const).map((k) => (
                 <Field key={k} label={k.replace(/_/g, ' ')}>
                   <input type="number" step="0.01" className={inputClass} value={form[k]} onChange={(e) => setForm({ ...form, [k]: Number(e.target.value) })} />
@@ -540,7 +538,7 @@ export function PayrollPage() {
               ))}
             </div>
             <p className="text-xs text-muted font-medium">Charges employeur</p>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {(['cpp_employer', 'ei_employer', 'qpip_employer', 'employer_benefits'] as const).map((k) => (
                 <Field key={k} label={k.replace(/_/g, ' ')}>
                   <input type="number" step="0.01" className={inputClass} value={form[k]} onChange={(e) => setForm({ ...form, [k]: Number(e.target.value) })} />

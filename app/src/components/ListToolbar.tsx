@@ -20,7 +20,7 @@ export function ListToolbar({
   return (
     <div className="mb-4 space-y-3">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 w-full sm:max-w-md">
           <input
             type="search"
             className={`${inputClass} pl-9`}
@@ -60,7 +60,7 @@ export function FilterSelect({
     <label className={`inline-flex items-center gap-1.5 text-sm ${className}`}>
       <span className="text-muted text-xs whitespace-nowrap">{label}</span>
       <select
-        className="px-2 py-1.5 rounded-lg border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-yuzu/40"
+        className="min-h-[44px] sm:min-h-0 px-2 py-2 sm:py-1.5 rounded-lg border border-border bg-white text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-yuzu/40"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -88,7 +88,7 @@ export function FilterChips<T extends string>({
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+          className={`min-h-[44px] sm:min-h-0 px-3 py-2 sm:py-1.5 rounded-lg text-sm transition-colors active:scale-[0.98] ${
             value === o.value ? 'bg-yuzu-light font-medium text-ink' : 'text-muted hover:bg-stone-100'
           }`}
         >
@@ -115,14 +115,14 @@ export function DateRangeFilter({
       <span className="text-muted text-xs">Du</span>
       <input
         type="date"
-        className="px-2 py-1.5 rounded-lg border border-border bg-white text-sm"
+        className="min-h-[44px] sm:min-h-0 px-2 py-2 sm:py-1.5 rounded-lg border border-border bg-white text-base sm:text-sm"
         value={from}
         onChange={(e) => onFromChange(e.target.value)}
       />
       <span className="text-muted text-xs">au</span>
       <input
         type="date"
-        className="px-2 py-1.5 rounded-lg border border-border bg-white text-sm"
+        className="min-h-[44px] sm:min-h-0 px-2 py-2 sm:py-1.5 rounded-lg border border-border bg-white text-base sm:text-sm"
         value={to}
         onChange={(e) => onToChange(e.target.value)}
       />
@@ -133,7 +133,7 @@ export function DateRangeFilter({
 export function ClearFiltersButton({ onClick, visible }: { onClick: () => void; visible: boolean }) {
   if (!visible) return null
   return (
-    <button type="button" onClick={onClick} className="text-xs text-muted hover:text-ink underline">
+    <button type="button" onClick={onClick} className="min-h-[44px] sm:min-h-0 px-1 text-sm text-muted hover:text-ink underline">
       Réinitialiser filtres
     </button>
   )

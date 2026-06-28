@@ -70,7 +70,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Tableau de bord</h1>
+      <h1 className="text-xl sm:text-2xl font-semibold">Tableau de bord</h1>
 
       <section>
         <h2 className="text-sm font-medium text-muted mb-3">Opérations</h2>

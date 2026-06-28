@@ -4,7 +4,8 @@ import type { Dividend, Employee } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { employeeDisplayName, splitDividendEqually } from '../lib/payrollCalc'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -125,7 +126,7 @@ export function DividendsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Dividendes</h1>
           <p className="text-sm text-muted mt-1">
@@ -168,8 +169,8 @@ export function DividendsPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucune distribution ne correspond aux filtres." />
           ) : (
-            <div className="bg-white border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
+            <DataTable>
+    
                 <thead className="bg-stone-50 text-muted text-left">
                   <tr>
                     <th className="px-4 py-3">Date</th>
@@ -189,18 +190,17 @@ export function DividendsPage() {
                       <td className="px-4 py-3">{formatCad(d.amount_per_employee)}</td>
                       <td className="px-4 py-3 text-muted">{d.description ?? '—'}</td>
                       <td className="px-4 py-3 text-right space-x-1">
-                        <Button variant="ghost" className="!px-2 !py-1" onClick={() => viewDetail(d)}>
+                        <Button variant="ghost" className={tableActionClass} onClick={() => viewDetail(d)}>
                           Détail
                         </Button>
-                        <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(d.id)}>
+                        <Button variant="danger" className={tableActionClass} onClick={() => remove(d.id)}>
                           Suppr.
                         </Button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+            </DataTable>
           )}
         </>
       )}
@@ -235,7 +235,7 @@ export function DividendsPage() {
       <Modal title="Détail distribution" open={detailOpen} onClose={() => setDetailOpen(false)}>
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="text-muted text-xs">Date</div>
                 <div>{formatDate(selected.payment_date)}</div>
@@ -262,6 +262,7 @@ export function DividendsPage() {
                 ))}
               </tbody>
             </table>
+
             <div className="flex justify-end">
               <Button variant="danger" onClick={() => remove(selected.id)}>Supprimer</Button>
             </div>

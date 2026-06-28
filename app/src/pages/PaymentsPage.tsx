@@ -6,7 +6,8 @@ import { inDateRange, matchesSearch } from '../lib/filters'
 import { deriveInvoiceStatus, invoiceBalance } from '../lib/invoice'
 import { deletePayment } from '../lib/invoiceActions'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -126,7 +127,7 @@ export function PaymentsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Paiements</h1>
         <Button onClick={() => openRecord()} disabled={outstanding.length === 0}>
           Enregistrer un paiement
@@ -148,8 +149,8 @@ export function PaymentsPage() {
           {outstanding.length === 0 ? (
             <EmptyState message="Aucune facture ouverte ne correspond à la recherche." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden mb-8">
-          <table className="w-full text-sm">
+        <DataTable className="mb-8">
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Facture</th>
@@ -173,15 +174,14 @@ export function PaymentsPage() {
                     <Badge label={inv.status} tone={inv.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openRecord(inv)}>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openRecord(inv)}>
                       Payer
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -211,8 +211,8 @@ export function PaymentsPage() {
           {filteredPayments.length === 0 ? (
             <EmptyState message="Aucun paiement ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Date</th>
@@ -232,13 +232,12 @@ export function PaymentsPage() {
                   <td className="px-4 py-3 text-muted">{p.method ?? '—'}</td>
                   <td className="px-4 py-3 text-muted">{p.reference ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => handleDeletePayment(p)}>Suppr.</Button>
+                    <Button variant="danger" className={tableActionClass} onClick={() => handleDeletePayment(p)}>Suppr.</Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -257,7 +256,7 @@ export function PaymentsPage() {
               ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date *">
               <input type="date" className={inputClass} required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} />
             </Field>

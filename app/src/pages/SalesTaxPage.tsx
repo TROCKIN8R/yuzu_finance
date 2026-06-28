@@ -4,7 +4,8 @@ import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -109,7 +110,7 @@ export function SalesTaxPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Taxes de vente (TPS / TVQ)</h1>
         <Button onClick={openNew}>Nouvelle période</Button>
       </div>
@@ -140,8 +141,8 @@ export function SalesTaxPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucune période ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3">Période</th>
@@ -159,26 +160,25 @@ export function SalesTaxPage() {
                   <td className="px-4 py-3">{formatCad(r.qst_net)}</td>
                   <td className="px-4 py-3"><Badge label={r.status} tone={r.status} /></td>
                   <td className="px-4 py-3 text-right space-x-1">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(r)}>Mod.</Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(r.id)}>Suppr.</Button>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(r)}>Mod.</Button>
+                    <Button variant="danger" className={tableActionClass} onClick={() => remove(r.id)}>Suppr.</Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
       <Modal title="Période TPS/TVQ" open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Début"><input type="date" className={inputClass} required value={form.period_start} onChange={(e) => setForm({ ...form, period_start: e.target.value })} /></Field>
             <Field label="Fin"><input type="date" className={inputClass} required value={form.period_end} onChange={(e) => setForm({ ...form, period_end: e.target.value })} /></Field>
             <Field label="Échéance dépôt"><input type="date" className={inputClass} value={form.filing_due_date} onChange={(e) => setForm({ ...form, filing_due_date: e.target.value })} /></Field>
           </div>
           <Button type="button" variant="secondary" onClick={calculateFromData}>Calculer depuis factures et dépenses</Button>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="TPS perçue"><input type="number" step="0.01" className={inputClass} value={form.gst_collected} onChange={(e) => setForm({ ...form, gst_collected: Number(e.target.value) })} /></Field>
             <Field label="TVQ perçue"><input type="number" step="0.01" className={inputClass} value={form.qst_collected} onChange={(e) => setForm({ ...form, qst_collected: Number(e.target.value) })} /></Field>
             <Field label="CTI / TPS"><input type="number" step="0.01" className={inputClass} value={form.gst_itc} onChange={(e) => setForm({ ...form, gst_itc: Number(e.target.value) })} /></Field>

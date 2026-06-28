@@ -7,7 +7,8 @@ import { computeInvoiceTotals } from '../lib/invoice'
 import { deleteInvoice } from '../lib/invoiceActions'
 import { downloadInvoicePdf } from '../lib/invoicePdf'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -173,7 +174,7 @@ export function InvoicesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Factures</h1>
         <Button onClick={openCreate} disabled={clients.length === 0}>
           Créer depuis le temps
@@ -225,8 +226,8 @@ export function InvoicesPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucune facture ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">N°</th>
@@ -248,18 +249,17 @@ export function InvoicesPage() {
                     <Badge label={inv.status} tone={inv.status} />
                   </td>
                   <td className="px-4 py-3 text-right space-x-1">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => viewDetail(inv)}>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => viewDetail(inv)}>
                       Voir
                     </Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => handleDelete(inv)}>
+                    <Button variant="danger" className={tableActionClass} onClick={() => handleDelete(inv)}>
                       Suppr.
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -329,7 +329,7 @@ export function InvoicesPage() {
       <Modal title={selected?.invoice_number ?? 'Facture'} open={detailOpen} onClose={() => setDetailOpen(false)} wide>
         {selected && (
           <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="text-muted text-xs">Client</div>
                 <div className="font-medium">{selected.clients?.legal_name}</div>
@@ -357,18 +357,19 @@ export function InvoicesPage() {
                 ))}
               </tbody>
             </table>
+
             <div className="text-right space-y-1">
               <div>Sous-total : {formatCad(selected.subtotal)}</div>
               <div>TPS : {formatCad(selected.gst)}</div>
               <div>TVQ : {formatCad(selected.qst)}</div>
               <div className="font-semibold text-lg">Total : {formatCad(selected.total)}</div>
             </div>
-            <div className="flex gap-2 justify-between pt-2 flex-wrap">
-              <div className="flex gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-between pt-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={handlePdf}>Télécharger PDF</Button>
                 <Button variant="danger" onClick={() => handleDelete(selected)}>Supprimer</Button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
               {(['draft', 'sent', 'void'] as InvoiceStatus[]).map((s) => (
                 <Button
                   key={s}

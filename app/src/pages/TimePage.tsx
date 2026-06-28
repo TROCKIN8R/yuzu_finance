@@ -5,7 +5,8 @@ import { effectiveRate, formatCad, formatDate, lineAmount, relationOne, todayIso
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -147,7 +148,7 @@ export function TimePage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h1 className="text-2xl font-semibold">Suivi du temps</h1>
         <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
           Logger du temps
@@ -213,8 +214,8 @@ export function TimePage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucune entrée ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable minWidth={800}>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Employé</th>
@@ -253,10 +254,10 @@ export function TimePage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
-                      <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(t)}>
+                      <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(t)}>
                         Modifier
                       </Button>
-                      <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(t)}>
+                      <Button variant="danger" className={tableActionClass} onClick={() => remove(t)}>
                         Suppr.
                       </Button>
                     </td>
@@ -264,8 +265,7 @@ export function TimePage() {
                 )
               })}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -287,7 +287,7 @@ export function TimePage() {
               ))}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Date *">
               <input type="date" className={inputClass} required value={form.entry_date} onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
             </Field>
@@ -298,7 +298,7 @@ export function TimePage() {
           <Field label="Description *">
             <textarea className={inputClass} required rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Taux override (optionnel)">
               <input type="number" step="0.01" className={inputClass} placeholder="Taux projet par défaut" value={form.rate_override} onChange={(e) => setForm({ ...form, rate_override: e.target.value })} />
             </Field>

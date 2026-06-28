@@ -4,7 +4,8 @@ import type { Client, Project, ProjectStatus } from '../lib/types'
 import { formatCad } from '../lib/format'
 import { matchesSearch } from '../lib/filters'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -93,7 +94,7 @@ export function ProjectsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Projets</h1>
         <Button onClick={openNew} disabled={clients.length === 0}>
           Nouveau projet
@@ -134,8 +135,8 @@ export function ProjectsPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucun projet ne correspond aux filtres." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Projet</th>
@@ -155,18 +156,17 @@ export function ProjectsPage() {
                     <Badge label={p.status} tone={p.status} />
                   </td>
                   <td className="px-4 py-3 text-right space-x-2">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(p)}>
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(p)}>
                       Modifier
                     </Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(p.id)}>
+                    <Button variant="danger" className={tableActionClass} onClick={() => remove(p.id)}>
                       Suppr.
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -182,7 +182,7 @@ export function ProjectsPage() {
           <Field label="Nom du projet *">
             <input className={inputClass} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Taux horaire (CAD) *">
               <input type="number" step="0.01" min="0" className={inputClass} required value={form.default_hourly_rate} onChange={(e) => setForm({ ...form, default_hourly_rate: Number(e.target.value) })} />
             </Field>

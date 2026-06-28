@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Client } from '../lib/types'
 import { matchesSearch } from '../lib/filters'
-import { Button } from '../components/Button'
+import { Button, tableActionClass } from '../components/Button'
+import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -88,7 +89,7 @@ export function ClientsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-semibold">Clients</h1>
         <Button onClick={openNew}>Nouveau client</Button>
       </div>
@@ -108,8 +109,8 @@ export function ClientsPage() {
           {filtered.length === 0 ? (
             <EmptyState message="Aucun client ne correspond à votre recherche." />
           ) : (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <DataTable>
+
             <thead className="bg-stone-50 text-muted text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Nom</th>
@@ -126,19 +127,20 @@ export function ClientsPage() {
                   <td className="px-4 py-3 text-muted">{c.contact_name ?? '—'}</td>
                   <td className="px-4 py-3 text-muted">{c.email ?? '—'}</td>
                   <td className="px-4 py-3 text-muted">{c.city ?? '—'}</td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <Button variant="ghost" className="!px-2 !py-1" onClick={() => openEdit(c)}>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex flex-wrap gap-1 justify-end">
+                    <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(c)}>
                       Modifier
                     </Button>
-                    <Button variant="danger" className="!px-2 !py-1" onClick={() => remove(c.id)}>
+                    <Button variant="danger" className={tableActionClass} onClick={() => remove(c.id)}>
                       Suppr.
                     </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </DataTable>
           )}
         </>
       )}
@@ -147,7 +149,7 @@ export function ClientsPage() {
           <Field label="Nom légal *">
             <input className={inputClass} required value={form.legal_name ?? ''} onChange={(e) => setForm({ ...form, legal_name: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Contact">
               <input className={inputClass} value={form.contact_name ?? ''} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
             </Field>
@@ -158,7 +160,7 @@ export function ClientsPage() {
           <Field label="Adresse">
             <input className={inputClass} value={form.address_line1 ?? ''} onChange={(e) => setForm({ ...form, address_line1: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Ville">
               <input className={inputClass} value={form.city ?? ''} onChange={(e) => setForm({ ...form, city: e.target.value })} />
             </Field>

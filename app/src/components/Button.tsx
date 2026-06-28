@@ -17,10 +17,13 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; children: ReactNode }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors disabled:opacity-50 active:scale-[0.98] ${variants[variant]} ${className}`}
       {...props}
     >
       {children}
     </button>
   )
 }
+
+/** Table row actions — touch-friendly on mobile, compact on desktop. */
+export const tableActionClass = '!min-h-[44px] !min-w-[44px] sm:!min-h-[32px] sm:!min-w-0 !px-3 !py-2 sm:!px-2 sm:!py-1'
