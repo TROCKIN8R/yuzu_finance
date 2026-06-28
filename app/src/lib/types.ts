@@ -49,6 +49,7 @@ export interface TimeEntry {
   projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'client_id'> & {
     clients?: Pick<Client, 'legal_name'>
   }
+  invoices?: Pick<Invoice, 'invoice_number'>
 }
 
 export interface Invoice {
@@ -106,22 +107,64 @@ export interface OrganizationSettings {
   payment_instructions: string | null
 }
 
+type OmitSystemFields<T> = Omit<T, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+
 export interface Database {
   public: {
     Tables: {
-      clients: { Row: Client; Insert: Partial<Client>; Update: Partial<Client> }
-      projects: { Row: Project; Insert: Partial<Project>; Update: Partial<Project> }
-      time_entries: { Row: TimeEntry; Insert: Partial<TimeEntry>; Update: Partial<TimeEntry> }
-      invoices: { Row: Invoice; Insert: Partial<Invoice>; Update: Partial<Invoice> }
-      payments: { Row: Payment; Insert: Partial<Payment>; Update: Partial<Payment> }
+      clients: {
+        Row: Client
+        Insert: OmitSystemFields<Client> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<Client>>
+        Relationships: []
+      }
+      projects: {
+        Row: Project
+        Insert: OmitSystemFields<Project> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<Project>>
+        Relationships: []
+      }
+      time_entries: {
+        Row: TimeEntry
+        Insert: OmitSystemFields<TimeEntry> & { id?: string; user_id?: string; invoice_id?: string | null }
+        Update: Partial<OmitSystemFields<TimeEntry>>
+        Relationships: []
+      }
+      invoices: {
+        Row: Invoice
+        Insert: OmitSystemFields<Invoice> & {
+          id?: string
+          user_id?: string
+          subtotal?: number
+          gst?: number
+          qst?: number
+          total?: number
+          status?: InvoiceStatus
+        }
+        Update: Partial<OmitSystemFields<Invoice>>
+        Relationships: []
+      }
+      payments: {
+        Row: Payment
+        Insert: OmitSystemFields<Payment> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<Payment>>
+        Relationships: []
+      }
       organization_settings: {
         Row: OrganizationSettings
-        Insert: Partial<OrganizationSettings>
+        Insert: Partial<OrganizationSettings> & { user_id: string }
         Update: Partial<OrganizationSettings>
+        Relationships: []
       }
     }
+    Views: Record<string, never>
     Functions: {
       next_invoice_number: { Args: Record<string, never>; Returns: string }
     }
+    Enums: {
+      project_status: ProjectStatus
+      invoice_status: InvoiceStatus
+    }
+    CompositeTypes: Record<string, never>
   }
 }

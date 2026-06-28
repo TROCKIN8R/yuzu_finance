@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Database } from './types'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -18,7 +17,7 @@ if (missing) {
  * requests and other users cannot read or write your rows.
  * Never use the service_role key here.
  */
-export const supabase = createClient<Database>(url ?? '', key ?? '', {
+export const supabase = createClient(url ?? '', key ?? '', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react'
-
 const styles: Record<string, string> = {
   draft: 'bg-stone-100 text-stone-600',
   sent: 'bg-blue-50 text-blue-700',
