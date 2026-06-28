@@ -13,7 +13,17 @@ Read [SECURITY.md](../SECURITY.md) before deploying.
 3. **Settings → Pages → Build and deployment → Source**: GitHub Actions.
 4. Push to `main` — workflow `.github/workflows/deploy-pages.yml` builds and deploys.
 
-Site URL: `https://<username>.github.io/<repo-name>/`
+Site URL: `https://<username>.github.io/<repo-name>/` (include the repo name and trailing slash).
+
+Example: `https://trockin8r.github.io/yuzu_finance/`
+
+## Troubleshooting 404
+
+1. **Settings → Pages → Build and deployment → Source** must be **GitHub Actions** (not “Deploy from a branch”).
+2. Open the latest **Deploy to GitHub Pages** workflow run — both `build` and `deploy` jobs must be green.
+3. Use the project URL with the repo name: `https://<user>.github.io/yuzu_finance/` — the root `github.io/` URL will 404 for project sites.
+4. After changing Pages source, run **Actions → Deploy to GitHub Pages → Run workflow** once.
+5. Hard-refresh the browser (or wait 1–2 minutes for CDN cache).
 
 ## Custom domain
 

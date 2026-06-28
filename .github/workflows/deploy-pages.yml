@@ -12,13 +12,15 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
 
       - uses: actions/setup-node@v4
         with:
@@ -38,6 +40,14 @@ jobs:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_ALLOW_SIGNUP: 'false'
         run: npm run build
+
+      - name: Verify build output
+        working-directory: app
+        run: |
+          ls -la dist
+          test -f dist/index.html
+          test -f dist/404.html
+          grep -q "/${{ github.event.repository.name }}/" dist/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
