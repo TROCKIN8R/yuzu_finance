@@ -16,6 +16,8 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 |------|---------|
 | `20260629000000_partners.sql` | clients → partners |
 | `20260629100000_bank_import.sql` | **`bank_transactions` table** + Wealthsimple CSV import (creates table if missing) |
+| `20260630120000_dividend_declared_paid.sql` | Dividends: `declared_date`, `status` (declared/paid), nullable `payment_date` |
+| `20260630120100_dividend_declared_date_default.sql` | Default + trigger so `declared_date` is set if missing (older app builds) |
 
 If Banque import fails with `relation "bank_transactions" does not exist`, run **`20260629100000_bank_import.sql`** — it now creates the table, RLS, and import columns in one step.
 

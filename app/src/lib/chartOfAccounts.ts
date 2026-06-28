@@ -20,6 +20,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '2060', name: 'Remboursements dus à l\'employé', type: 'liability' },
   { code: '2100', name: 'TPS à remettre', type: 'liability' },
   { code: '2110', name: 'TVQ à remettre', type: 'liability' },
+  { code: '2125', name: 'Dividendes à payer', type: 'liability' },
   { code: '2200', name: 'Retenues à la source — impôts', type: 'liability' },
   { code: '2210', name: 'RPC / AE / RQAP à remettre', type: 'liability' },
   { code: '2300', name: 'Impôts société dus', type: 'liability' },

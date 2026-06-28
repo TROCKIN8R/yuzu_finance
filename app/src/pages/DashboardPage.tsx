@@ -91,7 +91,7 @@ export function DashboardPage() {
           'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
         ),
       supabase.from('invoices').select('subtotal, invoice_date, status').neq('status', 'void'),
-      supabase.from('dividends').select('total_amount, payment_date'),
+      supabase.from('dividends').select('total_amount, declared_date, payment_date, status'),
       supabase.from('corporate_tax_records').select('paid_amount, paid_date'),
       supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
     ])
@@ -156,7 +156,7 @@ export function DashboardPage() {
             'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
           ),
         supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date').neq('status', 'void'),
-        supabase.from('dividends').select('total_amount, payment_date'),
+        supabase.from('dividends').select('total_amount, declared_date, payment_date, status'),
         supabase.from('corporate_tax_records').select('amount, paid_amount, status'),
         supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
         supabase.from('bank_transactions').select('amount, transaction_date'),
@@ -279,7 +279,7 @@ export function DashboardPage() {
           <StmtRow label="Cotisations employeur (cash)" value={formatCad(cf.employerPayrollContributions)} indent negative />
           <StmtRow label="Remises TPS/TVQ" value={formatCad(cf.salesTaxRemitted)} indent negative />
           <StmtRow label="Impôts société payés" value={formatCad(cf.corporateTaxPaid)} indent negative />
-          <StmtRow label="Dividendes distribués" value={formatCad(cf.dividendsPaid)} indent negative />
+          <StmtRow label="Dividendes payés" value={formatCad(cf.dividendsPaid)} indent negative />
           <StmtRow label="Total décaissements" value={formatCad(fin.cashOut)} bold negative />
         </div>
       </section>
@@ -307,6 +307,9 @@ export function DashboardPage() {
           <StmtRow label="TPS à remettre" value={formatCad(bs.gstPayable)} indent />
           <StmtRow label="TVQ à remettre" value={formatCad(bs.qstPayable)} indent />
           <StmtRow label="Remises paie en attente" value={formatCad(bs.payrollRemittancesPending)} />
+          {bs.dividendsPayable > 0 && (
+            <StmtRow label="Dividendes à payer" value={formatCad(bs.dividendsPayable)} indent />
+          )}
           <StmtRow label="Impôts société dus" value={formatCad(bs.corporateTaxDue)} />
           <StmtRow label="Provision impôt société" value={formatCad(bs.corpTaxProvision)} indent />
           <StmtRow label="Total passif" value={formatCad(bs.totalLiabilities)} bold />
@@ -315,7 +318,7 @@ export function DashboardPage() {
           <StmtRow label="Capital-actions" value={formatCad(eq.shareCapital)} indent />
           <StmtRow label="BNR d'ouverture" value={formatCad(eq.openingRetainedEarnings)} indent />
           <StmtRow label="Résultat de la période" value={formatCad(eq.operatingIncome)} indent />
-          <StmtRow label="Dividendes (période)" value={formatCad(eq.dividendsDistributed)} indent negative />
+          <StmtRow label="Dividendes déclarés (période)" value={formatCad(eq.dividendsDistributed)} indent negative />
           <StmtRow label="BNR cumulé" value={formatCad(eq.retainedEarnings)} indent />
           <StmtRow label="Total avoir" value={formatCad(eq.totalEquity)} bold />
         </section>

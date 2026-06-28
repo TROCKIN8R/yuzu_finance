@@ -142,7 +142,14 @@ export function buildGeneralLedger(data: {
     payroll_run_id?: string | null
   }[]
   payrollRuns: PayrollRow[]
-  dividends: { id: string; payment_date: string; total_amount: number; description: string | null }[]
+  dividends: {
+    id: string
+    declared_date: string
+    payment_date: string | null
+    status: string
+    total_amount: number
+    description: string | null
+  }[]
   corporateTax: {
     id: string
     paid_date: string | null
@@ -301,15 +308,28 @@ export function buildGeneralLedger(data: {
   for (const d of data.dividends) {
     entries.push(
       entry(
-        `div-${d.id}`,
-        d.payment_date,
-        'dividend',
+        `div-decl-${d.id}`,
+        d.declared_date,
+        'dividend_declared',
         d.id,
-        d.payment_date,
-        d.description ?? 'Dividendes',
-        [jl('3200', Number(d.total_amount), 0), jl('1010', 0, Number(d.total_amount))]
+        d.declared_date,
+        d.description ?? 'Dividendes déclarés',
+        [jl('3100', Number(d.total_amount), 0), jl('2125', 0, Number(d.total_amount))]
       )
     )
+    if (d.status === 'paid' && d.payment_date) {
+      entries.push(
+        entry(
+          `div-pay-${d.id}`,
+          d.payment_date,
+          'dividend',
+          d.id,
+          d.payment_date,
+          d.description ?? 'Paiement dividendes',
+          [jl('2125', Number(d.total_amount), 0), jl('1010', 0, Number(d.total_amount))]
+        )
+      )
+    }
   }
 
   for (const ct of data.corporateTax) {

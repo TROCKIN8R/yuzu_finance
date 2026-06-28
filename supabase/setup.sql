@@ -507,7 +507,9 @@ create trigger corporate_tax_records_updated_at
 create table public.dividends (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  payment_date date not null default current_date,
+  declared_date date not null default current_date,
+  payment_date date,
+  status text not null default 'declared' check (status in ('declared', 'paid')),
   total_amount numeric(12, 2) not null check (total_amount > 0),
   employee_count integer not null check (employee_count > 0),
   amount_per_employee numeric(12, 2) not null check (amount_per_employee >= 0),
@@ -533,6 +535,25 @@ create index dividend_allocations_dividend_id_idx on public.dividend_allocations
 create trigger dividends_set_user_id
   before insert on public.dividends
   for each row execute function public.set_user_id();
+
+create or replace function public.dividends_before_insert()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.declared_date is null then
+    new.declared_date := coalesce(new.payment_date, current_date);
+  end if;
+  if new.status is null then
+    new.status := 'declared';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger dividends_before_insert
+  before insert on public.dividends
+  for each row execute function public.dividends_before_insert();
 
 create trigger dividends_updated_at
   before update on public.dividends

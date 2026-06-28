@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { deletePayment, recalculateInvoiceStatus } from './invoiceActions'
-import type { CorpTaxStatus, ExpenseCategory, TaxPeriodStatus } from './types'
+import type { CorpTaxStatus, DividendStatus, ExpenseCategory, TaxPeriodStatus } from './types'
 import type { ParsedBankRow } from './wealthsimpleCsv'
 
 async function loadExistingImportKeys(): Promise<Set<string>> {
@@ -90,6 +90,17 @@ async function revertLinkedRecord(bankId: string, matchSource: string | null, ma
           paid_amount: prev.paid_amount,
           paid_date: prev.paid_date,
         })
+        .eq('id', matchId)
+    }
+    return
+  }
+
+  if (matchSource === 'dividend') {
+    const prev = parseRevertNote<{ status: DividendStatus; payment_date: string | null }>(notes, 'dividend_prev:')
+    if (prev) {
+      await supabase
+        .from('dividends')
+        .update({ status: prev.status, payment_date: prev.payment_date })
         .eq('id', matchId)
     }
   }
@@ -238,14 +249,35 @@ export async function assignBankPayroll(
   if (bankErr) throw new Error(bankErr.message)
 }
 
-export async function assignBankDividend(bankId: string, dividendId: string) {
+export async function assignBankDividend(bankId: string, dividendId: string, paymentDate: string) {
+  const { data: dividend, error: readErr } = await supabase
+    .from('dividends')
+    .select('status, payment_date')
+    .eq('id', dividendId)
+    .single()
+
+  if (readErr || !dividend) throw new Error(readErr?.message ?? 'Dividende introuvable')
+  if (dividend.status === 'paid') throw new Error('Ce dividende est déjà payé.')
+
+  const prevNote = `dividend_prev:${JSON.stringify({
+    status: dividend.status as DividendStatus,
+    payment_date: dividend.payment_date,
+  })}`
+
+  const { error: divErr } = await supabase
+    .from('dividends')
+    .update({ status: 'paid', payment_date: paymentDate })
+    .eq('id', dividendId)
+
+  if (divErr) throw new Error(divErr.message)
+
   const { error: bankErr } = await supabase
     .from('bank_transactions')
     .update({
       reconciled: true,
       match_source: 'dividend',
       match_id: dividendId,
-      notes: null,
+      notes: prevNote,
     })
     .eq('id', bankId)
 

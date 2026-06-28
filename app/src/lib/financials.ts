@@ -35,6 +35,7 @@ export interface BalanceSheetDetail {
   qstPayable: number
   payrollRemittancesPending: number
   employeeReimbursementsPending: number
+  dividendsPayable: number
   corporateTaxDue: number
   corpTaxProvision: number
   totalLiabilities: number
@@ -171,7 +172,12 @@ export function buildFinancialSnapshot(
       invoice_date: string
     }[]
     invoicePaidMap: Record<string, number>
-    dividends?: { total_amount: number; payment_date: string }[]
+    dividends?: {
+      total_amount: number
+      declared_date: string
+      payment_date: string | null
+      status: string
+    }[]
     corporateTax?: { amount: number; paid_amount: number; status: string }[]
     salesTaxRemitted?: { gst_net: number; qst_net: number; filed_date?: string | null; period_end: string }[]
     bankTransactions?: { amount: number; transaction_date: string }[]
@@ -203,8 +209,16 @@ export function buildFinancialSnapshot(
     .filter((p) => p.remittance_status !== 'remitted')
     .reduce((s, p) => s + payrollRemittancesTotal(p), 0)
 
+  const dividendsDeclared = (data.dividends ?? [])
+    .filter((d) => inPeriod(d.declared_date, period))
+    .reduce((s, d) => s + Number(d.total_amount), 0)
+
   const dividendsPaid = (data.dividends ?? [])
-    .filter((d) => inPeriod(d.payment_date, period))
+    .filter((d) => d.status === 'paid' && d.payment_date && inPeriod(d.payment_date, period))
+    .reduce((s, d) => s + Number(d.total_amount), 0)
+
+  const dividendsPayable = (data.dividends ?? [])
+    .filter((d) => d.status === 'declared')
     .reduce((s, d) => s + Number(d.total_amount), 0)
 
   const corporateTaxPaid = (data.corporateTax ?? []).reduce((s, r) => s + Number(r.paid_amount), 0)
@@ -274,7 +288,7 @@ export function buildFinancialSnapshot(
 
   const shareCapital = Number(data.settings?.share_capital ?? 0)
   const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
-  const retainedEarnings = round2(openingRE + operatingIncome - dividendsPaid)
+  const retainedEarnings = round2(openingRE + operatingIncome - dividendsDeclared)
   const totalEquity = round2(shareCapital + retainedEarnings)
 
   const openingCash = Number(data.settings?.opening_cash_balance ?? 0)
@@ -292,6 +306,7 @@ export function buildFinancialSnapshot(
     qstPayable +
     payrollRemittancesPending +
     employeeReimbursementsPending +
+    dividendsPayable +
     corporateTaxDue +
     corpTaxProvision
 
@@ -332,6 +347,7 @@ export function buildFinancialSnapshot(
       qstPayable,
       payrollRemittancesPending,
       employeeReimbursementsPending,
+      dividendsPayable,
       corporateTaxDue,
       corpTaxProvision,
       totalLiabilities,
@@ -339,7 +355,7 @@ export function buildFinancialSnapshot(
         shareCapital,
         openingRetainedEarnings: openingRE,
         operatingIncome,
-        dividendsDistributed: dividendsPaid,
+        dividendsDistributed: dividendsDeclared,
         retainedEarnings,
         totalEquity,
       },
@@ -350,7 +366,7 @@ export function buildFinancialSnapshot(
       payrollGross,
       employerPayrollContributions,
       operatingIncome,
-      dividendsDistributed: dividendsPaid,
+      dividendsDistributed: dividendsDeclared,
     },
   }
 }

@@ -38,7 +38,7 @@ export function CompensationPage() {
           'payment_date, gross_pay, cpp_employer, ei_employer, qpip_employer, employer_benefits, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, other_deductions'
         )
         .gte('payment_date', yearStart),
-      supabase.from('dividends').select('total_amount, payment_date').gte('payment_date', yearStart),
+      supabase.from('dividends').select('total_amount, declared_date').gte('declared_date', yearStart),
     ])
 
     setMetrics({
@@ -66,7 +66,7 @@ export function CompensationPage() {
       <MetricGrid>
         <MetricCard label="Employés actifs" value={metrics.activeEmployees} />
         <MetricCard label={`Coût paie ${new Date().getFullYear()}`} value={formatCad(metrics.payrollCostYtd)} />
-        <MetricCard label={`Dividendes ${new Date().getFullYear()}`} value={formatCad(metrics.dividendsYtd)} />
+        <MetricCard label={`Dividendes déclarés ${new Date().getFullYear()}`} value={formatCad(metrics.dividendsYtd)} />
       </MetricGrid>
 
       <CompensationWorkflowNav current={current} />

@@ -6,6 +6,7 @@ import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { employeeDisplayName, splitDividendEqually } from '../lib/payrollCalc'
 import { Button, tableActionClass } from '../components/Button'
+import { Badge } from '../components/Badge'
 import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
@@ -20,7 +21,7 @@ import { AlertBanner } from '../components/AlertBanner'
 type CompensationOutletContext = { refreshMetrics?: () => void }
 
 const emptyForm = {
-  payment_date: todayIso(),
+  declared_date: todayIso(),
   total_amount: 0,
   description: '',
   notes: '',
@@ -44,7 +45,7 @@ export function DividendsPage() {
 
   const filtered = useMemo(() => {
     return rows.filter((d) => {
-      if (!inDateRange(d.payment_date, dateFrom, dateTo)) return false
+      if (!inDateRange(d.declared_date, dateFrom, dateTo)) return false
       return matchesSearch(search, d.description, d.notes, d.total_amount, d.amount_per_employee)
     })
   }, [rows, search, dateFrom, dateTo])
@@ -64,7 +65,7 @@ export function DividendsPage() {
       supabase
         .from('dividends')
         .select('*, dividend_allocations(id, amount, employee_id, employees(first_name, last_name))')
-        .order('payment_date', { ascending: false }),
+        .order('declared_date', { ascending: false }),
       supabase.from('employees').select('*').eq('active', true).order('last_name'),
     ])
     setRows((div.data as Dividend[]) ?? [])
@@ -74,7 +75,7 @@ export function DividendsPage() {
 
   function openNew() {
     if (activeCount === 0) {
-      alert('Ajoutez au moins un employé actif avant de distribuer des dividendes.')
+      alert('Ajoutez au moins un employé actif avant de déclarer des dividendes.')
       return
     }
     setForm(emptyForm)
@@ -85,13 +86,20 @@ export function DividendsPage() {
     ev.preventDefault()
     if (activeCount === 0) return
 
+    const declaredDate = form.declared_date || todayIso()
+    if (!declaredDate) {
+      alert('Indiquez une date de déclaration.')
+      return
+    }
+
     const amounts = splitDividendEqually(form.total_amount, activeCount)
     const perEmployee = amounts[0]
 
     const { data: dividend, error } = await supabase
       .from('dividends')
       .insert({
-        payment_date: form.payment_date,
+        declared_date: declaredDate,
+        status: 'declared',
         total_amount: form.total_amount,
         employee_count: activeCount,
         amount_per_employee: perEmployee,
@@ -122,7 +130,12 @@ export function DividendsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Supprimer cette distribution de dividendes ?')) return
+    const row = rows.find((r) => r.id === id)
+    if (row?.status === 'paid') {
+      alert('Dividende déjà payé — désaffectez la transaction bancaire avant de supprimer.')
+      return
+    }
+    if (!confirm('Supprimer cette déclaration de dividendes ?')) return
     await supabase.from('dividends').delete().eq('id', id)
     setDetailOpen(false)
     setSelected(null)
@@ -143,10 +156,10 @@ export function DividendsPage() {
           step={2}
           totalSteps={2}
           title="Dividendes"
-          hint="Distributions aux actionnaires."
+          hint="Déclaration puis paiement via la banque."
           actions={
             <Button onClick={openNew} disabled={activeCount === 0}>
-              Nouvelle distribution
+              Déclarer un dividende
             </Button>
           }
         />
@@ -161,7 +174,7 @@ export function DividendsPage() {
           }
           actions={
             <Button onClick={openNew} disabled={activeCount === 0}>
-              Nouvelle distribution
+              Déclarer un dividende
             </Button>
           }
         />
@@ -210,7 +223,9 @@ export function DividendsPage() {
     
                 <thead className="bg-stone-50 text-muted text-left">
                   <tr>
-                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Déclaré le</th>
+                    <th className="px-4 py-3">Statut</th>
+                    <th className="px-4 py-3">Payé le</th>
                     <th className="px-4 py-3">Montant total</th>
                     <th className="px-4 py-3">Employés</th>
                     <th className="px-4 py-3">Par employé</th>
@@ -221,7 +236,14 @@ export function DividendsPage() {
                 <tbody className="divide-y divide-border">
                   {filtered.map((d) => (
                     <tr key={d.id}>
-                      <td className="px-4 py-3">{formatDate(d.payment_date)}</td>
+                      <td className="px-4 py-3">{formatDate(d.declared_date)}</td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          label={d.status === 'paid' ? 'Payé' : 'Déclaré'}
+                          tone={d.status === 'paid' ? 'paid' : 'declared'}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-muted">{d.payment_date ? formatDate(d.payment_date) : '—'}</td>
                       <td className="px-4 py-3 font-medium">{formatCad(d.total_amount)}</td>
                       <td className="px-4 py-3 text-muted">{d.employee_count}</td>
                       <td className="px-4 py-3">{formatCad(d.amount_per_employee)}</td>
@@ -242,10 +264,13 @@ export function DividendsPage() {
         </>
       )}
 
-      <Modal title="Distribuer des dividendes" open={open} onClose={() => setOpen(false)}>
+      <Modal title="Déclarer un dividende" open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3 text-sm">
-          <Field label="Date de paiement *">
-            <input type="date" className={inputClass} required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} />
+          <p className="text-sm text-muted">
+            La déclaration réduit les bénéfices non répartis. Le paiement sera enregistré lors de la réconciliation bancaire.
+          </p>
+          <Field label="Date de déclaration *">
+            <input type="date" className={inputClass} required value={form.declared_date} onChange={(e) => setForm({ ...form, declared_date: e.target.value })} />
           </Field>
           <Field label="Montant total à distribuer (CAD) *">
             <input type="number" step="0.01" min="0.01" className={inputClass} required value={form.total_amount || ''} onChange={(e) => setForm({ ...form, total_amount: Number(e.target.value) })} />
@@ -264,7 +289,7 @@ export function DividendsPage() {
           </Field>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button type="submit" disabled={form.total_amount <= 0}>Distribuer</Button>
+            <Button type="submit" disabled={form.total_amount <= 0}>Déclarer</Button>
           </div>
         </form>
       </Modal>
@@ -274,8 +299,19 @@ export function DividendsPage() {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="text-muted text-xs">Date</div>
-                <div>{formatDate(selected.payment_date)}</div>
+                <div className="text-muted text-xs">Déclaré le</div>
+                <div>{formatDate(selected.declared_date)}</div>
+              </div>
+              <div>
+                <div className="text-muted text-xs">Statut</div>
+                <Badge
+                  label={selected.status === 'paid' ? 'Payé' : 'Déclaré'}
+                  tone={selected.status === 'paid' ? 'paid' : 'declared'}
+                />
+              </div>
+              <div>
+                <div className="text-muted text-xs">Payé le</div>
+                <div>{selected.payment_date ? formatDate(selected.payment_date) : 'En attente (banque)'}</div>
               </div>
               <div>
                 <div className="text-muted text-xs">Total</div>
@@ -307,8 +343,8 @@ export function DividendsPage() {
         )}
       </Modal>
       {embedded && (
-        <WorkflowFooter to="/bank" label="Encaisser dans Banque">
-          Paiement effectué ?
+        <WorkflowFooter to="/bank" label="Marquer payé dans Banque">
+          Dividende déclaré ?
         </WorkflowFooter>
       )}
     </PageShell>

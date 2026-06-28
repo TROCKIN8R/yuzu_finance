@@ -65,10 +65,14 @@ export interface Employee {
   updated_at: string
 }
 
+export type DividendStatus = 'declared' | 'paid'
+
 export interface Dividend {
   id: string
   user_id: string
-  payment_date: string
+  declared_date: string
+  payment_date: string | null
+  status: DividendStatus
   total_amount: number
   employee_count: number
   amount_per_employee: number

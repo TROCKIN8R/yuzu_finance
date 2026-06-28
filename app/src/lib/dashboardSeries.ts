@@ -50,7 +50,12 @@ type PayrollRow = {
   qpip_employee: number
   other_deductions: number
 }
-type DividendRow = { total_amount: number; payment_date: string }
+type DividendRow = {
+  total_amount: number
+  declared_date: string
+  payment_date: string | null
+  status: string
+}
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
@@ -181,10 +186,13 @@ export function buildMonthlySeries(
   }
 
   for (const d of data.dividends) {
-    const ym = monthKey(d.payment_date)
-    if (!months.includes(ym)) continue
-    add(cashOutByMonth, ym, Number(d.total_amount))
-    add(dividendsByMonth, ym, Number(d.total_amount))
+    const declareYm = monthKey(d.declared_date)
+    if (months.includes(declareYm)) add(dividendsByMonth, declareYm, Number(d.total_amount))
+
+    if (d.status === 'paid' && d.payment_date) {
+      const payYm = monthKey(d.payment_date)
+      if (months.includes(payYm)) add(cashOutByMonth, payYm, Number(d.total_amount))
+    }
   }
 
   for (const t of data.corporateTax) {

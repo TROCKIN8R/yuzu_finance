@@ -195,7 +195,7 @@ export function BankPage() {
           'id, payment_date, pay_period_start, pay_period_end, net_pay, remittance_status, remittance_date, remittance_reference, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, employees(first_name, last_name)'
         )
         .order('payment_date', { ascending: false }),
-      supabase.from('dividends').select('id, payment_date, total_amount, description').order('payment_date', { ascending: false }),
+      supabase.from('dividends').select('id, declared_date, payment_date, total_amount, description, status').order('declared_date', { ascending: false }),
       supabase.from('corporate_tax_records').select('*').order('due_date', { ascending: true }),
       supabase.from('sales_tax_periods').select('*').order('period_end', { ascending: false }),
     ])
@@ -312,7 +312,7 @@ export function BankPage() {
         remittance_reference: tx.description.slice(0, 120),
       })
 
-      setDividendForm({ dividend_id: dividends[0]?.id ?? '' })
+      setDividendForm({ dividend_id: declaredDividends[0]?.id ?? '' })
 
       const openPeriod = salesTaxPeriods.find((p) => p.status !== 'paid') ?? salesTaxPeriods[0]
       setSalesTaxForm({
@@ -395,7 +395,7 @@ export function BankPage() {
           alert('Sélectionnez un dividende.')
           return
         }
-        await assignBankDividend(assignTx.id, dividendForm.dividend_id)
+        await assignBankDividend(assignTx.id, dividendForm.dividend_id, assignTx.transaction_date)
       } else if (assignKind === 'sales_tax') {
         if (!salesTaxForm.period_id) {
           alert('Sélectionnez une période TPS/TVQ.')
@@ -450,6 +450,7 @@ export function BankPage() {
 
   const payrollMap = useMemo(() => Object.fromEntries(payrollRuns.map((p) => [p.id, p])), [payrollRuns])
   const dividendMap = useMemo(() => Object.fromEntries(dividends.map((d) => [d.id, d])), [dividends])
+  const declaredDividends = useMemo(() => dividends.filter((d) => d.status === 'declared'), [dividends])
   const salesTaxMap = useMemo(() => Object.fromEntries(salesTaxPeriods.map((p) => [p.id, p])), [salesTaxPeriods])
   const corpTaxMap = useMemo(() => Object.fromEntries(corpTaxRecords.map((r) => [r.id, r])), [corpTaxRecords])
 
@@ -483,7 +484,9 @@ export function BankPage() {
     }
     if (tx.match_source === 'dividend' && tx.match_id) {
       const d = dividendMap[tx.match_id]
-      return d ? `Dividende · ${formatDate(d.payment_date)} · ${formatCad(d.total_amount)}` : 'Dividende'
+      return d
+        ? `Dividende · ${formatDate(d.payment_date ?? d.declared_date)} · ${formatCad(d.total_amount)}`
+        : 'Dividende'
     }
     if (tx.match_source === 'sales_tax' && tx.match_id) {
       const p = salesTaxMap[tx.match_id]
@@ -918,19 +921,21 @@ export function BankPage() {
             </>
           ) : assignKind === 'dividend' ? (
             <>
-              {dividends.length === 0 ? (
-                <p className="text-sm text-amber-800">Aucun dividende — enregistrez une distribution d&apos;abord.</p>
+              {declaredDividends.length === 0 ? (
+                <p className="text-sm text-amber-800">
+                  Aucun dividende déclaré en attente — déclarez une distribution dans Rémunération d&apos;abord.
+                </p>
               ) : (
-                <Field label="Distribution *">
+                <Field label="Dividende déclaré *">
                   <select
                     className={inputClass}
                     required
                     value={dividendForm.dividend_id}
                     onChange={(e) => setDividendForm({ dividend_id: e.target.value })}
                   >
-                    {dividends.map((d) => (
+                    {declaredDividends.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {formatDate(d.payment_date)} · {formatCad(d.total_amount)}
+                        {formatDate(d.declared_date)} · {formatCad(d.total_amount)}
                         {d.description ? ` · ${d.description}` : ''}
                       </option>
                     ))}
@@ -1042,7 +1047,7 @@ export function BankPage() {
               disabled={
                 (assignKind === 'payment' && outstanding.length === 0) ||
                 (assignKind === 'payroll' && payrollRuns.length === 0) ||
-                (assignKind === 'dividend' && dividends.length === 0) ||
+                (assignKind === 'dividend' && declaredDividends.length === 0) ||
                 (assignKind === 'sales_tax' && salesTaxPeriods.length === 0) ||
                 (assignKind === 'corporate_tax' && corpTaxRecords.length === 0)
               }

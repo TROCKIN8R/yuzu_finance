@@ -42,7 +42,7 @@ export function GeneralLedgerPage() {
         .select(
           'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
         ),
-      supabase.from('dividends').select('id, payment_date, total_amount, description'),
+      supabase.from('dividends').select('id, declared_date, payment_date, total_amount, description, status'),
       supabase.from('corporate_tax_records').select('id, paid_date, paid_amount, label, fiscal_year'),
       supabase.from('sales_tax_periods').select('id, period_end, filed_date, gst_net, qst_net, status'),
       supabase.from('accounting_adjustments').select('*'),
