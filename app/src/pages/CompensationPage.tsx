@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { payrollEmployerTotal } from '../lib/financials'
 import { PageHeader } from '../components/PageHeader'
-import { Button } from '../components/Button'
+import { PageShell } from '../components/PageShell'
+import { MetricCard, MetricGrid } from '../components/MetricCard'
 import { CompensationWorkflowNav, type CompensationStep } from '../components/CompensationWorkflowNav'
 
 function stepFromPath(pathname: string): CompensationStep | undefined {
@@ -49,44 +50,28 @@ export function CompensationPage() {
 
   if (onEmployees) {
     return (
-      <div className="max-w-6xl">
+      <PageShell width="wide">
         <Outlet context={{ refreshMetrics: loadMetrics }} />
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="max-w-6xl">
+    <PageShell width="wide">
       <PageHeader
         title="Rémunération"
         subtitle="Salaire d'employé et dividendes — distincts en comptabilité et fiscalité. Brouillon pour révision CPA."
-        actions={
-          <Link to="/compensation/employees">
-            <Button variant="secondary">Employés</Button>
-          </Link>
-        }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Employés actifs</div>
-          <div className="text-lg font-semibold mt-0.5">{metrics.activeEmployees}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Coût paie {new Date().getFullYear()}</div>
-          <div className="text-lg font-semibold mt-0.5">{formatCad(metrics.payrollCostYtd)}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Dividendes {new Date().getFullYear()}</div>
-          <div className="text-lg font-semibold mt-0.5">{formatCad(metrics.dividendsYtd)}</div>
-        </div>
-      </div>
+      <MetricGrid>
+        <MetricCard label="Employés actifs" value={metrics.activeEmployees} />
+        <MetricCard label={`Coût paie ${new Date().getFullYear()}`} value={formatCad(metrics.payrollCostYtd)} />
+        <MetricCard label={`Dividendes ${new Date().getFullYear()}`} value={formatCad(metrics.dividendsYtd)} />
+      </MetricGrid>
 
       <CompensationWorkflowNav current={current} />
 
-      <div className="mt-6">
-        <Outlet context={{ refreshMetrics: loadMetrics }} />
-      </div>
-    </div>
+      <Outlet context={{ refreshMetrics: loadMetrics }} />
+    </PageShell>
   )
 }

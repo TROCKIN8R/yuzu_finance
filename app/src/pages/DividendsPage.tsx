@@ -3,15 +3,19 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Dividend, Employee } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch } from '../lib/filters'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { employeeDisplayName, splitDividendEqually } from '../lib/payrollCalc'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, DateRangeFilter, ListToolbar } from '../components/ListToolbar'
-import { SectionHeader } from '../components/PageHeader'
+import { DateRangeFilter, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { StepPanelHeader } from '../components/WorkflowNav'
+import { WorkflowFooter } from '../components/WorkflowFooter'
+import { PageShell } from '../components/PageShell'
+import { AlertBanner } from '../components/AlertBanner'
 
 type CompensationOutletContext = { refreshMetrics?: () => void }
 
@@ -133,30 +137,34 @@ export function DividendsPage() {
   const totalDistributed = filtered.reduce((s, d) => s + Number(d.total_amount), 0)
 
   return (
-    <div>
+    <PageShell>
       {embedded ? (
-        <SectionHeader
-          title="Étape 2 — Dividendes"
+        <StepPanelHeader
+          step={2}
+          totalSteps={2}
+          title="Dividendes"
+          hint="Distributions aux actionnaires."
           actions={
             <Button onClick={openNew} disabled={activeCount === 0}>
               Nouvelle distribution
             </Button>
           }
-          className="mb-6"
         />
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold">Dividendes</h1>
-            <p className="text-sm text-muted mt-1">
-              Répartis également entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
+        <PageHeader
+          title="Dividendes"
+          subtitle={
+            <>
+              Répartis entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
               {hasFilters ? ` · Total filtré : ${formatCad(totalDistributed)}` : rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
-            </p>
-          </div>
-          <Button onClick={openNew} disabled={activeCount === 0}>
-            Nouvelle distribution
-          </Button>
-        </div>
+            </>
+          }
+          actions={
+            <Button onClick={openNew} disabled={activeCount === 0}>
+              Nouvelle distribution
+            </Button>
+          }
+        />
       )}
       {embedded && (
         <p className="text-sm text-muted mb-4">
@@ -166,13 +174,13 @@ export function DividendsPage() {
       )}
 
       {activeCount === 0 && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
+        <AlertBanner>
           Aucun employé actif —{' '}
           <Link to="/compensation/employees" className="font-medium underline">
             ajoutez un employé
           </Link>{' '}
           avant de distribuer des dividendes.
-        </p>
+        </AlertBanner>
       )}
 
       {rows.length === 0 ? (
@@ -185,16 +193,15 @@ export function DividendsPage() {
             searchPlaceholder="Description, montant…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!dateFrom, !!dateTo)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setDateFrom('')
+              setDateTo('')
+            }}
           >
             <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setDateFrom('')
-                setDateTo('')
-              }}
-            />
           </ListToolbar>
           {filtered.length === 0 ? (
             <EmptyState message="Aucune distribution ne correspond aux filtres." />
@@ -300,13 +307,10 @@ export function DividendsPage() {
         )}
       </Modal>
       {embedded && (
-        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
-          Encaissez le paiement dans{' '}
-          <Link to="/bank" className="text-yuzu-dark font-medium hover:underline">
-            Banque →
-          </Link>
-        </p>
+        <WorkflowFooter to="/bank" label="Encaisser dans Banque">
+          Paiement effectué ?
+        </WorkflowFooter>
       )}
-    </div>
+    </PageShell>
   )
 }

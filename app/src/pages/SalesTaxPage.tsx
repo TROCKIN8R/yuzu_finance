@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
-import { matchesSearch } from '../lib/filters'
+import { matchesSearch, countActiveFilters } from '../lib/filters'
 import { calculateSalesTaxPeriod } from '../lib/salesTaxCalc'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -11,7 +10,9 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const empty = {
   period_start: todayIso().slice(0, 8) + '01',
@@ -114,16 +115,13 @@ export function SalesTaxPage() {
   }
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <Link to="/taxes" className="text-sm text-yuzu-dark hover:underline">
-            ← Fiscalité
-          </Link>
-          <h1 className="text-2xl font-semibold mt-1">Taxes de vente (TPS / TVQ)</h1>
-        </div>
-        <Button onClick={openNew}>Nouvelle période</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        backTo={{ to: '/other', label: 'Autre' }}
+        title="Taxes de vente (TPS / TVQ)"
+        subtitle="Périodes trimestrielles, CTI/RTI et remises."
+        actions={<Button onClick={openNew}>Nouvelle période</Button>}
+      />
       {rows.length === 0 ? (
         <EmptyState message="Aucune déclaration TPS/TVQ." />
       ) : (
@@ -134,6 +132,12 @@ export function SalesTaxPage() {
             searchPlaceholder="Période, montants…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!statusFilter)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setStatusFilter('')
+            }}
           >
             <FilterSelect
               label="Statut"
@@ -141,12 +145,11 @@ export function SalesTaxPage() {
               onChange={setStatusFilter}
               options={[
                 { value: '', label: 'Tous' },
-                { value: 'open', label: 'open' },
-                { value: 'filed', label: 'filed' },
-                { value: 'paid', label: 'paid' },
+                { value: 'open', label: 'Ouverte' },
+                { value: 'filed', label: 'Déposée' },
+                { value: 'paid', label: 'Payée' },
               ]}
             />
-            <ClearFiltersButton visible={hasFilters} onClick={() => { setSearch(''); setStatusFilter('') }} />
           </ListToolbar>
           {filtered.length === 0 ? (
             <EmptyState message="Aucune période ne correspond aux filtres." />
@@ -205,6 +208,6 @@ export function SalesTaxPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

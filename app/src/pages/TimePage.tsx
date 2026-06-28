@@ -3,7 +3,7 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, Project, TimeEntry } from '../lib/types'
 import { effectiveRate, formatCad, formatDate, lineAmount, relationOne, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch } from '../lib/filters'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -11,8 +11,12 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
-import { SectionHeader } from '../components/PageHeader'
+import { DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { StepPanelHeader } from '../components/WorkflowNav'
+import { WorkflowFooter } from '../components/WorkflowFooter'
+import { PageShell } from '../components/PageShell'
+import { AlertBanner } from '../components/AlertBanner'
 
 type Filter = 'all' | 'unbilled' | 'invoiced'
 type BillingOutletContext = { refreshMetrics?: () => void }
@@ -155,33 +159,47 @@ export function TimePage() {
 
   const unbilledCount = useMemo(() => rows.filter((t) => !t.invoice_id && t.billable).length, [rows])
 
+  const filterCount = countActiveFilters(
+    !!search,
+    !!projectFilter,
+    !!partnerFilter,
+    !!employeeFilter,
+    !!dateFrom,
+    !!dateTo,
+    billingFilter !== 'all'
+  )
+
   return (
-    <div>
+    <PageShell>
       {embedded ? (
-        <SectionHeader
-          title="Étape 2 — Temps"
+        <StepPanelHeader
+          step={2}
+          totalSteps={4}
+          title="Temps"
+          hint="Heures facturables par projet et employé."
           actions={
             <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
               Logger du temps
             </Button>
           }
-          className="mb-4"
         />
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-          <h1 className="text-2xl font-semibold">Suivi du temps</h1>
-          <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
-            Logger du temps
-          </Button>
-        </div>
+        <PageHeader
+          title="Suivi du temps"
+          actions={
+            <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
+              Logger du temps
+            </Button>
+          }
+        />
       )}
       {employees.length === 0 && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
+        <AlertBanner>
           <Link to="/compensation/employees" className="font-medium underline">
             Ajoutez un employé
           </Link>{' '}
           avant de logger du temps.
-        </p>
+        </AlertBanner>
       )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune entrée de temps." />
@@ -193,6 +211,17 @@ export function TimePage() {
             searchPlaceholder="Description, projet, partenaire, facture…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={filterCount}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setProjectFilter('')
+              setPartnerFilter('')
+              setEmployeeFilter('')
+              setDateFrom('')
+              setDateTo('')
+              setBillingFilter('all')
+            }}
           >
             <FilterChips
               value={billingFilter}
@@ -222,18 +251,6 @@ export function TimePage() {
               options={[{ value: '', label: 'Tous' }, ...partnerOptions]}
             />
             <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setProjectFilter('')
-                setPartnerFilter('')
-                setEmployeeFilter('')
-                setDateFrom('')
-                setDateTo('')
-                setBillingFilter('all')
-              }}
-            />
           </ListToolbar>
           {filtered.length === 0 ? (
             <EmptyState message="Aucune entrée ne correspond aux filtres." />
@@ -340,13 +357,10 @@ export function TimePage() {
         </form>
       </Modal>
       {embedded && unbilledCount > 0 && (
-        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
-          {unbilledCount} entrée{unbilledCount > 1 ? 's' : ''} prête{unbilledCount > 1 ? 's' : ''} à facturer.{' '}
-          <Link to="/billing/invoices" className="text-yuzu-dark font-medium hover:underline">
-            Créer une facture →
-          </Link>
-        </p>
+        <WorkflowFooter to="/billing/invoices" label="Créer une facture">
+          {unbilledCount} entrée{unbilledCount > 1 ? 's' : ''} prête{unbilledCount > 1 ? 's' : ''} à facturer.
+        </WorkflowFooter>
       )}
-    </div>
+    </PageShell>
   )
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useOutletContext } from 'react-router-dom'
+import { useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { BillingType, Partner, Project, ProjectStatus } from '../lib/types'
-import { matchesSearch } from '../lib/filters'
+import { matchesSearch, countActiveFilters } from '../lib/filters'
 import { customerPartners } from '../lib/partners'
 import { billingTypeLabel, projectAmountLabel } from '../lib/invoice'
 import { Badge } from '../components/Badge'
@@ -11,8 +11,11 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
-import { SectionHeader } from '../components/PageHeader'
+import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { StepPanelHeader } from '../components/WorkflowNav'
+import { WorkflowFooter } from '../components/WorkflowFooter'
+import { PageShell } from '../components/PageShell'
 
 type BillingOutletContext = { refreshMetrics?: () => void }
 
@@ -126,24 +129,28 @@ export function ProjectsPage() {
   }
 
   return (
-    <div>
+    <PageShell>
       {embedded ? (
-        <SectionHeader
-          title="Étape 1 — Projets"
+        <StepPanelHeader
+          step={1}
+          totalSteps={4}
+          title="Projets"
+          hint="Mandats horaires ou forfaitaires par partenaire client."
           actions={
             <Button onClick={openNew} disabled={billablePartners.length === 0}>
               Nouveau projet
             </Button>
           }
-          className="mb-4"
         />
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <h1 className="text-2xl font-semibold">Projets</h1>
-          <Button onClick={openNew} disabled={billablePartners.length === 0}>
-            Nouveau projet
-          </Button>
-        </div>
+        <PageHeader
+          title="Projets"
+          actions={
+            <Button onClick={openNew} disabled={billablePartners.length === 0}>
+              Nouveau projet
+            </Button>
+          }
+        />
       )}
       {billablePartners.length === 0 && (
         <p className="text-sm text-muted mb-4">
@@ -160,6 +167,13 @@ export function ProjectsPage() {
             searchPlaceholder="Projet, partenaire…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!partnerFilter, !!statusFilter)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setPartnerFilter('')
+              setStatusFilter('')
+            }}
           >
             <FilterSelect
               label="Partenaire"
@@ -176,19 +190,11 @@ export function ProjectsPage() {
               onChange={setStatusFilter}
               options={[
                 { value: '', label: 'Tous' },
-                { value: 'active', label: 'active' },
-                { value: 'on_hold', label: 'on_hold' },
-                { value: 'completed', label: 'completed' },
-                { value: 'archived', label: 'archived' },
+                { value: 'active', label: 'Actif' },
+                { value: 'on_hold', label: 'En pause' },
+                { value: 'completed', label: 'Terminé' },
+                { value: 'archived', label: 'Archivé' },
               ]}
-            />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setPartnerFilter('')
-                setStatusFilter('')
-              }}
             />
           </ListToolbar>
           {filtered.length === 0 ? (
@@ -322,13 +328,10 @@ export function ProjectsPage() {
         </form>
       </Modal>
       {embedded && rows.some((p) => p.status === 'active' && p.billing_type === 'hourly') && (
-        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
-          Projet horaire actif ?{' '}
-          <Link to="/billing/time" className="text-yuzu-dark font-medium hover:underline">
-            Enregistrer du temps →
-          </Link>
-        </p>
+        <WorkflowFooter to="/billing/time" label="Enregistrer du temps">
+          Projet horaire actif ?
+        </WorkflowFooter>
       )}
-    </div>
+    </PageShell>
   )
 }

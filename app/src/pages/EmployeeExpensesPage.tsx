@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, ExpenseCategory, OrganizationSettings } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch } from '../lib/filters'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { computePurchaseTaxes } from '../lib/taxes'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
@@ -13,7 +13,9 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'other']
 
@@ -167,28 +169,30 @@ export function EmployeeExpensesPage() {
   const total = filtered.reduce((s, e) => s + Number(e.total), 0)
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Frais à rembourser</h1>
-          <p className="text-sm text-muted mt-1">
-            Dépenses payées personnellement — à inclure lors d&apos;une{' '}
-            <Link to="/compensation/employees" className="text-yuzu-dark hover:underline font-medium">
+    <PageShell>
+      <PageHeader
+        backTo={{ to: '/other', label: 'Autre' }}
+        title="Frais à rembourser"
+        subtitle={
+          <>
+            Dépenses payées personnellement — incluses lors d&apos;une{' '}
+            <Link to="/compensation/payroll" className="text-yuzu-dark hover:underline font-medium">
               paie
             </Link>
             .
             {unreimbursedTotal > 0 && (
               <> En attente : <strong>{formatCad(unreimbursedTotal)}</strong></>
             )}
-          </p>
-          <p className="text-xs text-muted mt-1">
+            {' · '}
             Total{hasFilters ? ' (filtré)' : ''} : {formatCad(total)}
-          </p>
-        </div>
-        <Button onClick={openNew} disabled={activeEmployees.length === 0}>
-          Nouveau frais
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={openNew} disabled={activeEmployees.length === 0}>
+            Nouveau frais
+          </Button>
+        }
+      />
 
       {activeEmployees.length === 0 ? (
         <EmptyState message="Ajoutez un employé actif (page Paie) avant d'enregistrer des frais." />
@@ -202,6 +206,23 @@ export function EmployeeExpensesPage() {
             searchPlaceholder="Fournisseur, description…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(
+              !!search,
+              statusFilter !== 'all',
+              !!employeeFilter,
+              !!categoryFilter,
+              !!dateFrom,
+              !!dateTo
+            )}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setStatusFilter('all')
+              setEmployeeFilter('')
+              setCategoryFilter('')
+              setDateFrom('')
+              setDateTo('')
+            }}
           >
             <FilterChips
               value={statusFilter}
@@ -231,17 +252,6 @@ export function EmployeeExpensesPage() {
               ]}
             />
             <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setStatusFilter('all')
-                setEmployeeFilter('')
-                setCategoryFilter('')
-                setDateFrom('')
-                setDateTo('')
-              }}
-            />
           </ListToolbar>
 
           {filtered.length === 0 ? (
@@ -421,6 +431,6 @@ export function EmployeeExpensesPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

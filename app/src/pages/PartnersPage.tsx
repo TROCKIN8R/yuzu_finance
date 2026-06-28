@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Partner, PartnerKind } from '../lib/types'
-import { matchesSearch } from '../lib/filters'
+import { matchesSearch, countActiveFilters } from '../lib/filters'
 import { PARTNER_KIND_LABELS } from '../lib/partners'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -9,7 +9,9 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const empty: Partial<Partner> = {
   legal_name: '',
@@ -109,14 +111,12 @@ export function PartnersPage() {
   }
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold">Partenaires</h1>
-          <p className="text-sm text-muted mt-1">Clients, fournisseurs, ou les deux — une fiche par organisation.</p>
-        </div>
-        <Button onClick={openNew}>Nouveau partenaire</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Partenaires"
+        subtitle="Clients, fournisseurs, ou les deux — une fiche par organisation."
+        actions={<Button onClick={openNew}>Nouveau partenaire</Button>}
+      />
       {rows.length === 0 ? (
         <EmptyState message="Aucun partenaire — ajoutez votre premier contact commercial." />
       ) : (
@@ -127,19 +127,18 @@ export function PartnersPage() {
             searchPlaceholder="Nom, contact, courriel, ville…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!kindFilter)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setKindFilter('')
+            }}
           >
             <FilterSelect
               label="Rôle"
               value={kindFilter}
               onChange={(v) => setKindFilter(v as PartnerKind | '')}
               options={KIND_OPTIONS}
-            />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setKindFilter('')
-              }}
             />
           </ListToolbar>
           {filtered.length === 0 ? (
@@ -269,6 +268,6 @@ export function PartnersPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

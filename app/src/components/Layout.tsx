@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
@@ -18,18 +18,33 @@ const primaryNav: { section: string; links: NavItem[] }[] = [
     links: [
       { to: '/bank', label: 'Banque' },
       { to: '/compensation/payroll', label: 'Rémunération' },
-      { to: '/taxes', label: 'Fiscalité' },
+      { to: '/other', label: 'Autre' },
     ],
   },
 ]
 
-const moreNav: NavItem[] = [
-  { to: '/employee-expenses', label: 'Frais à rembourser' },
-  { to: '/ledger', label: 'Grand livre' },
-  { to: '/adjustments', label: 'Ajustements' },
+const otherModulePaths = [
+  '/other',
+  '/sales-tax',
+  '/corporate-tax',
+  '/employee-expenses',
+  '/ledger',
+  '/adjustments',
 ]
 
-const morePaths = new Set(moreNav.map((l) => l.to))
+const mobilePageTitles: { match: (path: string) => boolean; title: string }[] = [
+  { match: (p) => p === '/', title: 'Tableau de bord' },
+  { match: (p) => p.startsWith('/billing'), title: 'Prestation → Encaissement' },
+  { match: (p) => p.startsWith('/compensation'), title: 'Rémunération' },
+  { match: (p) => p === '/bank', title: 'Banque' },
+  { match: (p) => p === '/partners', title: 'Partenaires' },
+  { match: (p) => otherModulePaths.some((m) => p === m || p.startsWith(`${m}/`)), title: 'Autre' },
+  { match: (p) => p === '/settings', title: 'Paramètres' },
+]
+
+function mobileTitle(pathname: string) {
+  return mobilePageTitles.find((t) => t.match(pathname))?.title ?? 'Yuzu Finance'
+}
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
@@ -39,21 +54,6 @@ function MenuIcon({ open }: { open: boolean }) {
       ) : (
         <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
       )}
-    </svg>
-  )
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-      aria-hidden
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   )
 }
@@ -68,19 +68,11 @@ export function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const onMoreRoute = useMemo(
-    () => morePaths.has(location.pathname) || location.pathname.startsWith('/sales-tax') || location.pathname.startsWith('/corporate-tax'),
-    [location.pathname]
-  )
-  const [moreOpen, setMoreOpen] = useState(onMoreRoute)
+  const pageTitle = mobileTitle(location.pathname)
 
   useEffect(() => {
     setMenuOpen(false)
   }, [location.pathname])
-
-  useEffect(() => {
-    if (onMoreRoute) setMoreOpen(true)
-  }, [onMoreRoute])
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? 'hidden' : ''
@@ -106,9 +98,8 @@ export function Layout() {
         >
           <MenuIcon open={menuOpen} />
         </button>
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-yuzu flex items-center justify-center text-sm font-bold shrink-0">Y</div>
-          <span className="font-semibold text-sm truncate">Yuzu Finance</span>
+        <div className="flex flex-col items-center min-w-0 flex-1 px-1">
+          <span className="font-semibold text-sm truncate w-full text-center">{pageTitle}</span>
         </div>
         <div className="w-[44px]" aria-hidden />
       </header>
@@ -164,11 +155,11 @@ export function Layout() {
               <div className="px-3 text-[10px] uppercase tracking-wider text-muted mb-1">{group.section}</div>
               <div className="space-y-0.5">
                 {group.links.map((l) => {
-                  const fiscalActive =
-                    l.to === '/taxes' &&
-                    (location.pathname === '/taxes' ||
-                      location.pathname.startsWith('/sales-tax') ||
-                      location.pathname.startsWith('/corporate-tax'))
+                  const otherActive =
+                    l.to === '/other' &&
+                    otherModulePaths.some(
+                      (p) => location.pathname === p || location.pathname.startsWith(`${p}/`)
+                    )
                   const billingActive = location.pathname.startsWith('/billing')
                   if (l.to === '/billing/projects') {
                     return (
@@ -197,14 +188,14 @@ export function Layout() {
                       </NavLink>
                     )
                   }
-                  if (l.to === '/taxes') {
+                  if (l.to === '/other') {
                     return (
                       <NavLink
                         key={l.to}
                         to={l.to}
                         end={l.end}
                         onClick={() => setMenuOpen(false)}
-                        className={navLinkClass(fiscalActive)}
+                        className={navLinkClass(otherActive)}
                       >
                         {l.label}
                       </NavLink>
@@ -225,33 +216,6 @@ export function Layout() {
               </div>
             </div>
           ))}
-
-          <div>
-            <button
-              type="button"
-              onClick={() => setMoreOpen((o) => !o)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[10px] uppercase tracking-wider text-muted hover:bg-stone-50 hover:text-ink min-h-[44px] md:min-h-0"
-              aria-expanded={moreOpen}
-            >
-              <span>Plus</span>
-              <Chevron open={moreOpen} />
-            </button>
-            {moreOpen && (
-              <div className="space-y-0.5 mt-0.5">
-                {moreNav.map((l) => (
-                  <NavLink
-                    key={l.to}
-                    to={l.to}
-                    end={l.end}
-                    onClick={() => setMenuOpen(false)}
-                    className={({ isActive }) => navLinkClass(isActive)}
-                  >
-                    {l.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
         </nav>
         <div className="p-3 border-t border-border safe-bottom shrink-0 space-y-1">
           <NavLink
@@ -267,7 +231,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden min-w-0 w-full">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden min-w-0 w-full max-w-[90rem] mx-auto">
         <Outlet />
       </main>
     </div>

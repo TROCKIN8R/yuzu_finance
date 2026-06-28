@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCad, formatDate } from '../lib/format'
-import { inDateRange } from '../lib/filters'
+import { countActiveFilters, inDateRange } from '../lib/filters'
 import {
   buildGeneralLedger,
   buildTrialBalance,
@@ -13,7 +13,9 @@ import {
 import { exportJournalCsv, exportTrialBalanceCsv } from '../lib/exportCsv'
 import { DataTable } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
-import { DateRangeFilter } from '../components/ListToolbar'
+import { DateRangeFilter, FilterSelect, ListToolbar, ViewToggle } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 
 export function GeneralLedgerPage() {
@@ -74,67 +76,66 @@ export function GeneralLedgerPage() {
   const trial = useMemo(() => buildTrialBalance(filteredEntries), [filteredEntries])
   const totals = useMemo(() => journalTotals(filteredEntries), [filteredEntries])
 
+  const hasFilters = !!(dateFrom || dateTo || accountFilter)
+
   if (loading) return <div className="text-muted">Chargement…</div>
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold">Grand livre</h1>
-        <p className="text-sm text-muted mt-1">
-          Écritures en partie double générées depuis factures, paiements, dépenses, paie, dividendes et taxes.
-          Brouillon de gestion — valider avec votre CPA.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setView('journal')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] ${view === 'journal' ? 'bg-yuzu-light text-ink' : 'bg-white border border-border text-muted'}`}
-        >
-          Journal général
-        </button>
-        <button
-          type="button"
-          onClick={() => setView('trial')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[44px] ${view === 'trial' ? 'bg-yuzu-light text-ink' : 'bg-white border border-border text-muted'}`}
-        >
-          Balance de vérification
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3 mb-4">
-        <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-        <label className="text-xs text-muted flex flex-col gap-1">
-          Compte
-          <select
-            className="border border-border rounded-lg px-2 py-2 text-sm bg-white min-h-[44px]"
-            value={accountFilter}
-            onChange={(e) => setAccountFilter(e.target.value)}
+    <PageShell>
+      <PageHeader
+        backTo={{ to: '/other', label: 'Autre' }}
+        title="Grand livre"
+        subtitle="Écritures en partie double — brouillon de gestion, valider avec votre CPA."
+        actions={
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() =>
+              view === 'journal'
+                ? exportJournalCsv(filteredEntries)
+                : exportTrialBalanceCsv(trial)
+            }
           >
-            <option value="">Tous</option>
-            {CHART_OF_ACCOUNTS.map((a) => (
-              <option key={a.code} value={a.code}>
-                {a.code} — {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="text-xs text-muted pb-2">
-          {filteredEntries.length} écriture{filteredEntries.length !== 1 ? 's' : ''} sur {entries.length}
-        </p>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() =>
-            view === 'journal'
-              ? exportJournalCsv(filteredEntries)
-              : exportTrialBalanceCsv(trial)
-          }
-        >
-          Exporter CSV
-        </Button>
-      </div>
+            Exporter CSV
+          </Button>
+        }
+      />
+
+      <ViewToggle
+        value={view}
+        onChange={setView}
+        label="Affichage"
+        options={[
+          { value: 'journal', label: 'Journal général' },
+          { value: 'trial', label: 'Balance de vérification' },
+        ]}
+      />
+
+      <ListToolbar
+        hideSearch
+        search=""
+        onSearchChange={() => {}}
+        resultCount={filteredEntries.length}
+        totalCount={entries.length}
+        activeFilterCount={countActiveFilters(!!dateFrom, !!dateTo, !!accountFilter)}
+        clearVisible={hasFilters}
+        onClearFilters={() => {
+          setDateFrom('')
+          setDateTo('')
+          setAccountFilter('')
+        }}
+      >
+        <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+        <FilterSelect
+          label="Compte"
+          value={accountFilter}
+          onChange={setAccountFilter}
+          options={[
+            { value: '', label: 'Tous' },
+            ...CHART_OF_ACCOUNTS.map((a) => ({ value: a.code, label: `${a.code} — ${a.name}` })),
+          ]}
+        />
+      </ListToolbar>
 
       {view === 'journal' ? (
         filteredEntries.length === 0 ? (
@@ -212,6 +213,6 @@ export function GeneralLedgerPage() {
           ))}
         </div>
       </section>
-    </div>
+    </PageShell>
   )
 }

@@ -3,7 +3,7 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch } from '../lib/filters'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
 import {
   calculatePayrollDeductions,
@@ -28,8 +28,12 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
-import { SectionHeader } from '../components/PageHeader'
+import { DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { StepPanelHeader } from '../components/WorkflowNav'
+import { WorkflowFooter } from '../components/WorkflowFooter'
+import { PageShell } from '../components/PageShell'
+import { AlertBanner } from '../components/AlertBanner'
 
 type CompensationOutletContext = { refreshMetrics?: () => void }
 
@@ -338,32 +342,33 @@ export function PayrollPage() {
   const previewSalaryNet = form ? calcNet(form) : 0
   const previewNetPay = netPayWithReimbursement(previewSalaryNet, reimbPreview.nonTaxable)
 
+  const payrollActions = (
+    <div className="flex flex-wrap gap-2">
+      <Link to="/employee-expenses">
+        <Button variant="secondary">Frais à rembourser</Button>
+      </Link>
+      <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
+        Nouvelle paie
+      </Button>
+    </div>
+  )
+
   return (
-    <div className={embedded ? undefined : 'space-y-10'}>
+    <PageShell className={embedded ? undefined : 'space-y-10'}>
       <section>
         {embedded ? (
-          <SectionHeader
-            title="Étape 1 — Salaire"
-            actions={
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  to="/employee-expenses"
-                  className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
-                >
-                  Frais à rembourser
-                </Link>
-                <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
-                  Nouvelle paie
-                </Button>
-              </div>
-            }
-            className="mb-4"
+          <StepPanelHeader
+            step={1}
+            totalSteps={2}
+            title="Salaire"
+            hint="Paies, retenues et remises source."
+            actions={payrollActions}
           />
         ) : (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-semibold">Paie</h1>
-              <p className="text-sm text-muted mt-1">
+          <PageHeader
+            title="Paie"
+            subtitle={
+              <>
                 Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
                 {' · '}
                 Retenues employé : {formatCad(ytdEmployeeDeductions)}
@@ -371,29 +376,19 @@ export function PayrollPage() {
                 Charges employeur : {formatCad(ytdEmployerContributions)}
                 {' · '}
                 Coût total : {formatCad(ytdCost)}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to="/employee-expenses"
-                className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 sm:min-h-[36px] sm:px-3 sm:py-2 rounded-lg text-sm transition-colors bg-white border border-border text-ink hover:bg-stone-50"
-              >
-                Frais à rembourser
-              </Link>
-              <Button onClick={() => openNewPayroll()} disabled={activeEmployees.length === 0}>
-                Nouvelle paie
-              </Button>
-            </div>
-          </div>
+              </>
+            }
+            actions={payrollActions}
+          />
         )}
         {activeEmployees.length === 0 && (
-          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 mb-4">
+          <AlertBanner>
             Aucun employé actif —{' '}
             <Link to="/compensation/employees" className="font-medium underline">
               ajoutez un employé
             </Link>{' '}
             avant de créer une paie.
-          </p>
+          </AlertBanner>
         )}
         {embedded && (
           <p className="text-sm text-muted mb-4">
@@ -410,6 +405,14 @@ export function PayrollPage() {
               searchPlaceholder="Employé, période, montants…"
               resultCount={filtered.length}
               totalCount={rows.length}
+              activeFilterCount={countActiveFilters(!!search, !!employeeFilter, !!dateFrom, !!dateTo)}
+              clearVisible={hasFilters}
+              onClearFilters={() => {
+                setSearch('')
+                setEmployeeFilter('')
+                setDateFrom('')
+                setDateTo('')
+              }}
             >
               <FilterSelect
                 label="Employé"
@@ -421,15 +424,6 @@ export function PayrollPage() {
                 ]}
               />
               <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-              <ClearFiltersButton
-                visible={hasFilters}
-                onClick={() => {
-                  setSearch('')
-                  setEmployeeFilter('')
-                  setDateFrom('')
-                  setDateTo('')
-                }}
-              />
             </ListToolbar>
             {filtered.length === 0 ? (
               <EmptyState message="Aucune paie ne correspond aux filtres." />
@@ -494,12 +488,9 @@ export function PayrollPage() {
       </section>
 
       {embedded && rows.length > 0 && (
-        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
-          Distribution aux actionnaires ?{' '}
-          <Link to="/compensation/dividends" className="text-yuzu-dark font-medium hover:underline">
-            Enregistrer un dividende →
-          </Link>
-        </p>
+        <WorkflowFooter to="/compensation/dividends" label="Enregistrer un dividende">
+          Distribution aux actionnaires ?
+        </WorkflowFooter>
       )}
 
       <Modal title={payEditingId ? 'Modifier paie' : 'Nouvelle paie'} open={payOpen} onClose={() => setPayOpen(false)} wide>
@@ -678,6 +669,6 @@ export function PayrollPage() {
           </form>
         )}
       </Modal>
-    </div>
+    </PageShell>
   )
 }

@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { CorporateTaxRecord, CorpTaxStatus } from '../lib/types'
 import { formatCad, formatDate } from '../lib/format'
-import { matchesSearch } from '../lib/filters'
+import { matchesSearch, countActiveFilters } from '../lib/filters'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const empty = {
   fiscal_year: '2025-2026',
@@ -100,19 +101,13 @@ export function CorporateTaxPage() {
   const due = filtered.filter((r) => r.status !== 'paid').reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <Link to="/taxes" className="text-sm text-yuzu-dark hover:underline">
-            ← Fiscalité
-          </Link>
-          <h1 className="text-2xl font-semibold mt-1">Impôts société</h1>
-          <p className="text-sm text-muted mt-1">
-            Solde dû{hasFilters ? ' (filtré)' : ''} : {formatCad(due)}
-          </p>
-        </div>
-        <Button onClick={openNew}>Nouveau</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        backTo={{ to: '/other', label: 'Autre' }}
+        title="Impôts société"
+        subtitle={`Solde dû${hasFilters ? ' (filtré)' : ''} : ${formatCad(due)}`}
+        actions={<Button onClick={openNew}>Nouveau</Button>}
+      />
       {rows.length === 0 ? (
         <EmptyState message="Aucun impôt société enregistré (T2, CO-17, acomptes)." />
       ) : (
@@ -123,6 +118,13 @@ export function CorporateTaxPage() {
             searchPlaceholder="Description, autorité…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!statusFilter, !!fiscalYearFilter)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setStatusFilter('')
+              setFiscalYearFilter('')
+            }}
           >
             <FilterSelect
               label="Année fiscale"
@@ -136,18 +138,10 @@ export function CorporateTaxPage() {
               onChange={setStatusFilter}
               options={[
                 { value: '', label: 'Tous' },
-                { value: 'estimated', label: 'estimated' },
-                { value: 'due', label: 'due' },
-                { value: 'paid', label: 'paid' },
+                { value: 'estimated', label: 'Estimé' },
+                { value: 'due', label: 'À payer' },
+                { value: 'paid', label: 'Payé' },
               ]}
-            />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setStatusFilter('')
-                setFiscalYearFilter('')
-              }}
             />
           </ListToolbar>
           {filtered.length === 0 ? (
@@ -209,6 +203,6 @@ export function CorporateTaxPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

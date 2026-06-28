@@ -10,3 +10,7 @@ export function inDateRange(date: string, from: string, to: string): boolean {
   if (to && date > to) return false
   return true
 }
+
+export function countActiveFilters(...flags: boolean[]): number {
+  return flags.filter(Boolean).length
+}

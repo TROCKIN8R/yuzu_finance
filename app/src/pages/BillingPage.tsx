@@ -3,6 +3,8 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad, relationOne } from '../lib/format'
 import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
+import { MetricCard, MetricGrid } from '../components/MetricCard'
 import { BillingWorkflowNav, type BillingStep } from '../components/BillingWorkflowNav'
 
 function stepFromPath(pathname: string): BillingStep | undefined {
@@ -49,40 +51,29 @@ export function BillingPage() {
   }
 
   return (
-    <div className="max-w-6xl">
+    <PageShell width="wide">
       <PageHeader
         title="Prestation à encaissement"
         subtitle={
           <>
-            Cycle de facturation pour mandats horaires et forfaitaires — pas de devis ni bon de commande.{' '}
+            Cycle de facturation —{' '}
             <Link to="/partners" className="text-yuzu-dark hover:underline">
-              Partenaires clients
+              partenaires clients
             </Link>{' '}
             requis en amont.
           </>
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Heures non facturées</div>
-          <div className="text-lg font-semibold mt-0.5">{metrics.unbilledHours} h</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Temps à facturer</div>
-          <div className="text-lg font-semibold mt-0.5">{formatCad(metrics.unbilledAmount)}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Factures brouillon</div>
-          <div className="text-lg font-semibold mt-0.5">{metrics.draftInvoices}</div>
-        </div>
-      </div>
+      <MetricGrid>
+        <MetricCard label="Heures non facturées" value={`${metrics.unbilledHours} h`} />
+        <MetricCard label="Temps à facturer" value={formatCad(metrics.unbilledAmount)} />
+        <MetricCard label="Factures brouillon" value={metrics.draftInvoices} />
+      </MetricGrid>
 
       <BillingWorkflowNav current={current} />
 
-      <div className="mt-6">
-        <Outlet context={{ refreshMetrics: loadMetrics }} />
-      </div>
-    </div>
+      <Outlet context={{ refreshMetrics: loadMetrics }} />
+    </PageShell>
   )
 }

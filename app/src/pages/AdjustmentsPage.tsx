@@ -8,6 +8,8 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const types: { value: AdjustmentType; label: string }[] = [
   { value: 'prepaid', label: 'Charge payée d\'avance' },
@@ -80,14 +82,13 @@ export function AdjustmentsPage() {
   ))
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Ajustements comptables</h1>
-          <p className="text-sm text-muted mt-1">Prépaiements, charges à payer, amortissements et écritures manuelles.</p>
-        </div>
-        <Button onClick={() => setOpen(true)}>Nouvel ajustement</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        backTo={{ to: '/other', label: 'Autre' }}
+        title="Ajustements comptables"
+        subtitle="Prépaiements, charges à payer, amortissements et écritures manuelles."
+        actions={<Button onClick={() => setOpen(true)}>Nouvel ajustement</Button>}
+      />
 
       {rows.length === 0 ? (
         <EmptyState message="Aucun ajustement — ajoutez des écritures de fin de période." />
@@ -106,23 +107,22 @@ export function AdjustmentsPage() {
           </thead>
           <tbody className="divide-y divide-border text-sm">
             {rows.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className="hover:bg-stone-50/50">
                 <td className="px-4 py-3">{formatDate(r.start_date)}</td>
-                <td className="px-4 py-3">{r.end_date ? formatDate(r.end_date) : '—'}</td>
+                <td className="px-4 py-3 text-muted">{r.end_date ? formatDate(r.end_date) : '—'}</td>
                 <td className="px-4 py-3">{types.find((t) => t.value === r.adjustment_type)?.label ?? r.adjustment_type}</td>
                 <td className="px-4 py-3">{r.description}</td>
-                <td className="px-4 py-3 text-right font-medium">
-                  {r.adjustment_type === 'manual'
-                    ? formatCad(r.total_amount ?? 0)
-                    : `${formatCad(r.monthly_amount ?? 0)} / mois`}
-                </td>
-                <td className="px-4 py-3">
-                  <button type="button" className="text-yuzu-dark underline text-xs" onClick={() => toggleActive(r)}>
-                    {r.active ? 'Oui' : 'Non'}
-                  </button>
-                </td>
                 <td className="px-4 py-3 text-right">
-                  <Button variant="danger" className={tableActionClass} onClick={() => remove(r.id)}>Suppr.</Button>
+                  {r.total_amount != null ? formatCad(r.total_amount) : r.monthly_amount != null ? `${formatCad(r.monthly_amount)}/mois` : '—'}
+                </td>
+                <td className="px-4 py-3">{r.active ? 'Oui' : 'Non'}</td>
+                <td className="px-4 py-3 text-right space-x-2">
+                  <Button variant="ghost" className={tableActionClass} onClick={() => toggleActive(r)}>
+                    {r.active ? 'Désactiver' : 'Activer'}
+                  </Button>
+                  <Button variant="danger" className={tableActionClass} onClick={() => remove(r.id)}>
+                    Suppr.
+                  </Button>
                 </td>
               </tr>
             ))}
@@ -130,7 +130,7 @@ export function AdjustmentsPage() {
         </DataTable>
       )}
 
-      <Modal title="Ajustement comptable" open={open} onClose={() => setOpen(false)}>
+      <Modal title="Nouvel ajustement" open={open} onClose={() => setOpen(false)}>
         <form onSubmit={save} className="space-y-3">
           <Field label="Type">
             <select
@@ -138,30 +138,32 @@ export function AdjustmentsPage() {
               value={form.adjustment_type}
               onChange={(e) => setForm({ ...form, adjustment_type: e.target.value as AdjustmentType })}
             >
-              {types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {types.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
             </select>
           </Field>
-          <Field label="Description">
+          <Field label="Description *">
             <input className={inputClass} required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Date début">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Date de début *">
               <input type="date" className={inputClass} required value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
             </Field>
-            <Field label="Date fin">
+            <Field label="Date de fin">
               <input type="date" className={inputClass} value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
             </Field>
           </div>
           {isManual ? (
-            <Field label="Montant unique">
-              <input type="number" step="0.01" min="0.01" className={inputClass} required value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: Number(e.target.value) })} />
+            <Field label="Montant total (CAD)">
+              <input type="number" step="0.01" className={inputClass} value={form.total_amount} onChange={(e) => setForm({ ...form, total_amount: Number(e.target.value) })} />
             </Field>
           ) : (
-            <Field label="Montant mensuel">
-              <input type="number" step="0.01" min="0.01" className={inputClass} required value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: Number(e.target.value) })} />
+            <Field label="Montant mensuel (CAD)">
+              <input type="number" step="0.01" className={inputClass} value={form.monthly_amount} onChange={(e) => setForm({ ...form, monthly_amount: Number(e.target.value) })} />
             </Field>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Compte débit">
               <select className={inputClass} value={form.debit_account} onChange={(e) => setForm({ ...form, debit_account: e.target.value })}>{accountOptions}</select>
             </Field>
@@ -169,9 +171,6 @@ export function AdjustmentsPage() {
               <select className={inputClass} value={form.credit_account} onChange={(e) => setForm({ ...form, credit_account: e.target.value })}>{accountOptions}</select>
             </Field>
           </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Actif
-          </label>
           <Field label="Notes">
             <textarea className={inputClass} rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </Field>
@@ -181,6 +180,6 @@ export function AdjustmentsPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

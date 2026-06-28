@@ -41,7 +41,11 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
+import { MetricCard, MetricGrid } from '../components/MetricCard'
+import { AlertBanner } from '../components/AlertBanner'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
 
@@ -522,56 +526,42 @@ export function BankPage() {
   const vendors = providerPartners(partners)
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Banque</h1>
-          <p className="text-sm text-muted mt-1">
-            Importez vos relevés Wealthsimple, puis affectez chaque ligne (facture, dépense, paie, dividende, taxes).
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void handleCsvUpload(f)
-              e.target.value = ''
-            }}
-          />
-          <Button type="button" onClick={() => fileRef.current?.click()}>
-            Importer CSV
-          </Button>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Banque"
+        subtitle="Importez vos relevés Wealthsimple, puis affectez chaque ligne (facture, dépense, paie, dividende, taxes)."
+        actions={
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void handleCsvUpload(f)
+                e.target.value = ''
+              }}
+            />
+            <Button type="button" onClick={() => fileRef.current?.click()}>
+              Importer CSV
+            </Button>
+          </>
+        }
+      />
 
-      {importMsg && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {importMsg}
-        </div>
-      )}
+      {importMsg && <AlertBanner variant="success">{importMsg}</AlertBanner>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-border rounded-xl p-4">
-          <div className="text-xs text-muted">Solde relevé (importé)</div>
-          <div className="text-xl font-semibold">{formatCad(bankBalance)}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-4">
-          <div className="text-xs text-muted">Trésorerie comptable</div>
-          <div className="text-xl font-semibold">{formatCad(bookCash)}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-4">
-          <div className="text-xs text-muted">Écart</div>
-          <div className={`text-xl font-semibold ${Math.abs(variance) > 1 ? 'text-amber-700' : ''}`}>{formatCad(variance)}</div>
-        </div>
-        <div className="bg-white border border-border rounded-xl p-4">
-          <div className="text-xs text-muted">Non affectées</div>
-          <div className="text-xl font-semibold">{unassignedCount}</div>
-        </div>
-      </div>
+      <MetricGrid cols={4}>
+        <MetricCard label="Solde relevé (importé)" value={formatCad(bankBalance)} />
+        <MetricCard label="Trésorerie comptable" value={formatCad(bookCash)} />
+        <MetricCard
+          label="Écart"
+          value={formatCad(variance)}
+          hint={Math.abs(variance) > 1 ? 'Vérifier les affectations' : undefined}
+        />
+        <MetricCard label="Non affectées" value={unassignedCount} />
+      </MetricGrid>
 
       {rows.length === 0 ? (
         <EmptyState message="Importez un CSV Wealthsimple (compte chèques ou carte de crédit) pour commencer." />
@@ -583,6 +573,12 @@ export function BankPage() {
             searchPlaceholder="Description, code, montant…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={(assignmentFilter !== 'unassigned' ? 1 : 0) + (search ? 1 : 0)}
+            clearVisible={assignmentFilter !== 'unassigned' || !!search}
+            onClearFilters={() => {
+              setAssignmentFilter('unassigned')
+              setSearch('')
+            }}
           >
             <FilterSelect
               label="Affectation"
@@ -599,13 +595,6 @@ export function BankPage() {
                 { value: 'corporate_tax', label: 'Impôts société' },
                 { value: 'ignored', label: 'Ignorées' },
               ]}
-            />
-            <ClearFiltersButton
-              visible={assignmentFilter !== 'unassigned' || !!search}
-              onClick={() => {
-                setAssignmentFilter('unassigned')
-                setSearch('')
-              }}
             />
           </ListToolbar>
 
@@ -952,7 +941,7 @@ export function BankPage() {
           ) : assignKind === 'sales_tax' ? (
             <>
               {salesTaxPeriods.length === 0 ? (
-                <p className="text-sm text-amber-800">Aucune période TPS/TVQ — créez-en une dans Fiscalité.</p>
+                <p className="text-sm text-amber-800">Aucune période TPS/TVQ — créez-en une dans Autre.</p>
               ) : (
                 <>
                   <Field label="Période *">
@@ -989,7 +978,7 @@ export function BankPage() {
           ) : (
             <>
               {corpTaxRecords.length === 0 ? (
-                <p className="text-sm text-amber-800">Aucun impôt société — enregistrez T2/CO-17 dans Fiscalité.</p>
+                <p className="text-sm text-amber-800">Aucun impôt société — enregistrez T2/CO-17 dans Autre.</p>
               ) : (
                 <>
                   <Field label="Enregistrement *">
@@ -1063,6 +1052,6 @@ export function BankPage() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageShell>
   )
 }

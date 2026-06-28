@@ -1,66 +1,24 @@
-import { NavLink } from 'react-router-dom'
+import { WorkflowNav, type WorkflowStepDef, type WorkflowTerminalStep } from './WorkflowNav'
 
 export type BillingStep = 'projects' | 'time' | 'invoices'
 
-const steps: { to: string; step: BillingStep; label: string; hint: string }[] = [
-  { to: '/billing/projects', step: 'projects', label: 'Projets', hint: 'Mandats et tarifs' },
-  { to: '/billing/time', step: 'time', label: 'Temps', hint: 'Heures facturables' },
-  { to: '/billing/invoices', step: 'invoices', label: 'Factures', hint: 'Émission et suivi' },
+const steps: WorkflowStepDef[] = [
+  { id: 'projects', to: '/billing/projects', label: 'Projets', hint: 'Mandats et tarifs' },
+  { id: 'time', to: '/billing/time', label: 'Temps', hint: 'Heures facturables' },
+  { id: 'invoices', to: '/billing/invoices', label: 'Factures', hint: 'Émission et suivi' },
 ]
 
-function stepClass(isActive: boolean) {
-  return `flex-1 min-w-[7.5rem] rounded-lg border px-3 py-2.5 text-left transition-colors ${
-    isActive
-      ? 'border-yuzu bg-yuzu-light/60 shadow-sm'
-      : 'border-border bg-white hover:border-yuzu/40 hover:bg-stone-50'
-  }`
-}
+const terminal: WorkflowTerminalStep[] = [
+  { to: '/bank', label: 'Encaissement', hint: 'Banque', stepNumber: 4, dashed: true },
+]
 
 export function BillingWorkflowNav({ current }: { current?: BillingStep }) {
   return (
-    <nav aria-label="Étapes de facturation" className="space-y-3">
-      <ol className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
-        {steps.map((s, i) => (
-          <li key={s.to} className="flex items-stretch gap-2 shrink-0 snap-start">
-            <NavLink to={s.to} className={({ isActive }) => stepClass(isActive || current === s.step)}>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                    current === s.step ? 'bg-yuzu text-ink' : 'bg-stone-100 text-muted'
-                  }`}
-                >
-                  {i + 1}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium leading-tight">{s.label}</div>
-                  <div className="text-[11px] text-muted leading-tight mt-0.5 hidden sm:block">{s.hint}</div>
-                </div>
-              </div>
-            </NavLink>
-            {i < steps.length - 1 && (
-              <span className="hidden sm:flex items-center text-muted/40 px-0.5" aria-hidden>
-                →
-              </span>
-            )}
-          </li>
-        ))}
-        <li className="flex items-stretch shrink-0 snap-start">
-          <NavLink
-            to="/bank"
-            className="rounded-lg border border-dashed border-border px-3 py-2.5 text-left hover:border-yuzu/40 hover:bg-stone-50 transition-colors min-w-[7.5rem]"
-          >
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-100 text-muted text-xs font-semibold">
-                4
-              </span>
-              <div>
-                <div className="text-sm font-medium leading-tight">Encaissement</div>
-                <div className="text-[11px] text-muted leading-tight mt-0.5 hidden sm:block">Banque</div>
-              </div>
-            </div>
-          </NavLink>
-        </li>
-      </ol>
-    </nav>
+    <WorkflowNav
+      ariaLabel="Étapes de facturation"
+      steps={steps}
+      currentId={current}
+      terminalSteps={terminal}
+    />
   )
 }

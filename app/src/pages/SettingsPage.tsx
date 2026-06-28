@@ -4,6 +4,8 @@ import type { OrganizationSettings } from '../lib/types'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
+import { PageHeader } from '../components/PageHeader'
+import { PageShell } from '../components/PageShell'
 
 const defaults: Omit<OrganizationSettings, 'user_id'> = {
   company_legal_name: '',
@@ -98,12 +100,9 @@ export function SettingsPage() {
   if (!userId) return <EmptyState message="Connectez-vous pour gérer les paramètres." />
 
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Paramètres</h1>
-        <p className="text-sm text-muted mt-1">Entreprise, taxes, exercice fiscal et avoir.</p>
-      </div>
-      <form onSubmit={save} className="space-y-6 bg-white border border-border rounded-xl p-5">
+    <PageShell width="narrow">
+      <PageHeader title="Paramètres" subtitle="Entreprise, taxes, exercice fiscal et avoir." />
+      <form onSubmit={save} className="space-y-6 ui-card p-5">
         <section className="space-y-3">
           <h2 className="font-medium">Entreprise</h2>
           <Field label="Raison sociale *">
@@ -168,6 +167,6 @@ export function SettingsPage() {
           {saved && <span className="text-sm text-emerald-600">Enregistré.</span>}
         </div>
       </form>
-    </div>
+    </PageShell>
   )
 }

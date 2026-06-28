@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
 import { customerPartners } from '../lib/partners'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch } from '../lib/filters'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import {
   buildLegacyLinesFromTimeEntries,
   buildLineFromFixedProject,
@@ -20,8 +20,11 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { ClearFiltersButton, DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
-import { SectionHeader } from '../components/PageHeader'
+import { DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { PageHeader } from '../components/PageHeader'
+import { StepPanelHeader } from '../components/WorkflowNav'
+import { WorkflowFooter } from '../components/WorkflowFooter'
+import { PageShell } from '../components/PageShell'
 
 type BillingOutletContext = { refreshMetrics?: () => void }
 
@@ -320,24 +323,28 @@ export function InvoicesPage() {
   const showTaxesOnInvoice = includeSalesTax && taxesEnabledInSettings
 
   return (
-    <div>
+    <PageShell>
       {embedded ? (
-        <SectionHeader
-          title="Étape 3 — Factures"
+        <StepPanelHeader
+          step={3}
+          totalSteps={4}
+          title="Factures"
+          hint="Créer et suivre les factures client."
           actions={
             <Button onClick={openCreate} disabled={billablePartners.length === 0}>
               Créer une facture
             </Button>
           }
-          className="mb-6"
         />
       ) : (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <h1 className="text-2xl font-semibold">Factures</h1>
-          <Button onClick={openCreate} disabled={billablePartners.length === 0}>
-            Créer une facture
-          </Button>
-        </div>
+        <PageHeader
+          title="Factures"
+          actions={
+            <Button onClick={openCreate} disabled={billablePartners.length === 0}>
+              Créer une facture
+            </Button>
+          }
+        />
       )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune facture — créez-en une à partir du temps ou d'un projet forfaitaire." />
@@ -349,6 +356,15 @@ export function InvoicesPage() {
             searchPlaceholder="N° facture, partenaire, montant…"
             resultCount={filtered.length}
             totalCount={rows.length}
+            activeFilterCount={countActiveFilters(!!search, !!partnerFilter, !!statusFilter, !!dateFrom, !!dateTo)}
+            clearVisible={hasFilters}
+            onClearFilters={() => {
+              setSearch('')
+              setPartnerFilter('')
+              setStatusFilter('')
+              setDateFrom('')
+              setDateTo('')
+            }}
           >
             <FilterSelect
               label="Partenaire"
@@ -362,24 +378,14 @@ export function InvoicesPage() {
               onChange={setStatusFilter}
               options={[
                 { value: '', label: 'Tous' },
-                { value: 'draft', label: 'draft' },
-                { value: 'sent', label: 'sent' },
-                { value: 'paid', label: 'paid' },
-                { value: 'partial', label: 'partial' },
-                { value: 'void', label: 'void' },
+                { value: 'draft', label: 'Brouillon' },
+                { value: 'sent', label: 'Envoyée' },
+                { value: 'paid', label: 'Payée' },
+                { value: 'partial', label: 'Partielle' },
+                { value: 'void', label: 'Annulée' },
               ]}
             />
             <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-            <ClearFiltersButton
-              visible={hasFilters}
-              onClick={() => {
-                setSearch('')
-                setPartnerFilter('')
-                setStatusFilter('')
-                setDateFrom('')
-                setDateTo('')
-              }}
-            />
           </ListToolbar>
           {filtered.length === 0 ? (
             <EmptyState message="Aucune facture ne correspond aux filtres." />
@@ -649,13 +655,10 @@ export function InvoicesPage() {
         )}
       </Modal>
       {embedded && (
-        <p className="text-sm text-muted mt-6 pt-4 border-t border-border">
-          Facture envoyée ?{' '}
-          <Link to="/bank" className="text-yuzu-dark font-medium hover:underline">
-            Encaisser le paiement dans Banque →
-          </Link>
-        </p>
+        <WorkflowFooter to="/bank" label="Encaisser le paiement dans Banque">
+          Facture envoyée ?
+        </WorkflowFooter>
       )}
-    </div>
+    </PageShell>
   )
 }
