@@ -6,6 +6,14 @@ function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
+/** Apply per-invoice include flag on top of organization tax registration. */
+export function effectiveTaxSettings(settings: TaxSettings, includeSalesTax: boolean): TaxSettings {
+  if (!includeSalesTax) {
+    return { ...settings, charge_gst: false, charge_qst: false }
+  }
+  return settings
+}
+
 /** Québec: TPS on taxable amount; TVQ on taxable amount + TPS. */
 export function computeSalesTaxes(subtotal: number, settings: TaxSettings) {
   const base = round2(subtotal)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Employee, PayFrequency, PayrollRun } from '../lib/types'
+import type { Employee, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
@@ -41,6 +41,9 @@ type PayrollForm = {
   other_deductions: number
   employer_benefits: number
   notes: string
+  remittance_status: RemittanceStatus
+  remittance_date: string
+  remittance_reference: string
 }
 
 const emptyEmployee = {
@@ -91,6 +94,9 @@ function payrollFormFromEmployee(emp: Employee, paymentDate = todayIso()): Payro
     other_deductions: 0,
     employer_benefits: 0,
     notes: '',
+    remittance_status: 'pending',
+    remittance_date: '',
+    remittance_reference: '',
   }
 }
 
@@ -222,6 +228,9 @@ export function PayrollPage() {
       other_deductions: Number(p.other_deductions),
       employer_benefits: Number(p.employer_benefits),
       notes: p.notes ?? '',
+      remittance_status: p.remittance_status ?? 'pending',
+      remittance_date: p.remittance_date ?? '',
+      remittance_reference: p.remittance_reference ?? '',
     })
     setPayEditingId(p.id)
     setPayOpen(true)
@@ -267,7 +276,13 @@ export function PayrollPage() {
   async function savePayroll(ev: React.FormEvent) {
     ev.preventDefault()
     if (!form || !form.employee_id) return
-    const payload = { ...form, net_pay: calcNet(form), employee_id: form.employee_id }
+    const payload = {
+      ...form,
+      net_pay: calcNet(form),
+      employee_id: form.employee_id,
+      remittance_date: form.remittance_date || null,
+      remittance_reference: form.remittance_reference || null,
+    }
     if (payEditingId) await supabase.from('payroll_runs').update(payload).eq('id', payEditingId)
     else await supabase.from('payroll_runs').insert(payload)
     setPayOpen(false)
@@ -408,6 +423,7 @@ export function PayrollPage() {
                       <th className="px-4 py-3">Charges employeur</th>
                       <th className="px-4 py-3">Coût total</th>
                       <th className="px-4 py-3">Payé le</th>
+                      <th className="px-4 py-3">Remise</th>
                       <th className="px-4 py-3" />
                     </tr>
                   </thead>
@@ -426,6 +442,12 @@ export function PayrollPage() {
                         <td className="px-4 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
                         <td className="px-4 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
                         <td className="px-4 py-3 text-muted">{formatDate(p.payment_date)}</td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            label={p.remittance_status === 'remitted' ? 'remise' : 'en attente'}
+                            tone={p.remittance_status === 'remitted' ? 'active' : 'draft'}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-right space-x-1">
                           <Button variant="ghost" className={tableActionClass} onClick={() => openEditPayroll(p)}>
                             Mod.
@@ -596,6 +618,34 @@ export function PayrollPage() {
                 <span>Coût total employeur</span>
                 <span>{formatCad(form.gross_pay + sumEmployerContributions(form))}</span>
               </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border pt-3">
+              <Field label="Statut remise">
+                <select
+                  className={inputClass}
+                  value={form.remittance_status}
+                  onChange={(e) => setForm({ ...form, remittance_status: e.target.value as RemittanceStatus })}
+                >
+                  <option value="pending">En attente</option>
+                  <option value="remitted">Remise effectuée</option>
+                </select>
+              </Field>
+              <Field label="Date remise">
+                <input
+                  type="date"
+                  className={inputClass}
+                  value={form.remittance_date}
+                  onChange={(e) => setForm({ ...form, remittance_date: e.target.value })}
+                />
+              </Field>
+              <Field label="Référence remise">
+                <input
+                  className={inputClass}
+                  value={form.remittance_reference}
+                  onChange={(e) => setForm({ ...form, remittance_reference: e.target.value })}
+                  placeholder="N° confirmation ARC"
+                />
+              </Field>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setPayOpen(false)}>Annuler</Button>

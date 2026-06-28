@@ -122,6 +122,7 @@ export function ExpensesPage() {
   }
 
   const total = filtered.reduce((s, e) => s + Number(e.total), 0)
+  const payrollExpenseCount = rows.filter((e) => e.category === 'payroll' || e.payroll_run_id).length
 
   return (
     <div>
@@ -134,6 +135,11 @@ export function ExpensesPage() {
         </div>
         <Button onClick={openNew}>Nouvelle dépense</Button>
       </div>
+      {payrollExpenseCount > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {payrollExpenseCount} dépense{payrollExpenseCount > 1 ? 's' : ''} catégorie « paie » détectée — elles sont exclues du P&L et du grand livre pour éviter un double comptage avec les fiches de paie.
+        </div>
+      )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune dépense enregistrée." />
       ) : (
@@ -220,6 +226,11 @@ export function ExpensesPage() {
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
+          {form.category === 'payroll' && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              La catégorie « paie » est réservée aux ajustements — utilisez la page Paie pour enregistrer les salaires afin d&apos;éviter un double comptage.
+            </p>
+          )}
           <Field label="Description"><input className={inputClass} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Field label="Montant HT *">

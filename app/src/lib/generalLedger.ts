@@ -1,41 +1,16 @@
 import { isRevenueInvoice } from './taxes'
+import {
+  CHART_OF_ACCOUNTS,
+  expenseCategoryAccount,
+  EXPENSE_CATEGORY_LABELS,
+  accountName,
+  type AccountType,
+} from './chartOfAccounts'
+import { lastDayOfMonth, monthsInRange } from './fiscalPeriod'
+import type { AccountingAdjustment } from './types'
 
-export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
-
-export interface Account {
-  code: string
-  name: string
-  type: AccountType
-}
-
-export const CHART_OF_ACCOUNTS: Account[] = [
-  { code: '1010', name: 'Banque / Trésorerie', type: 'asset' },
-  { code: '1100', name: 'Comptes clients', type: 'asset' },
-  { code: '1200', name: 'TPS à recevoir (CTI)', type: 'asset' },
-  { code: '1210', name: 'TVQ à recevoir (RTI)', type: 'asset' },
-  { code: '2000', name: 'Comptes fournisseurs', type: 'liability' },
-  { code: '2100', name: 'TPS à remettre', type: 'liability' },
-  { code: '2110', name: 'TVQ à remettre', type: 'liability' },
-  { code: '2200', name: 'Retenues à la source — impôts', type: 'liability' },
-  { code: '2210', name: 'RPC / AE / RQAP à remettre', type: 'liability' },
-  { code: '2300', name: 'Impôts société dus', type: 'liability' },
-  { code: '3000', name: 'Avoir des propriétaires', type: 'equity' },
-  { code: '3100', name: 'Dividendes déclarés', type: 'equity' },
-  { code: '4000', name: 'Revenus de services', type: 'revenue' },
-  { code: '5000', name: 'Dépenses d\'exploitation', type: 'expense' },
-  { code: '5100', name: 'Salaires et traitements', type: 'expense' },
-  { code: '5110', name: 'Charges sociales employeur', type: 'expense' },
-]
-
-const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
-  software: 'Logiciels',
-  office: 'Bureau',
-  travel: 'Déplacements',
-  professional: 'Services professionnels',
-  marketing: 'Marketing',
-  payroll: 'Paie (manuel)',
-  other: 'Autres',
-}
+export type { AccountType, Account } from './chartOfAccounts'
+export { CHART_OF_ACCOUNTS }
 
 export interface JournalLine {
   accountCode: string
@@ -67,9 +42,9 @@ function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
-function acct(code: string): Account {
+function acct(code: string) {
   const a = CHART_OF_ACCOUNTS.find((x) => x.code === code)
-  if (!a) throw new Error(`Unknown account ${code}`)
+  if (!a) return { code, name: accountName(code), type: 'expense' as const }
   return a
 }
 
@@ -110,6 +85,8 @@ type PayrollRow = {
   other_deductions: number
   employer_benefits: number
   net_pay: number
+  remittance_status?: string
+  remittance_date?: string | null
 }
 
 function employerContributionsTotal(p: Pick<PayrollRow, 'cpp_employer' | 'ei_employer' | 'qpip_employer' | 'employer_benefits'>) {
@@ -148,6 +125,7 @@ export function buildGeneralLedger(data: {
     qst: number
     total: number
     paid: boolean
+    payroll_run_id?: string | null
   }[]
   payrollRuns: PayrollRow[]
   dividends: { id: string; payment_date: string; total_amount: number; description: string | null }[]
@@ -166,6 +144,8 @@ export function buildGeneralLedger(data: {
     qst_net: number
     status: string
   }[]
+  adjustments?: AccountingAdjustment[]
+  periodEnd?: string
 }): JournalEntry[] {
   const entries: JournalEntry[] = []
 
@@ -207,11 +187,13 @@ export function buildGeneralLedger(data: {
   }
 
   for (const e of data.expenses) {
-    const cat = EXPENSE_CATEGORY_LABELS[e.category] ?? e.category
+    if (e.category === 'payroll' || e.payroll_run_id) continue
+    const cat = EXPENSE_CATEGORY_LABELS[e.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? e.category
     const desc = e.description ? `${e.vendor} — ${e.description}` : e.vendor
     const creditAccount = e.paid ? '1010' : '2000'
+    const expenseAccount = expenseCategoryAccount(e.category)
     const lines: JournalLine[] = [
-      jl('5000', Number(e.amount), 0),
+      jl(expenseAccount, Number(e.amount), 0),
       jl('1200', Number(e.gst), 0),
       jl('1210', Number(e.qst), 0),
       jl(creditAccount, 0, Number(e.total)),
@@ -250,6 +232,27 @@ export function buildGeneralLedger(data: {
         ]
       )
     )
+
+    if (pr.remittance_status === 'remitted' && pr.remittance_date) {
+      const remitTotal = round2(incomeTax + statutory)
+      if (remitTotal > 0) {
+        const lines: JournalLine[] = []
+        if (incomeTax > 0) lines.push(jl('2200', incomeTax, 0))
+        if (statutory > 0) lines.push(jl('2210', statutory, 0))
+        lines.push(jl('1010', 0, remitTotal))
+        entries.push(
+          entry(
+            `payroll-remit-${pr.id}`,
+            pr.remittance_date,
+            'payroll_remittance',
+            pr.id,
+            pr.remittance_date,
+            `Remise à la source — paie ${pr.payment_date}`,
+            lines
+          )
+        )
+      }
+    }
   }
 
   for (const d of data.dividends) {
@@ -261,7 +264,7 @@ export function buildGeneralLedger(data: {
         d.id,
         d.payment_date,
         d.description ?? 'Dividendes',
-        [jl('3100', Number(d.total_amount), 0), jl('1010', 0, Number(d.total_amount))]
+        [jl('3200', Number(d.total_amount), 0), jl('1010', 0, Number(d.total_amount))]
       )
     )
   }
@@ -305,7 +308,56 @@ export function buildGeneralLedger(data: {
     )
   }
 
+  const cap = data.periodEnd ?? '9999-12-31'
+  for (const adj of data.adjustments ?? []) {
+    if (!adj.active) continue
+    const end = adj.end_date ?? adj.start_date
+    if (adj.adjustment_type === 'manual') {
+      const amt = Number(adj.total_amount ?? adj.monthly_amount ?? 0)
+      if (amt > 0 && adj.start_date <= cap) {
+        entries.push(
+          entry(
+            `adj-${adj.id}`,
+            adj.start_date,
+            'adjustment',
+            adj.id,
+            adj.adjustment_type,
+            adj.description,
+            [jl(adj.debit_account, amt, 0), jl(adj.credit_account, 0, amt)]
+          )
+        )
+      }
+      continue
+    }
+    const monthly = Number(adj.monthly_amount ?? 0)
+    if (monthly <= 0) continue
+    const months = monthsInRange(adj.start_date, end, cap)
+    for (const ym of months) {
+      const postDate = lastDayOfMonth(ym)
+      entries.push(
+        entry(
+          `adj-${adj.id}-${ym}`,
+          postDate,
+          'adjustment',
+          adj.id,
+          ym,
+          `${adj.description} (${ym})`,
+          [jl(adj.debit_account, monthly, 0), jl(adj.credit_account, 0, monthly)]
+        )
+      )
+    }
+  }
+
   return entries.sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference))
+}
+
+export function filterEntriesByPeriod(entries: JournalEntry[], start: string, end: string): JournalEntry[] {
+  if (!start && !end) return entries
+  return entries.filter((e) => {
+    if (start && e.date < start) return false
+    if (end && e.date > end) return false
+    return true
+  })
 }
 
 export function flattenJournalEntries(entries: JournalEntry[]) {

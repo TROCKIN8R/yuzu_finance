@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { SalesTaxPeriod, TaxPeriodStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { matchesSearch } from '../lib/filters'
-import { isRevenueInvoice } from '../lib/taxes'
+import { calculateSalesTaxPeriod } from '../lib/salesTaxCalc'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -53,27 +53,30 @@ export function SalesTaxPage() {
   }
 
   async function calculateFromData() {
-    const { period_start, period_end } = form
+    const totals = await fetchPeriodTotals(form.period_start, form.period_end)
+    setForm({ ...form, ...totals })
+  }
+
+  async function fetchPeriodTotals(periodStart: string, periodEnd: string) {
     const [inv, exp] = await Promise.all([
-      supabase.from('invoices').select('gst, qst, invoice_date, status').gte('invoice_date', period_start).lte('invoice_date', period_end).neq('status', 'void'),
-      supabase.from('expenses').select('gst, qst, expense_date').gte('expense_date', period_start).lte('expense_date', period_end),
+      supabase.from('invoices').select('gst, qst, invoice_date, status').gte('invoice_date', periodStart).lte('invoice_date', periodEnd).neq('status', 'void'),
+      supabase.from('expenses').select('gst, qst, expense_date').gte('expense_date', periodStart).lte('expense_date', periodEnd),
     ])
-    const gst_collected = (inv.data ?? []).filter((i) => isRevenueInvoice(i.status)).reduce((s, i) => s + Number(i.gst), 0)
-    const qst_collected = (inv.data ?? []).filter((i) => isRevenueInvoice(i.status)).reduce((s, i) => s + Number(i.qst), 0)
-    const gst_itc = (exp.data ?? []).reduce((s, e) => s + Number(e.gst), 0)
-    const qst_itr = (exp.data ?? []).reduce((s, e) => s + Number(e.qst), 0)
-    setForm({ ...form, gst_collected, qst_collected, gst_itc, qst_itr })
+    return calculateSalesTaxPeriod(periodStart, periodEnd, inv.data ?? [], exp.data ?? [])
   }
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
-    const { gst_net, qst_net } = nets(form.gst_collected, form.qst_collected, form.gst_itc, form.qst_itr)
+    const totals = await fetchPeriodTotals(form.period_start, form.period_end)
+    const { gst_net, qst_net } = nets(totals.gst_collected, totals.qst_collected, totals.gst_itc, totals.qst_itr)
     const payload = {
       ...form,
-      filing_due_date: form.filing_due_date || null,
+      ...totals,
       gst_net,
       qst_net,
+      filing_due_date: form.filing_due_date || null,
       notes: form.notes || null,
+      auto_synced_at: new Date().toISOString(),
     }
     if (editingId) await supabase.from('sales_tax_periods').update(payload).eq('id', editingId)
     else await supabase.from('sales_tax_periods').insert(payload)

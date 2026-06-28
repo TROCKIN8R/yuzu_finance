@@ -10,9 +10,11 @@ import {
   journalTotals,
   type JournalEntry,
 } from '../lib/generalLedger'
+import { exportJournalCsv, exportTrialBalanceCsv } from '../lib/exportCsv'
 import { DataTable } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
 import { DateRangeFilter } from '../components/ListToolbar'
+import { Button } from '../components/Button'
 
 export function GeneralLedgerPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([])
@@ -28,18 +30,19 @@ export function GeneralLedgerPage() {
 
   async function load() {
     setLoading(true)
-    const [invoices, payments, expenses, payroll, dividends, corpTax, salesTax] = await Promise.all([
+    const [invoices, payments, expenses, payroll, dividends, corpTax, salesTax, adjustments] = await Promise.all([
       supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
       supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number)'),
-      supabase.from('expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, paid'),
+      supabase.from('expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, paid, payroll_run_id'),
       supabase
         .from('payroll_runs')
         .select(
-          'id, payment_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
+          'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
         ),
       supabase.from('dividends').select('id, payment_date, total_amount, description'),
       supabase.from('corporate_tax_records').select('id, paid_date, paid_amount, label, fiscal_year'),
       supabase.from('sales_tax_periods').select('id, period_end, filed_date, gst_net, qst_net, status'),
+      supabase.from('accounting_adjustments').select('*'),
     ])
 
     setEntries(
@@ -51,6 +54,7 @@ export function GeneralLedgerPage() {
         dividends: dividends.data ?? [],
         corporateTax: corpTax.data ?? [],
         salesTaxRemittances: salesTax.data ?? [],
+        adjustments: adjustments.data ?? [],
       })
     )
     setLoading(false)
@@ -117,6 +121,17 @@ export function GeneralLedgerPage() {
         <p className="text-xs text-muted pb-2">
           {filteredEntries.length} écriture{filteredEntries.length !== 1 ? 's' : ''} sur {entries.length}
         </p>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() =>
+            view === 'journal'
+              ? exportJournalCsv(filteredEntries)
+              : exportTrialBalanceCsv(trial)
+          }
+        >
+          Exporter CSV
+        </Button>
       </div>
 
       {view === 'journal' ? (

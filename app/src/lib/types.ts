@@ -1,3 +1,44 @@
+export type RemittanceStatus = 'pending' | 'remitted'
+export type AdjustmentType = 'prepaid' | 'accrual' | 'depreciation' | 'manual'
+export type BankMatchSource =
+  | 'payment'
+  | 'expense'
+  | 'payroll'
+  | 'dividend'
+  | 'sales_tax'
+  | 'corporate_tax'
+  | 'manual'
+
+export interface BankTransaction {
+  id: string
+  user_id: string
+  transaction_date: string
+  description: string
+  amount: number
+  reconciled: boolean
+  match_source: BankMatchSource | null
+  match_id: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AccountingAdjustment {
+  id: string
+  user_id: string
+  adjustment_type: AdjustmentType
+  description: string
+  start_date: string
+  end_date: string | null
+  total_amount: number | null
+  monthly_amount: number | null
+  debit_account: string
+  credit_account: string
+  active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
 export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
 export type TaxPeriodStatus = 'open' | 'filed' | 'paid'
 export type CorpTaxStatus = 'estimated' | 'due' | 'paid'
@@ -81,6 +122,9 @@ export interface PayrollRun {
   net_pay: number
   employer_benefits: number
   notes: string | null
+  remittance_status: RemittanceStatus
+  remittance_date: string | null
+  remittance_reference: string | null
   created_at: string
   updated_at: string
   employees?: Pick<Employee, 'first_name' | 'last_name'>
@@ -101,6 +145,7 @@ export interface SalesTaxPeriod {
   status: TaxPeriodStatus
   filed_date: string | null
   notes: string | null
+  auto_synced_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -212,6 +257,7 @@ export interface Invoice {
   qst: number
   total: number
   status: InvoiceStatus
+  include_sales_tax: boolean
   notes: string | null
   created_at: string
   updated_at: string
@@ -253,6 +299,12 @@ export interface OrganizationSettings {
   invoice_prefix: string
   payment_terms_days: number
   payment_instructions: string | null
+  share_capital: number
+  opening_retained_earnings: number
+  opening_cash_balance: number
+  fiscal_year_end_month: number
+  fiscal_year_end_day: number
+  estimated_corp_tax_rate: number
 }
 
 type OmitSystemFields<T> = Omit<T, 'id' | 'user_id' | 'created_at' | 'updated_at'>

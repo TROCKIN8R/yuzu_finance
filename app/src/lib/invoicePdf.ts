@@ -16,6 +16,9 @@ export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInpu
   const company = settings?.company_legal_name || 'Facture'
   const margin = 14
   let y = 20
+  const showTaxes =
+    (invoice.include_sales_tax ?? false) &&
+    (Number(invoice.gst) > 0 || Number(invoice.qst) > 0)
 
   doc.setFontSize(16)
   doc.text(company, margin, y)
@@ -58,6 +61,10 @@ export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInpu
   }
   y += 6
 
+  const head = showTaxes
+    ? ['Date', 'Description', 'Qté', 'Prix unit.', 'Sous-total', 'TPS', 'TVQ', 'Total']
+    : ['Date', 'Description', 'Qté', 'Prix unit.', 'Montant']
+
   const rows = lines.map((line) => {
     const qtyLabel =
       line.unit_label === 'h' ? `${Number(line.quantity).toFixed(2)} h` : `${Number(line.quantity).toFixed(0)}`
@@ -65,48 +72,66 @@ export function downloadInvoicePdf({ invoice, client, settings, lines }: PdfInpu
       line.unit_label === 'h'
         ? `${Number(line.unit_price).toFixed(2)} $/h`
         : `${Number(line.unit_price).toFixed(2)} $`
-    return [
+    const base = [
       line.line_date ? formatDate(line.line_date) : '—',
       line.description,
       qtyLabel,
       unitPrice,
-      `${Number(line.subtotal).toFixed(2)} $`,
-      `${Number(line.gst).toFixed(2)} $`,
-      `${Number(line.qst).toFixed(2)} $`,
-      `${Number(line.total).toFixed(2)} $`,
     ]
+    if (showTaxes) {
+      return [
+        ...base,
+        `${Number(line.subtotal).toFixed(2)} $`,
+        `${Number(line.gst).toFixed(2)} $`,
+        `${Number(line.qst).toFixed(2)} $`,
+        `${Number(line.total).toFixed(2)} $`,
+      ]
+    }
+    return [...base, `${Number(line.total).toFixed(2)} $`]
   })
 
   autoTable(doc, {
     startY: y,
-    head: [['Date', 'Description', 'Qté', 'Prix unit.', 'Sous-total', 'TPS', 'TVQ', 'Total']],
+    head: [head],
     body: rows,
     styles: { fontSize: 7 },
     headStyles: { fillColor: [229, 168, 23] },
-    columnStyles: {
-      0: { cellWidth: 22 },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-      4: { halign: 'right' },
-      5: { halign: 'right' },
-      6: { halign: 'right' },
-      7: { halign: 'right' },
-    },
+    columnStyles: showTaxes
+      ? {
+          0: { cellWidth: 22 },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right' },
+          7: { halign: 'right' },
+        }
+      : {
+          0: { cellWidth: 22 },
+          2: { halign: 'right' },
+          3: { halign: 'right' },
+          4: { halign: 'right' },
+        },
   })
 
   const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
   const rightX = 195
   doc.setFontSize(10)
-  doc.text(`Sous-total : ${Number(invoice.subtotal).toFixed(2)} $`, rightX, finalY, { align: 'right' })
-  doc.text(`TPS : ${Number(invoice.gst).toFixed(2)} $`, rightX, finalY + 6, { align: 'right' })
-  doc.text(`TVQ : ${Number(invoice.qst).toFixed(2)} $`, rightX, finalY + 12, { align: 'right' })
-  doc.setFontSize(12)
-  doc.text(`Total : ${Number(invoice.total).toFixed(2)} $`, rightX, finalY + 20, { align: 'right' })
+  if (showTaxes) {
+    doc.text(`Sous-total : ${Number(invoice.subtotal).toFixed(2)} $`, rightX, finalY, { align: 'right' })
+    doc.text(`TPS : ${Number(invoice.gst).toFixed(2)} $`, rightX, finalY + 6, { align: 'right' })
+    doc.text(`TVQ : ${Number(invoice.qst).toFixed(2)} $`, rightX, finalY + 12, { align: 'right' })
+    doc.setFontSize(12)
+    doc.text(`Total : ${Number(invoice.total).toFixed(2)} $`, rightX, finalY + 20, { align: 'right' })
+  } else {
+    doc.setFontSize(12)
+    doc.text(`Total : ${Number(invoice.total).toFixed(2)} $`, rightX, finalY, { align: 'right' })
+  }
 
   if (settings?.payment_instructions) {
     doc.setFontSize(8)
     doc.setTextColor(100)
-    doc.text(settings.payment_instructions, margin, finalY + 28, { maxWidth: 180 })
+    doc.text(settings.payment_instructions, margin, finalY + (showTaxes ? 28 : 12), { maxWidth: 180 })
   }
 
   doc.save(`${invoice.invoice_number}.pdf`)

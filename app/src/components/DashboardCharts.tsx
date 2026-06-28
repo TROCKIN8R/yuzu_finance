@@ -1,0 +1,285 @@
+import type { ReactNode } from 'react'
+import { formatCad } from '../lib/format'
+import type { EquityBreakdown, MonthlySeriesPoint } from '../lib/dashboardSeries'
+
+const PAD = { top: 16, right: 12, bottom: 36, left: 48 }
+const CHART_H = 200
+
+function compactCad(n: number) {
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M $`
+  if (abs >= 10_000) return `${(n / 1_000).toFixed(0)}k $`
+  if (abs >= 1_000) return `${(n / 1_000).toFixed(1)}k $`
+  return `${Math.round(n)} $`
+}
+
+function ChartShell({
+  title,
+  subtitle,
+  children,
+  legend,
+}: {
+  title: string
+  subtitle?: string
+  children: ReactNode
+  legend?: ReactNode
+}) {
+  return (
+    <div className="bg-white border border-border rounded-xl p-4 sm:p-5 h-full flex flex-col">
+      <div className="mb-3">
+        <h3 className="font-semibold text-sm">{title}</h3>
+        {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
+      </div>
+      <div className="flex-1 min-h-[200px]">{children}</div>
+      {legend && <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted">{legend}</div>}
+    </div>
+  )
+}
+
+function EmptyChart({ message }: { message: string }) {
+  return (
+    <div className="h-[200px] flex items-center justify-center text-sm text-muted border border-dashed border-border rounded-lg">
+      {message}
+    </div>
+  )
+}
+
+function scaleLinear(values: number[], minPadding = 0.08) {
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const span = max - min || 1
+  const pad = span * minPadding
+  return { min: min - pad, max: max + pad, span: span + pad * 2 || 1 }
+}
+
+function xPos(i: number, n: number, width: number) {
+  if (n <= 1) return width / 2
+  return (i / (n - 1)) * width
+}
+
+function yPos(v: number, min: number, span: number, height: number) {
+  return height - ((v - min) / span) * height
+}
+
+function gridLines(min: number, max: number, height: number, width: number) {
+  const ticks = 4
+  const lines = []
+  for (let i = 0; i <= ticks; i++) {
+    const v = min + ((max - min) * i) / ticks
+    const y = yPos(v, min, max - min || 1, height)
+    lines.push(
+      <g key={i}>
+        <line x1={0} y1={y} x2={width} y2={y} stroke="#e7e5e4" strokeWidth={1} />
+        <text x={-6} y={y + 4} textAnchor="end" className="fill-stone-400" fontSize={9}>
+          {compactCad(v)}
+        </text>
+      </g>
+    )
+  }
+  return lines
+}
+
+export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) {
+  if (points.length === 0) return <EmptyChart message="Pas assez de données" />
+  const values = points.map((p) => p.revenue)
+  if (values.every((v) => v === 0)) return <EmptyChart message="Aucun revenu sur la période" />
+
+  const width = 560
+  const innerW = width - PAD.left - PAD.right
+  const innerH = CHART_H - PAD.top - PAD.bottom
+  const { min, max, span } = scaleLinear(values)
+  const linePath = points
+    .map((p, i) => {
+      const x = PAD.left + xPos(i, points.length, innerW)
+      const y = PAD.top + yPos(p.revenue, min, span, innerH)
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
+    })
+    .join(' ')
+  const areaPath = `${linePath} L ${PAD.left + xPos(points.length - 1, points.length, innerW)} ${PAD.top + innerH} L ${PAD.left + xPos(0, points.length, innerW)} ${PAD.top + innerH} Z`
+
+  return (
+    <ChartShell title="Tendance des revenus" subtitle="Revenus HT facturés par mois">
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Tendance des revenus">
+        <g transform={`translate(0, ${PAD.top})`}>
+          {gridLines(min, max, innerH, innerW).map((g) => (
+            <g key={g.key} transform={`translate(${PAD.left}, 0)`}>
+              {g}
+            </g>
+          ))}
+        </g>
+        <path d={areaPath} fill="#fef9e8" />
+        <path d={linePath} fill="none" stroke="#e5a817" strokeWidth={2.5} strokeLinejoin="round" />
+        {points.map((p, i) => {
+          const x = PAD.left + xPos(i, points.length, innerW)
+          const y = PAD.top + yPos(p.revenue, min, span, innerH)
+          return <circle key={p.month} cx={x} cy={y} r={3.5} fill="#e5a817" />
+        })}
+        {points.map((p, i) => {
+          const x = PAD.left + xPos(i, points.length, innerW)
+          const show = points.length <= 6 || i % Math.ceil(points.length / 6) === 0 || i === points.length - 1
+          if (!show) return null
+          return (
+            <text key={`lbl-${p.month}`} x={x} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+              {p.label}
+            </text>
+          )
+        })}
+      </svg>
+    </ChartShell>
+  )
+}
+
+export function CashFlowChart({ points }: { points: MonthlySeriesPoint[] }) {
+  if (points.length === 0) return <EmptyChart message="Pas assez de données" />
+  const maxVal = Math.max(...points.flatMap((p) => [p.cashIn, p.cashOut]), 1)
+  const barGroupW = Math.min(48, 480 / points.length)
+  const barW = barGroupW * 0.35
+  const width = Math.max(320, points.length * (barGroupW + 8) + PAD.left + PAD.right)
+  const innerH = CHART_H - PAD.top - PAD.bottom
+
+  return (
+    <ChartShell
+      title="Flux de trésorerie"
+      subtitle="Encaissements vs décaissements par mois"
+      legend={
+        <>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-yuzu" /> Encaissements
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-red-400" /> Décaissements
+          </span>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Flux de trésorerie">
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+          const y = PAD.top + innerH * (1 - t)
+          return (
+            <g key={t}>
+              <line x1={PAD.left} y1={y} x2={width - PAD.right} y2={y} stroke="#e7e5e4" strokeWidth={1} />
+              <text x={PAD.left - 6} y={y + 4} textAnchor="end" className="fill-stone-400" fontSize={9}>
+                {compactCad(maxVal * t)}
+              </text>
+            </g>
+          )
+        })}
+        {points.map((p, i) => {
+          const gx = PAD.left + i * (barGroupW + 8) + barGroupW / 2
+          const inH = (p.cashIn / maxVal) * innerH
+          const outH = (p.cashOut / maxVal) * innerH
+          const baseY = PAD.top + innerH
+          return (
+            <g key={p.month}>
+              <rect x={gx - barW - 1} y={baseY - inH} width={barW} height={inH || 0} rx={2} fill="#e5a817" />
+              <rect x={gx + 1} y={baseY - outH} width={barW} height={outH || 0} rx={2} fill="#f87171" />
+              {(points.length <= 8 || i % Math.ceil(points.length / 8) === 0) && (
+                <text x={gx} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+                  {p.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </ChartShell>
+  )
+}
+
+export function CapitalChart({
+  points,
+  equity,
+  openingCash,
+}: {
+  points: MonthlySeriesPoint[]
+  equity: EquityBreakdown
+  openingCash: number
+}) {
+  const cashSeries = points.reduce<{ label: string; cash: number }[]>((acc, p, i) => {
+    const prev = i === 0 ? openingCash : acc[i - 1].cash
+    acc.push({ label: p.label, cash: Math.round((prev + p.netCashFlow) * 100) / 100 })
+    return acc
+  }, [])
+
+  const equityValues = points.map((p) => p.equity)
+  const cashValues = cashSeries.map((p) => p.cash)
+  const allValues = [...equityValues, ...cashValues]
+  if (allValues.every((v) => v === 0)) {
+    return <EmptyChart message="Configurez le capital et les soldes d'ouverture dans Paramètres" />
+  }
+
+  const width = 560
+  const innerW = width - PAD.left - PAD.right
+  const innerH = CHART_H - PAD.top - PAD.bottom
+  const { min, span } = scaleLinear(allValues, 0.05)
+
+  const line = (values: number[], color: string, key: string) => {
+    const path = values
+      .map((v, i) => {
+        const x = PAD.left + xPos(i, points.length, innerW)
+        const y = PAD.top + yPos(v, min, span, innerH)
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
+      })
+      .join(' ')
+    return <path key={key} d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+  }
+
+  const total = equity.totalEquity
+  const capPct = total > 0 ? (equity.shareCapital / total) * 100 : 0
+  const rePct = total > 0 ? (equity.retainedEarnings / total) * 100 : 100
+
+  return (
+    <ChartShell
+      title="Capital et trésorerie"
+      subtitle="Avoir estimé et trésorerie cumulée"
+      legend={
+        <>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-violet-600" /> Avoir total
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-emerald-600" /> Trésorerie
+          </span>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto mb-3" role="img" aria-label="Capital et trésorerie">
+        <g transform={`translate(0, ${PAD.top})`}>
+          {gridLines(min, min + span, innerH, innerW).map((g) => (
+            <g key={g.key} transform={`translate(${PAD.left}, 0)`}>
+              {g}
+            </g>
+          ))}
+        </g>
+        {line(equityValues, '#7c3aed', 'equity')}
+        {line(cashValues, '#059669', 'cash')}
+        {points.map((p, i) => {
+          const x = PAD.left + xPos(i, points.length, innerW)
+          const show = points.length <= 6 || i % Math.ceil(points.length / 6) === 0 || i === points.length - 1
+          if (!show) return null
+          return (
+            <text key={p.month} x={x} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+              {p.label}
+            </text>
+          )
+        })}
+      </svg>
+      <div className="space-y-2 pt-2 border-t border-border">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted">Avoir total (fin de période)</span>
+          <span className="font-medium">{formatCad(total)}</span>
+        </div>
+        <div className="h-3 rounded-full overflow-hidden flex bg-stone-100">
+          {capPct > 0 && (
+            <div className="bg-violet-500 h-full" style={{ width: `${capPct}%` }} title={`Capital-actions ${formatCad(equity.shareCapital)}`} />
+          )}
+          <div className="bg-violet-300 h-full" style={{ width: `${rePct}%` }} title={`BNR ${formatCad(equity.retainedEarnings)}`} />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted">
+          <span>Capital-actions {formatCad(equity.shareCapital)}</span>
+          <span>BNR {formatCad(equity.retainedEarnings)}</span>
+        </div>
+      </div>
+    </ChartShell>
+  )
+}

@@ -21,6 +21,8 @@ const nav: { section: string; links: NavItem[] }[] = [
     section: 'Comptabilité',
     links: [
       { to: '/ledger', label: 'Grand livre' },
+      { to: '/bank', label: 'Banque' },
+      { to: '/adjustments', label: 'Ajustements' },
       { to: '/expenses', label: 'Dépenses' },
       { to: '/payroll', label: 'Paie' },
       { to: '/dividends', label: 'Dividendes' },
@@ -28,6 +30,7 @@ const nav: { section: string; links: NavItem[] }[] = [
       { to: '/corporate-tax', label: 'Impôts société' },
     ],
   },
+  { section: 'Administration', links: [{ to: '/settings', label: 'Paramètres' }] },
 ]
 
 function MenuIcon({ open }: { open: boolean }) {
