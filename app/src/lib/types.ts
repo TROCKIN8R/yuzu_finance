@@ -1,3 +1,83 @@
+export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
+export type TaxPeriodStatus = 'open' | 'filed' | 'paid'
+export type CorpTaxStatus = 'estimated' | 'due' | 'paid'
+
+export interface Expense {
+  id: string
+  user_id: string
+  expense_date: string
+  vendor: string
+  category: ExpenseCategory
+  description: string | null
+  amount: number
+  gst: number
+  qst: number
+  total: number
+  paid: boolean
+  payroll_run_id: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PayrollRun {
+  id: string
+  user_id: string
+  pay_period_start: string
+  pay_period_end: string
+  payment_date: string
+  gross_pay: number
+  federal_tax: number
+  provincial_tax: number
+  cpp_employee: number
+  ei_employee: number
+  qpip_employee: number
+  cpp_employer: number
+  ei_employer: number
+  qpip_employer: number
+  other_deductions: number
+  net_pay: number
+  employer_benefits: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SalesTaxPeriod {
+  id: string
+  user_id: string
+  period_start: string
+  period_end: string
+  filing_due_date: string | null
+  gst_collected: number
+  qst_collected: number
+  gst_itc: number
+  qst_itr: number
+  gst_net: number
+  qst_net: number
+  status: TaxPeriodStatus
+  filed_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CorporateTaxRecord {
+  id: string
+  user_id: string
+  fiscal_year: string
+  label: string
+  tax_authority: string
+  due_date: string | null
+  amount: number
+  paid_amount: number
+  paid_date: string | null
+  status: CorpTaxStatus
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'archived'
 export type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'void'
 

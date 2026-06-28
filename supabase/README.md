@@ -7,6 +7,7 @@ Run **all** migrations in order:
 1. `20260628000000_initial.sql`
 2. `20260628000001_seed_settings_example.sql` (optional, after signup)
 3. `20260628000002_security_hardening.sql`
+4. `20260629000000_v2_finance_modules.sql` — expenses, payroll, sales tax, corporate tax
 
 ## Auth lockdown
 

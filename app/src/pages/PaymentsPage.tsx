@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import type { Invoice, Payment } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { deriveInvoiceStatus, invoiceBalance } from '../lib/invoice'
+import { deletePayment } from '../lib/invoiceActions'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -88,6 +89,16 @@ export function PaymentsPage() {
     load()
   }
 
+  async function handleDeletePayment(p: Payment) {
+    if (!confirm('Supprimer ce paiement ?')) return
+    try {
+      await deletePayment(p.id, p.invoice_id)
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur')
+    }
+  }
+
   const outstanding = invoices.filter((i) => i.balance > 0)
 
   return (
@@ -152,6 +163,7 @@ export function PaymentsPage() {
                 <th className="px-4 py-3 font-medium">Montant</th>
                 <th className="px-4 py-3 font-medium">Méthode</th>
                 <th className="px-4 py-3 font-medium">Référence</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -162,6 +174,9 @@ export function PaymentsPage() {
                   <td className="px-4 py-3">{formatCad(p.amount)}</td>
                   <td className="px-4 py-3 text-muted">{p.method ?? '—'}</td>
                   <td className="px-4 py-3 text-muted">{p.reference ?? '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant="danger" className="!px-2 !py-1" onClick={() => handleDeletePayment(p)}>Suppr.</Button>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase'
 import type { Client, Invoice, InvoiceStatus, OrganizationSettings, TimeEntry } from '../lib/types'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
 import { computeInvoiceTotals } from '../lib/invoice'
+import { deleteInvoice } from '../lib/invoiceActions'
+import { downloadInvoicePdf } from '../lib/invoicePdf'
 import { Badge } from '../components/Badge'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
@@ -64,7 +66,7 @@ export function InvoicesPage() {
     setSelected(inv)
     const { data } = await supabase
       .from('time_entries')
-      .select('*, projects(name)')
+      .select('*, projects(name, default_hourly_rate)')
       .eq('invoice_id', inv.id)
       .order('entry_date')
     setLinkedEntries((data as TimeEntry[]) ?? [])
@@ -132,6 +134,25 @@ export function InvoicesPage() {
     if (selected?.id === id) setSelected({ ...selected, status })
   }
 
+  async function handleDelete(inv: Invoice) {
+    if (!confirm(`Supprimer la facture ${inv.invoice_number} ? Les entrées de temps seront libérées.`)) return
+    try {
+      await deleteInvoice(inv.id)
+      setDetailOpen(false)
+      setSelected(null)
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur')
+    }
+  }
+
+  function handlePdf() {
+    if (!selected || !settings) return
+    const client = clients.find((c) => c.id === selected.client_id)
+    if (!client) return
+    downloadInvoicePdf({ invoice: selected, client, settings, entries: linkedEntries })
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -165,9 +186,12 @@ export function InvoicesPage() {
                   <td className="px-4 py-3">
                     <Badge label={inv.status} tone={inv.status} />
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right space-x-1">
                     <Button variant="ghost" className="!px-2 !py-1" onClick={() => viewDetail(inv)}>
                       Voir
+                    </Button>
+                    <Button variant="danger" className="!px-2 !py-1" onClick={() => handleDelete(inv)}>
+                      Suppr.
                     </Button>
                   </td>
                 </tr>
@@ -276,7 +300,12 @@ export function InvoicesPage() {
               <div>TVQ : {formatCad(selected.qst)}</div>
               <div className="font-semibold text-lg">Total : {formatCad(selected.total)}</div>
             </div>
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex gap-2 justify-between pt-2 flex-wrap">
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={handlePdf}>Télécharger PDF</Button>
+                <Button variant="danger" onClick={() => handleDelete(selected)}>Supprimer</Button>
+              </div>
+              <div className="flex gap-2">
               {(['draft', 'sent', 'void'] as InvoiceStatus[]).map((s) => (
                 <Button
                   key={s}
@@ -287,6 +316,7 @@ export function InvoicesPage() {
                   {s}
                 </Button>
               ))}
+              </div>
             </div>
           </div>
         )}
