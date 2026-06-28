@@ -10,7 +10,6 @@ import type {
   OrganizationSettings,
   Partner,
   Payment,
-  PayrollRun,
   SalesTaxPeriod,
 } from '../lib/types'
 import { formatCad, formatDate, relationOne } from '../lib/format'
@@ -45,6 +44,30 @@ import { EmptyState } from '../components/EmptyState'
 import { ClearFiltersButton, FilterSelect, ListToolbar } from '../components/ListToolbar'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
+
+/** Partial payroll rows loaded for bank assignment UI. */
+type BankPayrollRun = {
+  id: string
+  payment_date: string
+  pay_period_start: string
+  pay_period_end: string
+  net_pay: number
+  remittance_status: 'pending' | 'remitted'
+  remittance_date: string | null
+  remittance_reference: string | null
+  gross_pay: number
+  federal_tax: number
+  provincial_tax: number
+  cpp_employee: number
+  ei_employee: number
+  qpip_employee: number
+  cpp_employer: number
+  ei_employer: number
+  qpip_employer: number
+  other_deductions: number
+  employer_benefits: number
+  employees?: { first_name: string; last_name: string } | { first_name: string; last_name: string }[]
+}
 
 type AssignmentFilter =
   | 'unassigned'
@@ -99,7 +122,7 @@ export function BankPage() {
   const [bookCash, setBookCash] = useState(0)
   const [paymentMap, setPaymentMap] = useState<Record<string, Payment>>({})
   const [expenseMap, setExpenseMap] = useState<Record<string, Expense>>({})
-  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([])
+  const [payrollRuns, setPayrollRuns] = useState<BankPayrollRun[]>([])
   const [dividends, setDividends] = useState<Dividend[]>([])
   const [salesTaxPeriods, setSalesTaxPeriods] = useState<SalesTaxPeriod[]>([])
   const [corpTaxRecords, setCorpTaxRecords] = useState<CorporateTaxRecord[]>([])
@@ -192,7 +215,7 @@ export function BankPage() {
     setSettings(set.data)
     setPaymentMap(Object.fromEntries(payments.map((p) => [p.id, p])))
     setExpenseMap(Object.fromEntries(expenses.map((e) => [e.id, e])))
-    setPayrollRuns((payroll.data as PayrollRun[]) ?? [])
+    setPayrollRuns((payroll.data ?? []) as BankPayrollRun[])
     setDividends((div.data as Dividend[]) ?? [])
     setSalesTaxPeriods((salesTax.data as SalesTaxPeriod[]) ?? [])
     setCorpTaxRecords((corpTax.data as CorporateTaxRecord[]) ?? [])

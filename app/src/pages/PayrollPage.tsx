@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Employee, EmployeeExpense, PayFrequency, PayrollRun, RemittanceStatus } from '../lib/types'
+import type { Employee, EmployeeExpense, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
