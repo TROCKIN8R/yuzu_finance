@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { effectiveRate, formatCad, relationOne } from '../lib/format'
-import type { TimeEntry } from '../lib/types'
+import { formatCad, relationOne } from '../lib/format'
 import { PageHeader } from '../components/PageHeader'
 import { BillingWorkflowNav, type BillingStep } from '../components/BillingWorkflowNav'
 
@@ -26,7 +25,7 @@ export function BillingPage() {
     const [{ data: entries }, { data: drafts }] = await Promise.all([
       supabase
         .from('time_entries')
-        .select('hours, rate_override, projects(default_hourly_rate, billing_type)')
+        .select('hours, rate_override, projects(default_hourly_rate)')
         .is('invoice_id', null)
         .eq('billable', true),
       supabase.from('invoices').select('id').eq('status', 'draft'),
@@ -34,12 +33,12 @@ export function BillingPage() {
 
     let unbilledHours = 0
     let unbilledAmount = 0
-    for (const e of (entries ?? []) as TimeEntry[]) {
-      const p = relationOne(e.projects)
-      if (!p || p.billing_type === 'fixed') continue
-      const rate = effectiveRate(e, p)
+    for (const e of entries ?? []) {
+      const p = relationOne<{ default_hourly_rate: number }>(e.projects)
+      if (!p) continue
+      const rate = e.rate_override ?? p.default_hourly_rate
       unbilledHours += Number(e.hours)
-      unbilledAmount += Number(e.hours) * rate
+      unbilledAmount += Number(e.hours) * Number(rate)
     }
 
     setMetrics({
