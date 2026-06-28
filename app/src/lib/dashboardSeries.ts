@@ -52,6 +52,7 @@ type PayrollRow = {
 }
 type DividendRow = {
   total_amount: number
+  paid_amount?: number
   declared_date: string
   payment_date: string | null
   status: string
@@ -189,9 +190,9 @@ export function buildMonthlySeries(
     const declareYm = monthKey(d.declared_date)
     if (months.includes(declareYm)) add(dividendsByMonth, declareYm, Number(d.total_amount))
 
-    if (d.status === 'paid' && d.payment_date) {
+    if (Number(d.paid_amount ?? 0) > 0 && d.payment_date) {
       const payYm = monthKey(d.payment_date)
-      if (months.includes(payYm)) add(cashOutByMonth, payYm, Number(d.total_amount))
+      if (months.includes(payYm)) add(cashOutByMonth, payYm, Number(d.paid_amount))
     }
   }
 

@@ -91,7 +91,7 @@ export function DashboardPage() {
           'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
         ),
       supabase.from('invoices').select('subtotal, invoice_date, status').neq('status', 'void'),
-      supabase.from('dividends').select('total_amount, declared_date, payment_date, status'),
+      supabase.from('dividends').select('total_amount, paid_amount, declared_date, payment_date, status'),
       supabase.from('corporate_tax_records').select('paid_amount, paid_date'),
       supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
     ])
@@ -156,7 +156,7 @@ export function DashboardPage() {
             'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
           ),
         supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date').neq('status', 'void'),
-        supabase.from('dividends').select('total_amount, declared_date, payment_date, status'),
+        supabase.from('dividends').select('total_amount, paid_amount, declared_date, payment_date, status'),
         supabase.from('corporate_tax_records').select('amount, paid_amount, status'),
         supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
         supabase.from('bank_transactions').select('amount, transaction_date'),

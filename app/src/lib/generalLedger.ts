@@ -148,6 +148,7 @@ export function buildGeneralLedger(data: {
     payment_date: string | null
     status: string
     total_amount: number
+    paid_amount?: number
     description: string | null
   }[]
   corporateTax: {
@@ -317,7 +318,8 @@ export function buildGeneralLedger(data: {
         [jl('3100', Number(d.total_amount), 0), jl('2125', 0, Number(d.total_amount))]
       )
     )
-    if (d.status === 'paid' && d.payment_date) {
+    if (Number(d.paid_amount ?? 0) > 0 && d.payment_date) {
+      const paidAmount = Number(d.paid_amount)
       entries.push(
         entry(
           `div-pay-${d.id}`,
@@ -326,7 +328,7 @@ export function buildGeneralLedger(data: {
           d.id,
           d.payment_date,
           d.description ?? 'Paiement dividendes',
-          [jl('2125', Number(d.total_amount), 0), jl('1010', 0, Number(d.total_amount))]
+          [jl('2125', paidAmount, 0), jl('1010', 0, paidAmount)]
         )
       )
     }

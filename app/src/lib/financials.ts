@@ -174,6 +174,7 @@ export function buildFinancialSnapshot(
     invoicePaidMap: Record<string, number>
     dividends?: {
       total_amount: number
+      paid_amount?: number
       declared_date: string
       payment_date: string | null
       status: string
@@ -214,12 +215,13 @@ export function buildFinancialSnapshot(
     .reduce((s, d) => s + Number(d.total_amount), 0)
 
   const dividendsPaid = (data.dividends ?? [])
-    .filter((d) => d.status === 'paid' && d.payment_date && inPeriod(d.payment_date, period))
-    .reduce((s, d) => s + Number(d.total_amount), 0)
+    .filter((d) => Number(d.paid_amount ?? 0) > 0 && d.payment_date && inPeriod(d.payment_date, period))
+    .reduce((s, d) => s + Number(d.paid_amount), 0)
 
-  const dividendsPayable = (data.dividends ?? [])
-    .filter((d) => d.status === 'declared')
-    .reduce((s, d) => s + Number(d.total_amount), 0)
+  const dividendsPayable = (data.dividends ?? []).reduce(
+    (s, d) => s + Math.max(0, Number(d.total_amount) - Number(d.paid_amount ?? 0)),
+    0
+  )
 
   const corporateTaxPaid = (data.corporateTax ?? []).reduce((s, r) => s + Number(r.paid_amount), 0)
 

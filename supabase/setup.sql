@@ -511,6 +511,7 @@ create table public.dividends (
   payment_date date,
   status text not null default 'declared' check (status in ('declared', 'paid')),
   total_amount numeric(12, 2) not null check (total_amount > 0),
+  paid_amount numeric(12, 2) not null default 0 check (paid_amount >= 0),
   employee_count integer not null check (employee_count > 0),
   amount_per_employee numeric(12, 2) not null check (amount_per_employee >= 0),
   description text,

@@ -74,6 +74,7 @@ export interface Dividend {
   payment_date: string | null
   status: DividendStatus
   total_amount: number
+  paid_amount: number
   employee_count: number
   amount_per_employee: number
   description: string | null

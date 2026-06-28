@@ -239,12 +239,23 @@ export function DividendsPage() {
                       <td className="px-4 py-3">{formatDate(d.declared_date)}</td>
                       <td className="px-4 py-3">
                         <Badge
-                          label={d.status === 'paid' ? 'Payé' : 'Déclaré'}
+                          label={
+                            d.status === 'paid'
+                              ? 'Payé'
+                              : Number(d.paid_amount) > 0
+                                ? 'Partiel'
+                                : 'Déclaré'
+                          }
                           tone={d.status === 'paid' ? 'paid' : 'declared'}
                         />
                       </td>
                       <td className="px-4 py-3 text-muted">{d.payment_date ? formatDate(d.payment_date) : '—'}</td>
-                      <td className="px-4 py-3 font-medium">{formatCad(d.total_amount)}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {formatCad(d.total_amount)}
+                        {Number(d.paid_amount) > 0 && d.status !== 'paid' && (
+                          <span className="text-muted text-xs block">payé {formatCad(d.paid_amount)}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-muted">{d.employee_count}</td>
                       <td className="px-4 py-3">{formatCad(d.amount_per_employee)}</td>
                       <td className="px-4 py-3 text-muted">{d.description ?? '—'}</td>

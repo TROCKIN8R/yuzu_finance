@@ -96,11 +96,18 @@ async function revertLinkedRecord(bankId: string, matchSource: string | null, ma
   }
 
   if (matchSource === 'dividend') {
-    const prev = parseRevertNote<{ status: DividendStatus; payment_date: string | null }>(notes, 'dividend_prev:')
+    const prev = parseRevertNote<{ status: DividendStatus; payment_date: string | null; paid_amount: number }>(
+      notes,
+      'dividend_prev:'
+    )
     if (prev) {
       await supabase
         .from('dividends')
-        .update({ status: prev.status, payment_date: prev.payment_date })
+        .update({
+          status: prev.status,
+          payment_date: prev.payment_date,
+          paid_amount: prev.paid_amount ?? 0,
+        })
         .eq('id', matchId)
     }
   }
@@ -249,10 +256,15 @@ export async function assignBankPayroll(
   if (bankErr) throw new Error(bankErr.message)
 }
 
-export async function assignBankDividend(bankId: string, dividendId: string, paymentDate: string) {
+export async function assignBankDividend(
+  bankId: string,
+  dividendId: string,
+  paymentDate: string,
+  paidAmount: number
+) {
   const { data: dividend, error: readErr } = await supabase
     .from('dividends')
-    .select('status, payment_date')
+    .select('status, payment_date, paid_amount, total_amount')
     .eq('id', dividendId)
     .single()
 
@@ -262,11 +274,15 @@ export async function assignBankDividend(bankId: string, dividendId: string, pay
   const prevNote = `dividend_prev:${JSON.stringify({
     status: dividend.status as DividendStatus,
     payment_date: dividend.payment_date,
+    paid_amount: Number(dividend.paid_amount ?? 0),
   })}`
+
+  const newPaidTotal = round2(Number(dividend.paid_amount ?? 0) + paidAmount)
+  const status: DividendStatus = newPaidTotal >= Number(dividend.total_amount) ? 'paid' : 'declared'
 
   const { error: divErr } = await supabase
     .from('dividends')
-    .update({ status: 'paid', payment_date: paymentDate })
+    .update({ status, payment_date: paymentDate, paid_amount: newPaidTotal })
     .eq('id', dividendId)
 
   if (divErr) throw new Error(divErr.message)

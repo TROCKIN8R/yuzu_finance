@@ -195,7 +195,7 @@ export function BankPage() {
           'id, payment_date, pay_period_start, pay_period_end, net_pay, remittance_status, remittance_date, remittance_reference, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, employees(first_name, last_name)'
         )
         .order('payment_date', { ascending: false }),
-      supabase.from('dividends').select('id, declared_date, payment_date, total_amount, description, status').order('declared_date', { ascending: false }),
+      supabase.from('dividends').select('id, declared_date, payment_date, total_amount, paid_amount, description, status').order('declared_date', { ascending: false }),
       supabase.from('corporate_tax_records').select('*').order('due_date', { ascending: true }),
       supabase.from('sales_tax_periods').select('*').order('period_end', { ascending: false }),
     ])
@@ -395,7 +395,12 @@ export function BankPage() {
           alert('Sélectionnez un dividende.')
           return
         }
-        await assignBankDividend(assignTx.id, dividendForm.dividend_id, assignTx.transaction_date)
+        await assignBankDividend(
+          assignTx.id,
+          dividendForm.dividend_id,
+          assignTx.transaction_date,
+          round2(Math.abs(Number(assignTx.amount)))
+        )
       } else if (assignKind === 'sales_tax') {
         if (!salesTaxForm.period_id) {
           alert('Sélectionnez une période TPS/TVQ.')
@@ -455,6 +460,7 @@ export function BankPage() {
   const corpTaxMap = useMemo(() => Object.fromEntries(corpTaxRecords.map((r) => [r.id, r])), [corpTaxRecords])
 
   const selectedPayroll = payrollMap[payrollForm.payroll_run_id]
+  const selectedDividend = dividendMap[dividendForm.dividend_id]
   const selectedSalesTax = salesTaxMap[salesTaxForm.period_id]
   const selectedCorpTax = corpTaxMap[corpTaxForm.record_id]
 
@@ -936,11 +942,22 @@ export function BankPage() {
                     {declaredDividends.map((d) => (
                       <option key={d.id} value={d.id}>
                         {formatDate(d.declared_date)} · {formatCad(d.total_amount)}
+                        {Number(d.paid_amount) > 0 ? ` · payé ${formatCad(d.paid_amount)}` : ''}
                         {d.description ? ` · ${d.description}` : ''}
                       </option>
                     ))}
                   </select>
                 </Field>
+                {selectedDividend && assignTx && (
+                  <p className="text-xs text-muted">
+                    Ligne bancaire {formatCad(Math.abs(Number(assignTx.amount)))} · solde à payer{' '}
+                    {formatCad(Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))}
+                    {Math.abs(Math.abs(Number(assignTx.amount)) - (Number(selectedDividend.total_amount) - Number(selectedDividend.paid_amount ?? 0))) >
+                      0.01 && (
+                      <span className="text-amber-800"> · paiement partiel ou écart de montant</span>
+                    )}
+                  </p>
+                )}
               )}
             </>
           ) : assignKind === 'sales_tax' ? (
