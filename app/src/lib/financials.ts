@@ -28,12 +28,14 @@ export interface BalanceSheetDetail {
   accountsReceivable: number
   gstReceivable: number
   qstReceivable: number
+  unbilledRevenue: number
   totalAssets: number
   accountsPayable: number
   gstPayable: number
   qstPayable: number
   payrollRemittancesPending: number
   chargesPayable: number
+  employerLeviesPending: number
   employeeReimbursementsPending: number
   dividendsPayable: number
   corporateTaxDue: number
@@ -85,6 +87,8 @@ type PayrollRunRow = {
   qpip_employer: number
   other_deductions: number
   employer_benefits: number
+  hsf_employer?: number
+  cnesst_employer?: number
   net_pay: number
 }
 
@@ -110,13 +114,15 @@ export function employeeDeductionsTotal(p: Pick<
 
 export function employerContributionsTotal(p: Pick<
   PayrollRunRow,
-  'cpp_employer' | 'ei_employer' | 'qpip_employer' | 'employer_benefits'
+  'cpp_employer' | 'ei_employer' | 'qpip_employer' | 'employer_benefits' | 'hsf_employer' | 'cnesst_employer'
 >): number {
   return (
     Number(p.cpp_employer) +
     Number(p.ei_employer) +
     Number(p.qpip_employer) +
-    Number(p.employer_benefits)
+    Number(p.employer_benefits) +
+    Number(p.hsf_employer ?? 0) +
+    Number(p.cnesst_employer ?? 0)
   )
 }
 
@@ -133,6 +139,7 @@ function buildLedgerEntries(data: GeneralLedgerBuildInput, period: DateRange): J
   return buildGeneralLedger({
     ...data,
     periodEnd: period.end || undefined,
+    periodStart: period.start || undefined,
   })
 }
 
@@ -142,8 +149,13 @@ export function buildFinancialSnapshot(
     bankTransactions?: { amount: number; transaction_date: string }[]
     settings?: Pick<
       OrganizationSettings,
-      'share_capital' | 'opening_retained_earnings' | 'opening_cash_balance' | 'estimated_corp_tax_rate'
-    >
+      | 'share_capital'
+      | 'opening_retained_earnings'
+      | 'opening_cash_balance'
+      | 'opening_balance_date'
+      | 'estimated_corp_tax_rate'
+      | 'wip_accrual_enabled'
+    > | null
   },
   period: DateRange
 ): FinancialSnapshot {
@@ -163,11 +175,13 @@ export function buildFinancialSnapshot(
   const accountsReceivable = balanceOf(balances, '1100')
   const gstReceivable = balanceOf(balances, '1200')
   const qstReceivable = balanceOf(balances, '1210')
+  const unbilledRevenue = balanceOf(balances, '1300')
   const accountsPayable = balanceOf(balances, '2000')
   const gstPayable = balanceOf(balances, '2100')
   const qstPayable = balanceOf(balances, '2110')
   const payrollRemittancesPending = round2(balanceOf(balances, '2200') + balanceOf(balances, '2210'))
   const chargesPayable = balanceOf(balances, '2050')
+  const employerLeviesPending = balanceOf(balances, '2215')
   const employeeReimbursementsPending = balanceOf(balances, '2060')
   const dividendsPayable = balanceOf(balances, '2125')
   const corporateTaxDue = balanceOf(balances, '2300')
@@ -176,13 +190,14 @@ export function buildFinancialSnapshot(
   const retainedEarnings = balanceOf(balances, '3100')
   const totalEquity = round2(shareCapital + retainedEarnings)
   const salesTaxPayable = round2(gstPayable + qstPayable)
-  const totalAssets = round2(cash + accountsReceivable + gstReceivable + qstReceivable)
+  const totalAssets = round2(cash + accountsReceivable + gstReceivable + qstReceivable + unbilledRevenue)
   const totalLiabilities = round2(
     accountsPayable +
       gstPayable +
       qstPayable +
       payrollRemittancesPending +
       chargesPayable +
+      employerLeviesPending +
       employeeReimbursementsPending +
       dividendsPayable +
       corporateTaxDue +
@@ -224,12 +239,14 @@ export function buildFinancialSnapshot(
       accountsReceivable,
       gstReceivable,
       qstReceivable,
+      unbilledRevenue,
       totalAssets,
       accountsPayable,
       gstPayable,
       qstPayable,
       payrollRemittancesPending,
       chargesPayable,
+      employerLeviesPending,
       employeeReimbursementsPending,
       dividendsPayable,
       corporateTaxDue,

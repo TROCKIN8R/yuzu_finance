@@ -40,20 +40,19 @@
 | P3-2 | Chart series payroll cash double-count | Monthly cash out matches GL (no duplicate employer contrib) | done |
 | P3-3 | Contra-asset 1500 typed as asset | Account 1500 uses `contra` type | done |
 
-## P4 — Future (not in this pass)
+## P4 — Advanced modules
 
-| ID | Issue | Notes |
-|----|-------|-------|
-| P4-1 | WIP accrual for unbilled time | Requires policy + module |
-| P4-2 | T4/RL-1 / T5 / CO-17 form generation | Export schedules only |
-| P4-3 | HSF / CNESST payroll | External payroll or rate tables |
-| P4-4 | Period close / lock | New table + UI |
+| ID | Issue | Acceptance criteria | Status |
+|----|-------|---------------------|--------|
+| P4-1 | WIP accrual for unbilled time | Optional `wip_accrual_enabled`; monthly Dr 1300 Cr 4000; invoices Cr 1300 | done |
+| P4-2 | T4/RL-1 / T5 / CO-17 form generation | `/tax-exports` CSV schedules from payroll, dividends, GL | done |
+| P4-3 | HSF / CNESST payroll | Configurable rates; `hsf_employer` / `cnesst_employer` on payroll; GL 2215 | done |
+| P4-4 | Period close / lock | `fiscal_period_closes` table; `/period-close` UI; payroll save guard | done |
 
 ## Supabase migration
 
-Run `supabase/migrations/20260628140000_shareholders.sql` in SQL Editor, or:
+Run migrations in order in SQL Editor, or with `DATABASE_URL`:
 
 ```bash
-# Add DATABASE_URL (Postgres connection string) to app/.env.local, then:
-cd app && npm install && node ../scripts/apply-supabase-migration.mjs
+node scripts/apply-supabase-migration.mjs supabase/migrations/20260703150000_p4_accounting_features.sql
 ```

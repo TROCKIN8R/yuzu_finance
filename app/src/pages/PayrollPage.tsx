@@ -7,6 +7,7 @@ import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
 import {
   calculatePayrollDeductions,
+  calculateEmployerLevies,
   employeeDisplayName,
   EMPLOYEE_DEDUCTION_FIELDS,
   EMPLOYER_CONTRIBUTION_FIELDS,
@@ -21,6 +22,9 @@ import {
   reimbursementTotals,
 } from '../lib/reimbursement'
 import { recalculatePayrollWithReimbursements } from '../lib/payrollForm'
+import { isDateInClosedPeriod } from '../lib/fiscalPeriodClose'
+import { useFiscalPeriodCloses } from '../hooks/useFiscalPeriodCloses'
+import { payrollLeviesRemittance, payrollRemittancesTotal } from '../lib/payrollRemittance'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -117,6 +121,8 @@ export function PayrollPage() {
   const [reimbursableExpenses, setReimbursableExpenses] = useState<EmployeeExpense[]>([])
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set())
   const [salaryGrossBase, setSalaryGrossBase] = useState(0)
+  const [levyRates, setLevyRates] = useState({ hsf: 0.0165, cnesst: 0.01 })
+  const { closes: periodCloses } = useFiscalPeriodCloses()
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
 
@@ -145,15 +151,22 @@ export function PayrollPage() {
   }, [])
 
   async function load() {
-    const [emp, pay] = await Promise.all([
+    const [emp, pay, settings] = await Promise.all([
       supabase.from('employees').select('*').order('last_name').order('first_name'),
       supabase
         .from('payroll_runs')
         .select('*, employees(first_name, last_name)')
         .order('payment_date', { ascending: false }),
+      supabase.from('organization_settings').select('hsf_rate, cnesst_rate').maybeSingle(),
     ])
     setEmployees((emp.data as Employee[]) ?? [])
     setRows((pay.data as PayrollRun[]) ?? [])
+    if (settings.data) {
+      setLevyRates({
+        hsf: Number(settings.data.hsf_rate ?? 0.0165),
+        cnesst: Number(settings.data.cnesst_rate ?? 0.01),
+      })
+    }
     refreshMetrics?.()
   }
 
@@ -303,6 +316,10 @@ export function PayrollPage() {
   async function savePayroll(ev: React.FormEvent) {
     ev.preventDefault()
     if (!form || !form.employee_id) return
+    if (isDateInClosedPeriod(form.payment_date, periodCloses)) {
+      alert('Cette période est clôturée. Rouvrez le mois dans Clôture de période avant de modifier la paie.')
+      return
+    }
     const emp = employees.find((e) => e.id === form.employee_id)
     if (!emp) return
 
@@ -314,9 +331,11 @@ export function PayrollPage() {
       selectedIds: selectedExpenseIds,
       paymentDate: form.payment_date,
     })
+    const levies = calculateEmployerLevies(recalc.gross_pay, levyRates.hsf, levyRates.cnesst)
     const formWithGross = {
       ...form,
       ...recalc,
+      ...levies,
       other_deductions: form.other_deductions,
       employer_benefits: form.employer_benefits,
     }
@@ -365,6 +384,12 @@ export function PayrollPage() {
   const reimbPreview = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
   const previewSalaryNet = form ? calcNet(form) : 0
   const previewNetPay = netPayWithReimbursement(previewSalaryNet, reimbPreview.nonTaxable)
+  const previewLevies = form ? calculateEmployerLevies(form.gross_pay, levyRates.hsf, levyRates.cnesst) : { hsf_employer: 0, cnesst_employer: 0 }
+  const previewRemittance = form
+    ? payrollRemittancesTotal({ ...form, ...previewLevies, employer_benefits: form.employer_benefits }) +
+      payrollLeviesRemittance(previewLevies)
+    : 0
+  const paymentInClosedPeriod = form ? isDateInClosedPeriod(form.payment_date, periodCloses) : false
 
   const payrollActions = (
     <div className="flex flex-wrap gap-2">
@@ -651,13 +676,28 @@ export function PayrollPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Cotisations employeur</span>
-                <span>{formatCad(sumEmployerContributions(form))}</span>
+                <span>{formatCad(sumEmployerContributions({ ...form, ...previewLevies }))}</span>
+              </div>
+              {(previewLevies.hsf_employer > 0 || previewLevies.cnesst_employer > 0) && (
+                <div className="flex justify-between text-xs text-muted">
+                  <span>HSF + CNESST (estim.)</span>
+                  <span>{formatCad(payrollLeviesRemittance(previewLevies))}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xs text-muted">
+                <span>Remise totale (RP/TPZ + levées)</span>
+                <span>{formatCad(previewRemittance)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-yuzu/30 font-semibold">
                 <span>Coût total employeur</span>
-                <span>{formatCad(form.gross_pay + sumEmployerContributions(form))}</span>
+                <span>{formatCad(form.gross_pay + sumEmployerContributions({ ...form, ...previewLevies }))}</span>
               </div>
             </div>
+            {paymentInClosedPeriod && (
+              <AlertBanner variant="warning">
+                Période clôturée — rouvrez le mois dans Clôture de période pour enregistrer.
+              </AlertBanner>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border pt-3">
               <Field label="Statut remise">
                 <select

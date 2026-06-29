@@ -10,8 +10,11 @@ import { lastDayOfMonth, monthsInRange } from './fiscalPeriod'
 import {
   employerPayrollExpenseContributions,
   payrollIncomeTaxWithheld,
+  payrollLeviesRemittance,
   payrollStatutoryRemittance,
 } from './payrollRemittance'
+import { buildWipAccrualEntries } from './wipAccrual'
+import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
 import type { AccountingAdjustment, OrganizationSettings } from './types'
 
 export type { AccountType, Account } from './chartOfAccounts'
@@ -96,6 +99,8 @@ type PayrollRow = {
   qpip_employer: number
   other_deductions: number
   employer_benefits: number
+  hsf_employer?: number
+  cnesst_employer?: number
   net_pay: number
   reimbursement_total?: number
   remittance_status?: string
@@ -176,18 +181,28 @@ export function buildGeneralLedger(data: {
     status: string
   }[]
   adjustments?: AccountingAdjustment[]
+  timeEntries?: MetricsTimeEntry[]
+  fixedProjects?: MetricsProject[]
   settings?: Pick<
     OrganizationSettings,
-    'share_capital' | 'opening_retained_earnings' | 'opening_cash_balance' | 'opening_balance_date'
+    | 'share_capital'
+    | 'opening_retained_earnings'
+    | 'opening_cash_balance'
+    | 'opening_balance_date'
+    | 'estimated_corp_tax_rate'
+    | 'wip_accrual_enabled'
   > | null
   periodEnd?: string
+  periodStart?: string
 }): JournalEntry[] {
   const entries: JournalEntry[] = []
+  const wipEnabled = Boolean(data.settings?.wip_accrual_enabled)
 
   entries.push(...buildOpeningBalanceEntries(data.settings))
 
   for (const inv of data.invoices) {
     if (!isRevenueInvoice(inv.status)) continue
+    const revenueAccount = wipEnabled ? '1300' : '4000'
     entries.push(
       entry(
         `inv-${inv.id}`,
@@ -198,7 +213,7 @@ export function buildGeneralLedger(data: {
         `Facture ${inv.invoice_number}`,
         [
           jl('1100', Number(inv.total), 0),
-          jl('4000', 0, Number(inv.subtotal)),
+          jl(revenueAccount, 0, Number(inv.subtotal)),
           jl('2100', 0, Number(inv.gst)),
           jl('2110', 0, Number(inv.qst)),
         ]
@@ -271,6 +286,7 @@ export function buildGeneralLedger(data: {
     const employerContrib = employerPayrollExpenseContributions(pr)
     const incomeTax = payrollIncomeTaxWithheld(pr)
     const statutory = payrollStatutoryRemittance(pr)
+    const levies = payrollLeviesRemittance(pr)
     const benefits = Number(pr.employer_benefits)
 
     const payrollLines: JournalLine[] = [
@@ -280,6 +296,7 @@ export function buildGeneralLedger(data: {
       jl('2200', 0, incomeTax),
       jl('2210', 0, statutory),
     ]
+    if (levies > 0) payrollLines.push(jl('2215', 0, levies))
     if (benefits > 0) payrollLines.push(jl('2050', 0, benefits))
     if (nonTaxReimb > 0) payrollLines.push(jl('2060', nonTaxReimb, 0))
 
@@ -296,11 +313,12 @@ export function buildGeneralLedger(data: {
     )
 
     if (pr.remittance_status === 'remitted' && pr.remittance_date) {
-      const remitTotal = round2(incomeTax + statutory)
+      const remitTotal = round2(incomeTax + statutory + levies)
       if (remitTotal > 0) {
         const lines: JournalLine[] = []
         if (incomeTax > 0) lines.push(jl('2200', incomeTax, 0))
         if (statutory > 0) lines.push(jl('2210', statutory, 0))
+        if (levies > 0) lines.push(jl('2215', levies, 0))
         lines.push(jl('1010', 0, remitTotal))
         entries.push(
           entry(
@@ -445,6 +463,20 @@ export function buildGeneralLedger(data: {
         )
       )
     }
+  }
+
+  if (wipEnabled && data.periodEnd) {
+    const invoiceDates = new Map(data.invoices.map((inv) => [inv.id, inv.invoice_date]))
+    entries.push(
+      ...buildWipAccrualEntries({
+        entriesBeforeWip: entries,
+        timeEntries: data.timeEntries ?? [],
+        fixedProjects: data.fixedProjects ?? [],
+        invoiceDates,
+        periodEnd: data.periodEnd,
+        periodStart: data.periodStart,
+      })
+    )
   }
 
   return entries.sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference))

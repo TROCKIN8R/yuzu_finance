@@ -91,6 +91,9 @@ create table public.organization_settings (
   fiscal_year_end_month integer not null default 6 check (fiscal_year_end_month between 1 and 12),
   fiscal_year_end_day integer not null default 30 check (fiscal_year_end_day between 1 and 31),
   estimated_corp_tax_rate numeric(6, 5) not null default 0.12,
+  wip_accrual_enabled boolean not null default false,
+  hsf_rate numeric(6, 5) not null default 0.0165,
+  cnesst_rate numeric(6, 5) not null default 0.01,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -355,6 +358,8 @@ create table public.payroll_runs (
   net_pay numeric(12, 2) not null,
   reimbursement_total numeric(12, 2) not null default 0,
   employer_benefits numeric(12, 2) not null default 0,
+  hsf_employer numeric(12, 2) not null default 0,
+  cnesst_employer numeric(12, 2) not null default 0,
   remittance_status text not null default 'pending'
     check (remittance_status in ('pending', 'remitted')),
   remittance_date date,
@@ -678,6 +683,26 @@ create trigger accounting_adjustments_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- Fiscal period close (month-end lock)
+-- ---------------------------------------------------------------------------
+
+create table public.fiscal_period_closes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  period_end date not null,
+  notes text,
+  closed_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (user_id, period_end)
+);
+
+create index fiscal_period_closes_user_id_idx on public.fiscal_period_closes (user_id);
+
+create trigger fiscal_period_closes_set_user_id
+  before insert on public.fiscal_period_closes
+  for each row execute function public.set_user_id();
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security — only the owning user can access their rows
 -- ---------------------------------------------------------------------------
 
@@ -699,6 +724,7 @@ alter table public.dividend_allocations enable row level security;
 alter table public.shareholders enable row level security;
 alter table public.bank_transactions enable row level security;
 alter table public.accounting_adjustments enable row level security;
+alter table public.fiscal_period_closes enable row level security;
 
 create policy "settings_select_own" on public.organization_settings
   for select using (auth.uid() = user_id);
@@ -758,6 +784,9 @@ create policy "bank_transactions_all_own" on public.bank_transactions
 create policy "accounting_adjustments_all_own" on public.accounting_adjustments
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+create policy "fiscal_period_closes_all_own" on public.fiscal_period_closes
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ---------------------------------------------------------------------------
 -- Grants — authenticated only; block anonymous table access
 -- ---------------------------------------------------------------------------
@@ -780,6 +809,7 @@ revoke all on table public.dividend_allocations from anon, public;
 revoke all on table public.shareholders from anon, public;
 revoke all on table public.bank_transactions from anon, public;
 revoke all on table public.accounting_adjustments from anon, public;
+revoke all on table public.fiscal_period_closes from anon, public;
 
 grant select, insert, update, delete on table public.organization_settings to authenticated;
 grant select, insert, update, delete on table public.partners to authenticated;
@@ -799,6 +829,7 @@ grant select, insert, update, delete on table public.dividend_allocations to aut
 grant select, insert, update, delete on table public.shareholders to authenticated;
 grant select, insert, update, delete on table public.bank_transactions to authenticated;
 grant select, insert, update, delete on table public.accounting_adjustments to authenticated;
+grant select, insert, update, delete on table public.fiscal_period_closes to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Auto-create settings row on signup

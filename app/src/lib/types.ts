@@ -169,6 +169,8 @@ export interface PayrollRun {
   net_pay: number
   reimbursement_total: number
   employer_benefits: number
+  hsf_employer: number
+  cnesst_employer: number
   notes: string | null
   remittance_status: RemittanceStatus
   remittance_date: string | null
@@ -366,6 +368,9 @@ export interface OrganizationSettings {
   fiscal_year_end_month: number
   fiscal_year_end_day: number
   estimated_corp_tax_rate: number
+  wip_accrual_enabled: boolean
+  hsf_rate: number
+  cnesst_rate: number
 }
 
 type OmitSystemFields<T> = Omit<T, 'id' | 'user_id' | 'created_at' | 'updated_at'>

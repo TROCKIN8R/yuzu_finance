@@ -83,6 +83,9 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtRow label="Comptes clients (CC)" value={formatCad(bs.accountsReceivable)} />
       <StmtRow label="TPS à recevoir (CTI)" value={formatCad(bs.gstReceivable)} indent />
       <StmtRow label="TVQ à recevoir (RTI)" value={formatCad(bs.qstReceivable)} indent />
+      {bs.unbilledRevenue > 0 && (
+        <StmtRow label="Revenus non facturés (WIP)" value={formatCad(bs.unbilledRevenue)} indent />
+      )}
       <StmtRow label="Total actif" value={formatCad(bs.totalAssets)} bold />
 
       <StmtSection title="Passif" />
@@ -95,6 +98,9 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtRow label="Remises paie en attente" value={formatCad(bs.payrollRemittancesPending)} />
       {bs.chargesPayable > 0 && (
         <StmtRow label="Charges à payer (avantages employeur)" value={formatCad(bs.chargesPayable)} indent />
+      )}
+      {bs.employerLeviesPending > 0 && (
+        <StmtRow label="HSF / CNESST à remettre" value={formatCad(bs.employerLeviesPending)} indent />
       )}
       {bs.dividendsPayable > 0 && (
         <StmtRow label="Dividendes à payer" value={formatCad(bs.dividendsPayable)} indent />

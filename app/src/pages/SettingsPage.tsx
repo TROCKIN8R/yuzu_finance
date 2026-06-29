@@ -52,6 +52,9 @@ const defaults: OrganizationSettingsForm = {
   fiscal_year_end_month: 6,
   fiscal_year_end_day: 30,
   estimated_corp_tax_rate: 0.12,
+  wip_accrual_enabled: false,
+  hsf_rate: 0.0165,
+  cnesst_rate: 0.01,
 }
 
 function withBillingDefaults(form: OrganizationSettingsForm): OrganizationSettingsForm {
@@ -292,6 +295,30 @@ export function SettingsPage() {
             <Field label="BNR d'ouverture ($)"><input type="number" step="0.01" className={inputClass} value={form.opening_retained_earnings} onChange={(e) => setForm({ ...form, opening_retained_earnings: Number(e.target.value) })} /></Field>
             <Field label="Trésorerie d'ouverture ($)"><input type="number" step="0.01" className={inputClass} value={form.opening_cash_balance} onChange={(e) => setForm({ ...form, opening_cash_balance: Number(e.target.value) })} /></Field>
             <Field label="Taux impôt société (estim.)"><input type="number" step="0.01" className={inputClass} value={form.estimated_corp_tax_rate} onChange={(e) => setForm({ ...form, estimated_corp_tax_rate: Number(e.target.value) })} /></Field>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="font-medium">Comptabilité avancée</h2>
+          <p className="text-xs text-muted">
+            WIP : constat mensuel des revenus non facturés (Dr 1300 · Cr 4000). HSF/CNESST : taux planification
+            seulement — confirmez avec votre CPA ou paie.
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.wip_accrual_enabled}
+              onChange={(e) => setForm({ ...form, wip_accrual_enabled: e.target.checked })}
+            />
+            Activer la constatation WIP (revenus non facturés)
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Taux HSF (ex. 0.0165 = 1,65 %)">
+              <input type="number" step="0.0001" className={inputClass} value={form.hsf_rate} onChange={(e) => setForm({ ...form, hsf_rate: Number(e.target.value) })} />
+            </Field>
+            <Field label="Taux CNESST (ex. 0.01 = 1 %)">
+              <input type="number" step="0.0001" className={inputClass} value={form.cnesst_rate} onChange={(e) => setForm({ ...form, cnesst_rate: Number(e.target.value) })} />
+            </Field>
           </div>
         </section>
 

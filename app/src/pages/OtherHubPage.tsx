@@ -32,6 +32,16 @@ export function OtherHubPage() {
           title="Rapports financiers"
           description="État des résultats, bilan et flux de trésorerie — export PDF."
         />
+        <HubCard
+          to="/tax-exports"
+          title="Calendriers fiscaux"
+          description="Export CSV T4/RL-1, T5 et échéancier CO-17 — brouillon CPA."
+        />
+        <HubCard
+          to="/period-close"
+          title="Clôture de période"
+          description="Verrouille un mois comptable après rapprochement."
+        />
         <HubCard to="/ledger" title="Grand livre" description="Journal des écritures et balance de vérification." />
         <HubCard
           to="/adjustments"

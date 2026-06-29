@@ -44,6 +44,9 @@ export function buildOrganizationSettingsRow(
     fiscal_year_end_month: form.fiscal_year_end_month,
     fiscal_year_end_day: form.fiscal_year_end_day,
     estimated_corp_tax_rate: form.estimated_corp_tax_rate,
+    wip_accrual_enabled: form.wip_accrual_enabled,
+    hsf_rate: form.hsf_rate,
+    cnesst_rate: form.cnesst_rate,
   }
 }
 
@@ -103,6 +106,12 @@ export function settingsSaveErrorMessage(error: { message: string; code?: string
       '20260630150000_opening_balance_date.sql, puis réessayez.'
     )
   }
+  if (msg.includes('wip_accrual_enabled') || msg.includes('hsf_rate')) {
+    return (
+      'Colonnes comptabilité P4 manquantes. Exécutez la migration ' +
+      '20260703150000_p4_accounting_features.sql, puis réessayez.'
+    )
+  }
   if (msg.includes('share_capital') || msg.includes('opening_retained_earnings')) {
     return (
       'Colonnes comptables manquantes. Exécutez la migration 20260702000000_accounting_v3.sql ' +
@@ -147,5 +156,8 @@ export function mapSettingsRowToForm(data: OrganizationSettings): OrganizationSe
     fiscal_year_end_month: Number(data.fiscal_year_end_month ?? 6),
     fiscal_year_end_day: Number(data.fiscal_year_end_day ?? 30),
     estimated_corp_tax_rate: Number(data.estimated_corp_tax_rate ?? 0.12),
+    wip_accrual_enabled: Boolean(data.wip_accrual_enabled ?? false),
+    hsf_rate: Number(data.hsf_rate ?? 0.0165),
+    cnesst_rate: Number(data.cnesst_rate ?? 0.01),
   }
 }

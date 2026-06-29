@@ -213,6 +213,22 @@ export function sumEmployerContributions(f: {
   ei_employer: number
   qpip_employer: number
   employer_benefits: number
+  hsf_employer?: number
+  cnesst_employer?: number
 }): number {
-  return f.cpp_employer + f.ei_employer + f.qpip_employer + f.employer_benefits
+  return (
+    f.cpp_employer +
+    f.ei_employer +
+    f.qpip_employer +
+    f.employer_benefits +
+    Number(f.hsf_employer ?? 0) +
+    Number(f.cnesst_employer ?? 0)
+  )
+}
+
+export function calculateEmployerLevies(grossPay: number, hsfRate: number, cnesstRate: number) {
+  return {
+    hsf_employer: round2(grossPay * hsfRate),
+    cnesst_employer: round2(grossPay * cnesstRate),
+  }
 }

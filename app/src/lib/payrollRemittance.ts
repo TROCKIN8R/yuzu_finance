@@ -11,6 +11,8 @@ export type PayrollRemittanceFields = {
   ei_employer: number
   qpip_employer: number
   employer_benefits: number
+  hsf_employer?: number
+  cnesst_employer?: number
 }
 
 export function payrollIncomeTaxWithheld(p: Pick<
@@ -41,8 +43,12 @@ export function employerStatutoryContributions(p: Pick<
   return Number(p.cpp_employer) + Number(p.ei_employer) + Number(p.qpip_employer)
 }
 
+export function payrollLeviesRemittance(p: Pick<PayrollRemittanceFields, 'hsf_employer' | 'cnesst_employer'>): number {
+  return Number(p.hsf_employer ?? 0) + Number(p.cnesst_employer ?? 0)
+}
+
 export function employerPayrollExpenseContributions(p: PayrollRemittanceFields): number {
-  return employerStatutoryContributions(p) + Number(p.employer_benefits)
+  return employerStatutoryContributions(p) + Number(p.employer_benefits) + payrollLeviesRemittance(p)
 }
 
 /** Total due to CRA / Revenu Québec for source deductions on a payroll run. */

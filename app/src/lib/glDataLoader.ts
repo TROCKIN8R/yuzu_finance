@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { GeneralLedgerBuildInput } from './financials'
+import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
 
 export async function fetchGeneralLedgerData(): Promise<{
   data: GeneralLedgerBuildInput
@@ -16,6 +17,8 @@ export async function fetchGeneralLedgerData(): Promise<{
     salesTax,
     adjustments,
     settingsRow,
+    timeEntries,
+    fixedProjects,
   ] = await Promise.all([
     supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
     supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number, status)'),
@@ -24,7 +27,7 @@ export async function fetchGeneralLedgerData(): Promise<{
     supabase
       .from('payroll_runs')
       .select(
-        'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
+        'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, hsf_employer, cnesst_employer, net_pay, reimbursement_total'
       ),
     supabase.from('dividends').select('id, declared_date, payment_date, total_amount, paid_amount, description, status'),
     supabase
@@ -34,8 +37,15 @@ export async function fetchGeneralLedgerData(): Promise<{
     supabase.from('accounting_adjustments').select('*'),
     supabase
       .from('organization_settings')
-      .select('share_capital, opening_retained_earnings, opening_cash_balance, opening_balance_date, estimated_corp_tax_rate')
+      .select(
+        'share_capital, opening_retained_earnings, opening_cash_balance, opening_balance_date, estimated_corp_tax_rate, wip_accrual_enabled, hsf_rate, cnesst_rate'
+      )
       .maybeSingle(),
+    supabase.from('time_entries').select('entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate)'),
+    supabase
+      .from('projects')
+      .select('id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate')
+      .eq('billing_type', 'fixed'),
   ])
 
   const warnings: string[] = []
@@ -48,6 +58,9 @@ export async function fetchGeneralLedgerData(): Promise<{
   }
   if (settingsRow.error) {
     warnings.push(`Paramètres comptables non chargés : ${settingsRow.error.message}`)
+  }
+  if (timeEntries.error) {
+    warnings.push(`Temps non chargé pour WIP : ${timeEntries.error.message}`)
   }
 
   return {
@@ -62,6 +75,8 @@ export async function fetchGeneralLedgerData(): Promise<{
       salesTaxRemittances: salesTax.data ?? [],
       adjustments: adjustments.data ?? [],
       settings: settingsRow.data,
+      timeEntries: (timeEntries.data ?? []) as MetricsTimeEntry[],
+      fixedProjects: (fixedProjects.data ?? []) as MetricsProject[],
     },
     warnings,
   }
