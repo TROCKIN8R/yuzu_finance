@@ -25,6 +25,7 @@ export function GeneralLedgerPage() {
   const [dateTo, setDateTo] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
   const [view, setView] = useState<'journal' | 'trial'>('journal')
+  const [loadWarnings, setLoadWarnings] = useState<string[]>([])
 
   useEffect(() => {
     load()
@@ -32,7 +33,9 @@ export function GeneralLedgerPage() {
 
   async function load() {
     setLoading(true)
-    const [invoices, payments, expenses, employeeExpenses, payroll, dividends, corpTax, salesTax, adjustments] = await Promise.all([
+    setLoadWarnings([])
+    const [invoices, payments, expenses, employeeExpenses, payroll, dividends, corpTax, salesTax, adjustments, settingsRow] =
+      await Promise.all([
       supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
       supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number)'),
       supabase.from('expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, paid, payroll_run_id'),
@@ -46,7 +49,28 @@ export function GeneralLedgerPage() {
       supabase.from('corporate_tax_records').select('id, paid_date, paid_amount, label, fiscal_year'),
       supabase.from('sales_tax_periods').select('id, period_end, filed_date, gst_net, qst_net, status'),
       supabase.from('accounting_adjustments').select('*'),
+      supabase
+        .from('organization_settings')
+        .select('share_capital, opening_cash_balance, opening_balance_date')
+        .maybeSingle(),
     ])
+
+    const warnings: string[] = []
+    if (adjustments.error) {
+      warnings.push(
+        adjustments.error.message.includes('accounting_adjustments')
+          ? 'Ajustements manuels non chargés — exécutez la migration 20260630150100_accounting_adjustments.sql dans Supabase.'
+          : `Ajustements non chargés : ${adjustments.error.message}`
+      )
+    }
+    if (settingsRow.error) {
+      warnings.push(
+        settingsRow.error.message.includes('opening_balance_date')
+          ? 'Soldes d\'ouverture non chargés — exécutez la migration 20260630150000_opening_balance_date.sql dans Supabase.'
+          : `Paramètres comptables non chargés : ${settingsRow.error.message}`
+      )
+    }
+    setLoadWarnings(warnings)
 
     setEntries(
       buildGeneralLedger({
@@ -59,6 +83,7 @@ export function GeneralLedgerPage() {
         corporateTax: corpTax.data ?? [],
         salesTaxRemittances: salesTax.data ?? [],
         adjustments: adjustments.data ?? [],
+        settings: settingsRow.data,
       })
     )
     setLoading(false)
@@ -100,6 +125,16 @@ export function GeneralLedgerPage() {
           </Button>
         }
       />
+
+      {loadWarnings.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {loadWarnings.map((msg) => (
+            <p key={msg} className="text-sm text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              {msg}
+            </p>
+          ))}
+        </div>
+      )}
 
       <ViewToggle
         value={view}

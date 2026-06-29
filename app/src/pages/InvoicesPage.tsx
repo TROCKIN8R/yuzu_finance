@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
-import { customerPartners } from '../lib/partners'
+import { customerPartners, INVOICE_LANGUAGE_LABELS } from '../lib/partners'
+import { partnerInvoiceLanguage } from '../lib/invoiceI18n'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import {
@@ -309,11 +310,15 @@ export function InvoicesPage() {
     }
   }
 
-  function handlePdf() {
+  async function handlePdf() {
     if (!selected || !settings) return
     const partner = partners.find((p) => p.id === selected.partner_id)
     if (!partner) return
-    downloadInvoicePdf({ invoice: selected, partner, settings, lines: lineItems })
+    try {
+      await downloadInvoicePdf({ invoice: selected, partner, settings, lines: lineItems })
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur lors de la génération du PDF')
+    }
   }
 
   const preview = previewTotals()
@@ -607,6 +612,12 @@ export function InvoicesPage() {
               <div>
                 <div className="text-muted text-xs">Échéance</div>
                 <div>{formatDate(selected.due_date)}</div>
+              </div>
+              <div>
+                <div className="text-muted text-xs">Langue PDF</div>
+                <div>
+                  {INVOICE_LANGUAGE_LABELS[partnerInvoiceLanguage(partners.find((p) => p.id === selected.partner_id)?.language)]}
+                </div>
               </div>
             </div>
 

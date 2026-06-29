@@ -204,6 +204,8 @@ export type InvoiceStatus = 'draft' | 'sent' | 'partial' | 'paid' | 'void'
 
 export type PartnerKind = 'customer' | 'provider' | 'both'
 
+export type InvoiceLanguage = 'fr' | 'en'
+
 export interface Partner {
   id: string
   user_id: string
@@ -216,7 +218,7 @@ export interface Partner {
   province: string | null
   postal_code: string | null
   country: string | null
-  language: string | null
+  language: InvoiceLanguage | null
   payment_terms_days: number | null
   notes: string | null
   created_at: string
@@ -334,9 +336,17 @@ export interface OrganizationSettings {
   invoice_prefix: string
   payment_terms_days: number
   payment_instructions: string | null
+  interac_email: string | null
+  bank_institution: string | null
+  bank_transit: string | null
+  bank_account: string | null
+  billing_inquiries_email: string | null
+  payment_instructions_fr: string | null
+  payment_instructions_en: string | null
   share_capital: number
   opening_retained_earnings: number
   opening_cash_balance: number
+  opening_balance_date: string | null
   fiscal_year_end_month: number
   fiscal_year_end_day: number
   estimated_corp_tax_rate: number

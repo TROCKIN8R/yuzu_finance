@@ -5,8 +5,9 @@ export function formatCad(amount: number): string {
   }).format(amount)
 }
 
-export function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('fr-CA', { dateStyle: 'medium' }).format(new Date(iso + 'T12:00:00'))
+export function formatDate(iso: string, language: 'fr' | 'en' = 'fr'): string {
+  const locale = language === 'en' ? 'en-CA' : 'fr-CA'
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(iso + 'T12:00:00'))
 }
 
 export function todayIso(): string {

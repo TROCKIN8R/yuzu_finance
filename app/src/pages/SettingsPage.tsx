@@ -1,13 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { OrganizationSettings } from '../lib/types'
+import {
+  buildOrganizationSettingsRow,
+  buildOrganizationSettingsRowLegacy,
+  mapSettingsRowToForm,
+  settingsSaveErrorMessage,
+  type OrganizationSettingsForm,
+} from '../lib/organizationSettings'
+import {
+  composePaymentInstructions,
+  DEFAULT_BILLING_EMAIL,
+} from '../lib/paymentInstructions'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 
-const defaults: Omit<OrganizationSettings, 'user_id'> = {
+const defaults: OrganizationSettingsForm = {
   company_legal_name: '',
   company_operating_name: '',
   address_line1: '',
@@ -26,73 +37,115 @@ const defaults: Omit<OrganizationSettings, 'user_id'> = {
   qst_rate: 0.09975,
   invoice_prefix: 'YUZU',
   payment_terms_days: 30,
-  payment_instructions: '',
+  payment_instructions: null,
+  interac_email: DEFAULT_BILLING_EMAIL,
+  bank_institution: '',
+  bank_transit: '',
+  bank_account: '',
+  billing_inquiries_email: DEFAULT_BILLING_EMAIL,
+  payment_instructions_fr: null,
+  payment_instructions_en: null,
   share_capital: 0,
   opening_retained_earnings: 0,
   opening_cash_balance: 0,
+  opening_balance_date: null,
   fiscal_year_end_month: 6,
   fiscal_year_end_day: 30,
   estimated_corp_tax_rate: 0.12,
+}
+
+function withBillingDefaults(form: OrganizationSettingsForm): OrganizationSettingsForm {
+  return {
+    ...form,
+    interac_email: form.interac_email?.trim() || DEFAULT_BILLING_EMAIL,
+    billing_inquiries_email: form.billing_inquiries_email?.trim() || DEFAULT_BILLING_EMAIL,
+    bank_institution: form.bank_institution ?? '',
+    bank_transit: form.bank_transit ?? '',
+    bank_account: form.bank_account ?? '',
+  }
 }
 
 export function SettingsPage() {
   const [form, setForm] = useState(defaults)
   const [userId, setUserId] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const paymentPreviewFr = useMemo(() => composePaymentInstructions(form, 'fr'), [form])
+  const paymentPreviewEn = useMemo(() => composePaymentInstructions(form, 'en'), [form])
 
   useEffect(() => {
     load()
   }, [])
 
   async function load() {
+    setLoadError(null)
     const { data: session } = await supabase.auth.getSession()
     const uid = session.session?.user.id
     if (!uid) return
     setUserId(uid)
-    const { data } = await supabase.from('organization_settings').select('*').eq('user_id', uid).maybeSingle()
+
+    const { data, error } = await supabase.from('organization_settings').select('*').eq('user_id', uid).maybeSingle()
+    if (error) {
+      setLoadError(settingsSaveErrorMessage(error))
+      setForm(defaults)
+      return
+    }
+
     if (data) {
-      setForm({
-        ...defaults,
-        ...data,
-        company_operating_name: data.company_operating_name ?? '',
-        address_line1: data.address_line1 ?? '',
-        city: data.city ?? '',
-        province: data.province ?? 'QC',
-        postal_code: data.postal_code ?? '',
-        country: data.country ?? 'Canada',
-        neq: data.neq ?? '',
-        gst_number: data.gst_number ?? '',
-        qst_number: data.qst_number ?? '',
-        email: data.email ?? '',
-        phone: data.phone ?? '',
-        payment_instructions: data.payment_instructions ?? '',
-        share_capital: Number(data.share_capital ?? 0),
-        opening_retained_earnings: Number(data.opening_retained_earnings ?? 0),
-        opening_cash_balance: Number(data.opening_cash_balance ?? 0),
-        fiscal_year_end_month: Number(data.fiscal_year_end_month ?? 6),
-        fiscal_year_end_day: Number(data.fiscal_year_end_day ?? 30),
-        estimated_corp_tax_rate: Number(data.estimated_corp_tax_rate ?? 0.12),
-      })
+      setForm(withBillingDefaults(mapSettingsRowToForm(data as OrganizationSettings)))
+    } else {
+      setForm(defaults)
     }
   }
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
-    if (!userId) return
-    const payload = {
-      ...form,
-      company_operating_name: form.company_operating_name || null,
-      address_line1: form.address_line1 || null,
-      city: form.city || null,
-      postal_code: form.postal_code || null,
-      neq: form.neq || null,
-      gst_number: form.gst_number || null,
-      qst_number: form.qst_number || null,
-      email: form.email || null,
-      phone: form.phone || null,
-      payment_instructions: form.payment_instructions || null,
+    if (!userId || saving) return
+
+    setSaving(true)
+    setSaveError(null)
+
+    const payment_instructions_fr = composePaymentInstructions(form, 'fr')
+    const payment_instructions_en = composePaymentInstructions(form, 'en')
+    const row = buildOrganizationSettingsRow(userId, form, payment_instructions_fr, payment_instructions_en)
+
+    let usedLegacyFallback = false
+
+    let { error } = await supabase.from('organization_settings').upsert(row, { onConflict: 'user_id' })
+
+    if (
+      error &&
+      (error.message.includes('interac_email') ||
+        error.message.includes('payment_instructions_fr') ||
+        error.message.includes('bank_institution'))
+    ) {
+      const legacyRow = buildOrganizationSettingsRowLegacy(userId, form, payment_instructions_fr)
+      const retry = await supabase.from('organization_settings').upsert(legacyRow, { onConflict: 'user_id' })
+      error = retry.error
+      usedLegacyFallback = !error
     }
-    await supabase.from('organization_settings').upsert({ user_id: userId, ...payload })
+
+    setSaving(false)
+
+    if (error) {
+      setSaveError(settingsSaveErrorMessage(error))
+      return
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      payment_instructions_fr: payment_instructions_fr || null,
+      payment_instructions_en: payment_instructions_en || null,
+      payment_instructions: payment_instructions_fr || null,
+    }))
+    setSaveError(
+      usedLegacyFallback
+        ? 'Enregistré (sans coordonnées de paiement) — exécutez la migration 20260630140000_billing_payment_settings.sql dans Supabase.'
+        : null
+    )
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -102,6 +155,9 @@ export function SettingsPage() {
   return (
     <PageShell width="narrow">
       <PageHeader title="Paramètres" subtitle="Entreprise, taxes, exercice fiscal et avoir." />
+      {loadError && (
+        <p className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{loadError}</p>
+      )}
       <form onSubmit={save} className="space-y-6 ui-card p-5">
         <section className="space-y-3">
           <h2 className="font-medium">Entreprise</h2>
@@ -147,11 +203,88 @@ export function SettingsPage() {
             <Field label="Préfixe factures"><input className={inputClass} value={form.invoice_prefix} onChange={(e) => setForm({ ...form, invoice_prefix: e.target.value })} /></Field>
             <Field label="Délai paiement (jours)"><input type="number" className={inputClass} value={form.payment_terms_days} onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })} /></Field>
           </div>
-          <Field label="Instructions de paiement"><textarea className={inputClass} rows={2} value={form.payment_instructions ?? ''} onChange={(e) => setForm({ ...form, payment_instructions: e.target.value })} /></Field>
+
+          <div className="rounded-lg border border-border bg-stone-50/80 p-3 space-y-3">
+            <div>
+              <h3 className="text-sm font-medium">Coordonnées de paiement</h3>
+              <p className="text-xs text-muted mt-0.5">
+                Données sensibles — stockées dans Supabase uniquement. Utilisées pour générer le pied de page bilingue
+                des factures.
+              </p>
+            </div>
+            <Field label="Courriel Interac">
+              <input
+                type="email"
+                className={inputClass}
+                value={form.interac_email ?? ''}
+                onChange={(e) => setForm({ ...form, interac_email: e.target.value })}
+              />
+            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Field label="Institution">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  placeholder="623"
+                  value={form.bank_institution ?? ''}
+                  onChange={(e) => setForm({ ...form, bank_institution: e.target.value })}
+                />
+              </Field>
+              <Field label="Transit">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  value={form.bank_transit ?? ''}
+                  onChange={(e) => setForm({ ...form, bank_transit: e.target.value })}
+                />
+              </Field>
+              <Field label="Compte">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={form.bank_account ?? ''}
+                  onChange={(e) => setForm({ ...form, bank_account: e.target.value })}
+                />
+              </Field>
+            </div>
+            <Field label="Courriel comptabilité (questions)">
+              <input
+                type="email"
+                className={inputClass}
+                value={form.billing_inquiries_email ?? ''}
+                onChange={(e) => setForm({ ...form, billing_inquiries_email: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Pied de page facture — français">
+              <textarea className={`${inputClass} bg-stone-50`} rows={6} readOnly value={paymentPreviewFr} />
+            </Field>
+            <Field label="Pied de page facture — English">
+              <textarea className={`${inputClass} bg-stone-50`} rows={6} readOnly value={paymentPreviewEn} />
+            </Field>
+          </div>
+          <p className="text-xs text-muted">
+            Aperçu en direct. Enregistrez pour stocker les versions FR et EN ; la facture PDF utilise celle du partenaire.
+          </p>
         </section>
 
         <section className="space-y-3">
           <h2 className="font-medium">Exercice fiscal et avoir</h2>
+          <p className="text-xs text-muted">
+            Le capital-actions et la trésorerie d&apos;ouverture génèrent une écriture d&apos;ouverture dans le grand
+            livre (Dr banque · Cr capital-actions). Indiquez la date d&apos;apport (incorporation ou virement initial).
+          </p>
+          <Field label="Date des soldes d'ouverture">
+            <input
+              type="date"
+              className={inputClass}
+              value={form.opening_balance_date ?? ''}
+              onChange={(e) => setForm({ ...form, opening_balance_date: e.target.value || null })}
+            />
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fin AF — mois"><input type="number" min={1} max={12} className={inputClass} value={form.fiscal_year_end_month} onChange={(e) => setForm({ ...form, fiscal_year_end_month: Number(e.target.value) })} /></Field>
             <Field label="Fin AF — jour"><input type="number" min={1} max={31} className={inputClass} value={form.fiscal_year_end_day} onChange={(e) => setForm({ ...form, fiscal_year_end_day: Number(e.target.value) })} /></Field>
@@ -162,9 +295,14 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <div className="flex items-center gap-3">
-          <Button type="submit">Enregistrer</Button>
-          {saved && <span className="text-sm text-emerald-600">Enregistré.</span>}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Button type="submit" disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Button>
+          {saved && !saveError && <span className="text-sm text-emerald-600">Enregistré.</span>}
+          {saveError && (
+            <span className={`text-sm ${saveError.includes('partiellement') ? 'text-amber-800' : 'text-red-700'}`}>
+              {saveError}
+            </span>
+          )}
         </div>
       </form>
     </PageShell>

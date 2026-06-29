@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Partner, PartnerKind } from '../lib/types'
+import type { Partner, PartnerKind, InvoiceLanguage } from '../lib/types'
 import { matchesSearch, countActiveFilters } from '../lib/filters'
-import { PARTNER_KIND_LABELS } from '../lib/partners'
+import { INVOICE_LANGUAGE_LABELS, PARTNER_KIND_LABELS } from '../lib/partners'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -23,6 +23,7 @@ const empty: Partial<Partner> = {
   province: 'QC',
   postal_code: '',
   country: 'Canada',
+  language: 'fr' as InvoiceLanguage,
   payment_terms_days: 30,
   notes: '',
 }
@@ -92,6 +93,7 @@ export function PartnersPage() {
       province: form.province || null,
       postal_code: form.postal_code || null,
       country: form.country || null,
+      language: form.language ?? 'fr',
       payment_terms_days: form.payment_terms_days ?? 30,
       notes: form.notes || null,
     }
@@ -151,6 +153,7 @@ export function PartnersPage() {
                   <th className="px-4 py-3 font-medium">Rôle</th>
                   <th className="px-4 py-3 font-medium">Contact</th>
                   <th className="px-4 py-3 font-medium">Courriel</th>
+                  <th className="px-4 py-3 font-medium">Langue facture</th>
                   <th className="px-4 py-3 font-medium">Ville</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -164,6 +167,9 @@ export function PartnersPage() {
                     </td>
                     <td className="px-4 py-3 text-muted">{p.contact_name ?? '—'}</td>
                     <td className="px-4 py-3 text-muted">{p.email ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {p.kind === 'provider' ? '—' : INVOICE_LANGUAGE_LABELS[p.language === 'en' ? 'en' : 'fr']}
+                    </td>
                     <td className="px-4 py-3 text-muted">{p.city ?? '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex flex-wrap gap-1 justify-end">
@@ -251,14 +257,27 @@ export function PartnersPage() {
             </Field>
           </div>
           {(form.kind === 'customer' || form.kind === 'both') && (
-            <Field label="Délai de paiement (jours)">
-              <input
-                type="number"
-                className={inputClass}
-                value={form.payment_terms_days ?? 30}
-                onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })}
-              />
-            </Field>
+            <>
+              <Field label="Langue des factures">
+                <select
+                  className={inputClass}
+                  value={form.language ?? 'fr'}
+                  onChange={(e) => setForm({ ...form, language: e.target.value as InvoiceLanguage })}
+                >
+                  <option value="fr">{INVOICE_LANGUAGE_LABELS.fr}</option>
+                  <option value="en">{INVOICE_LANGUAGE_LABELS.en}</option>
+                </select>
+                <p className="text-xs text-muted mt-1">Détermine la langue du PDF (titres, colonnes, taxes).</p>
+              </Field>
+              <Field label="Délai de paiement (jours)">
+                <input
+                  type="number"
+                  className={inputClass}
+                  value={form.payment_terms_days ?? 30}
+                  onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })}
+                />
+              </Field>
+            </>
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>

@@ -7,7 +7,7 @@ import {
   type AccountType,
 } from './chartOfAccounts'
 import { lastDayOfMonth, monthsInRange } from './fiscalPeriod'
-import type { AccountingAdjustment } from './types'
+import type { AccountingAdjustment, OrganizationSettings } from './types'
 
 export type { AccountType, Account } from './chartOfAccounts'
 export { CHART_OF_ACCOUNTS }
@@ -167,9 +167,15 @@ export function buildGeneralLedger(data: {
     status: string
   }[]
   adjustments?: AccountingAdjustment[]
+  settings?: Pick<
+    OrganizationSettings,
+    'share_capital' | 'opening_cash_balance' | 'opening_balance_date'
+  > | null
   periodEnd?: string
 }): JournalEntry[] {
   const entries: JournalEntry[] = []
+
+  entries.push(...buildOpeningBalanceEntries(data.settings))
 
   for (const inv of data.invoices) {
     if (!isRevenueInvoice(inv.status)) continue
@@ -378,7 +384,7 @@ export function buildGeneralLedger(data: {
     if (!adj.active) continue
     const end = adj.end_date ?? adj.start_date
     if (adj.adjustment_type === 'manual') {
-      const amt = Number(adj.total_amount ?? adj.monthly_amount ?? 0)
+      const amt = round2(Number(adj.total_amount ?? adj.monthly_amount ?? 0))
       if (amt > 0 && adj.start_date <= cap) {
         entries.push(
           entry(
@@ -414,6 +420,43 @@ export function buildGeneralLedger(data: {
   }
 
   return entries.sort((a, b) => a.date.localeCompare(b.date) || a.reference.localeCompare(b.reference))
+}
+
+export function buildOpeningBalanceEntries(
+  settings: Pick<OrganizationSettings, 'share_capital' | 'opening_cash_balance' | 'opening_balance_date'> | null | undefined
+): JournalEntry[] {
+  if (!settings) return []
+
+  const shareCapital = round2(Number(settings.share_capital ?? 0))
+  const openingCash = round2(Number(settings.opening_cash_balance ?? 0))
+  if (shareCapital <= 0 && openingCash <= 0) return []
+
+  const date = settings.opening_balance_date ?? '2000-01-01'
+  const entries: JournalEntry[] = []
+
+  const cashDebit = openingCash > 0 ? openingCash : shareCapital
+  const capitalCredit = shareCapital > 0 ? shareCapital : openingCash
+  if (cashDebit > 0 && capitalCredit > 0) {
+    const lines = [jl('1010', cashDebit, 0), jl('3000', 0, capitalCredit)]
+    const diff = round2(cashDebit - capitalCredit)
+    if (Math.abs(diff) > 0.01) {
+      if (diff > 0) lines.push(jl('3100', 0, diff))
+      else lines.push(jl('3100', Math.abs(diff), 0))
+    }
+    entries.push(
+      entry(
+        'opening-capital',
+        date,
+        'opening',
+        'settings',
+        'OUVERTURE',
+        'Apport en capital — solde d\'ouverture',
+        lines
+      )
+    )
+  }
+
+  return entries
 }
 
 export function filterEntriesByPeriod(entries: JournalEntry[], start: string, end: string): JournalEntry[] {

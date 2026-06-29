@@ -1,9 +1,14 @@
-import type { Partner, PartnerKind } from './types'
+import type { Partner, PartnerKind, InvoiceLanguage } from './types'
 
 export const PARTNER_KIND_LABELS: Record<PartnerKind, string> = {
   customer: 'Client',
   provider: 'Fournisseur',
   both: 'Client et fournisseur',
+}
+
+export const INVOICE_LANGUAGE_LABELS: Record<InvoiceLanguage, string> = {
+  fr: 'Français',
+  en: 'English',
 }
 
 export function isCustomerPartner(kind: PartnerKind) {
