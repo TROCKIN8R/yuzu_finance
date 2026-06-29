@@ -81,8 +81,143 @@ function gridLines(min: number, max: number, height: number, width: number) {
 
 export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) {
   if (points.length === 0) return <EmptyChart message="Pas assez de données" />
-  const values = points.map((p) => p.revenue)
-  if (values.every((v) => v === 0)) return <EmptyChart message="Aucun revenu sur la période" />
+  const invoiced = points.map((p) => p.invoicedRevenue)
+  const worked = points.map((p) => p.workedRevenue)
+  if (invoiced.every((v) => v === 0) && worked.every((v) => v === 0)) {
+    return <EmptyChart message="Aucun revenu sur la période" />
+  }
+
+  const values = [...invoiced, ...worked]
+  const width = 560
+  const innerW = width - PAD.left - PAD.right
+  const innerH = CHART_H - PAD.top - PAD.bottom
+  const { min, max, span } = scaleLinear(values)
+
+  const linePath = (data: number[]) =>
+    data
+      .map((v, i) => {
+        const x = PAD.left + xPos(i, points.length, innerW)
+        const y = PAD.top + yPos(v, min, span, innerH)
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
+      })
+      .join(' ')
+
+  const invoicedPath = linePath(invoiced)
+  const workedPath = linePath(worked)
+
+  return (
+    <ChartShell
+      title="Prestations vs facturation"
+      subtitle="Réalisé (temps) et facturé (HT) par mois"
+      legend={
+        <>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-sky-600" /> Prestations réalisées
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-yuzu" /> Revenus facturés
+          </span>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Prestations vs facturation">
+        <g transform={`translate(0, ${PAD.top})`}>
+          {gridLines(min, max, innerH, innerW).map((g) => (
+            <g key={g.key} transform={`translate(${PAD.left}, 0)`}>
+              {g}
+            </g>
+          ))}
+        </g>
+        <path d={workedPath} fill="none" stroke="#0284c7" strokeWidth={2} strokeLinejoin="round" strokeDasharray="5 3" />
+        <path d={invoicedPath} fill="none" stroke="#e5a817" strokeWidth={2.5} strokeLinejoin="round" />
+        {points.map((p, i) => {
+          const x = PAD.left + xPos(i, points.length, innerW)
+          const show = points.length <= 6 || i % Math.ceil(points.length / 6) === 0 || i === points.length - 1
+          if (!show) return null
+          return (
+            <text key={p.month} x={x} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+              {p.label}
+            </text>
+          )
+        })}
+      </svg>
+    </ChartShell>
+  )
+}
+
+export function ProfitabilityChart({ points }: { points: MonthlySeriesPoint[] }) {
+  if (points.length === 0) return <EmptyChart message="Pas assez de données" />
+  const hasData = points.some((p) => p.invoicedRevenue !== 0 || p.payrollCost !== 0 || p.operatingExpenses !== 0)
+  if (!hasData) return <EmptyChart message="Aucune donnée de rentabilité" />
+
+  const maxVal = Math.max(
+    ...points.flatMap((p) => [p.invoicedRevenue, p.payrollCost + p.operatingExpenses, Math.abs(p.operatingIncome)]),
+    1
+  )
+  const barGroupW = Math.min(52, 480 / points.length)
+  const barW = barGroupW * 0.22
+  const width = Math.max(320, points.length * (barGroupW + 8) + PAD.left + PAD.right)
+  const innerH = CHART_H - PAD.top - PAD.bottom
+
+  return (
+    <ChartShell
+      title="Rentabilité d'exploitation"
+      subtitle="Revenus facturés, coûts et résultat par mois"
+      legend={
+        <>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-yuzu" /> Revenus
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-orange-400" /> Coûts
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-violet-500" /> Résultat
+          </span>
+        </>
+      }
+    >
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Rentabilité">
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+          const y = PAD.top + innerH * (1 - t)
+          return (
+            <g key={t}>
+              <line x1={PAD.left} y1={y} x2={width - PAD.right} y2={y} stroke="#e7e5e4" strokeWidth={1} />
+              <text x={PAD.left - 6} y={y + 4} textAnchor="end" className="fill-stone-400" fontSize={9}>
+                {compactCad(maxVal * t)}
+              </text>
+            </g>
+          )
+        })}
+        {points.map((p, i) => {
+          const gx = PAD.left + i * (barGroupW + 8) + barGroupW / 2
+          const baseY = PAD.top + innerH
+          const revH = (p.invoicedRevenue / maxVal) * innerH
+          const costH = ((p.payrollCost + p.operatingExpenses) / maxVal) * innerH
+          const opH = (Math.abs(p.operatingIncome) / maxVal) * innerH
+          const opY = p.operatingIncome >= 0 ? baseY - opH : baseY
+          return (
+            <g key={p.month}>
+              <rect x={gx - barW * 1.5 - 2} y={baseY - revH} width={barW} height={revH || 0} rx={2} fill="#e5a817" />
+              <rect x={gx - barW / 2} y={baseY - costH} width={barW} height={costH || 0} rx={2} fill="#fb923c" />
+              <rect x={gx + barW / 2 + 2} y={opY} width={barW} height={opH || 0} rx={2} fill={p.operatingIncome >= 0 ? '#8b5cf6' : '#f87171'} />
+              {(points.length <= 8 || i % Math.ceil(points.length / 8) === 0) && (
+                <text x={gx} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+                  {p.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </ChartShell>
+  )
+}
+
+export function PayrollTrendChart({ points }: { points: MonthlySeriesPoint[] }) {
+  if (points.length === 0) return <EmptyChart message="Pas assez de données" />
+  const values = points.map((p) => p.payrollCost)
+  if (values.every((v) => v === 0)) return <EmptyChart message="Aucune paie sur la période" />
 
   const width = 560
   const innerW = width - PAD.left - PAD.right
@@ -91,15 +226,15 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
   const linePath = points
     .map((p, i) => {
       const x = PAD.left + xPos(i, points.length, innerW)
-      const y = PAD.top + yPos(p.revenue, min, span, innerH)
+      const y = PAD.top + yPos(p.payrollCost, min, span, innerH)
       return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
     })
     .join(' ')
   const areaPath = `${linePath} L ${PAD.left + xPos(points.length - 1, points.length, innerW)} ${PAD.top + innerH} L ${PAD.left + xPos(0, points.length, innerW)} ${PAD.top + innerH} Z`
 
   return (
-    <ChartShell title="Tendance des revenus" subtitle="Revenus HT facturés par mois">
-      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Tendance des revenus">
+    <ChartShell title="Coût de la paie" subtitle="Salaire brut + charges patronales par mois">
+      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Coût de la paie">
         <g transform={`translate(0, ${PAD.top})`}>
           {gridLines(min, max, innerH, innerW).map((g) => (
             <g key={g.key} transform={`translate(${PAD.left}, 0)`}>
@@ -107,12 +242,12 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
             </g>
           ))}
         </g>
-        <path d={areaPath} fill="#fef9e8" />
-        <path d={linePath} fill="none" stroke="#e5a817" strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={areaPath} fill="#fff7ed" />
+        <path d={linePath} fill="none" stroke="#ea580c" strokeWidth={2.5} strokeLinejoin="round" />
         {points.map((p, i) => {
           const x = PAD.left + xPos(i, points.length, innerW)
-          const y = PAD.top + yPos(p.revenue, min, span, innerH)
-          return <circle key={p.month} cx={x} cy={y} r={3.5} fill="#e5a817" />
+          const y = PAD.top + yPos(p.payrollCost, min, span, innerH)
+          return <circle key={p.month} cx={x} cy={y} r={3.5} fill="#ea580c" />
         })}
         {points.map((p, i) => {
           const x = PAD.left + xPos(i, points.length, innerW)

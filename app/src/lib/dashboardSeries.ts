@@ -1,3 +1,4 @@
+import { effectiveRate, lineAmount, relationOne } from './format'
 import { payrollEmployerTotal } from './financials'
 import type { DateRange } from './fiscalPeriod'
 import { isRevenueInvoice } from './taxes'
@@ -5,7 +6,13 @@ import { isRevenueInvoice } from './taxes'
 export interface MonthlySeriesPoint {
   month: string
   label: string
+  /** Invoiced revenue (HT) — alias kept for chart compatibility */
   revenue: number
+  invoicedRevenue: number
+  workedRevenue: number
+  payrollCost: number
+  operatingExpenses: number
+  operatingIncome: number
   cashIn: number
   cashOut: number
   netCashFlow: number
@@ -56,6 +63,14 @@ type DividendRow = {
   declared_date: string
   payment_date: string | null
   status: string
+}
+
+type TimeEntryRow = {
+  entry_date: string
+  hours: number
+  rate_override: number | null
+  billable: boolean
+  projects?: { default_hourly_rate: number } | { default_hourly_rate: number }[] | null
 }
 
 function round2(n: number) {
@@ -123,6 +138,7 @@ export function buildMonthlySeries(
     payments: PaymentRow[]
     expenses: ExpenseRow[]
     payrollRuns: PayrollRow[]
+    timeEntries?: TimeEntryRow[]
     dividends: DividendRow[]
     corporateTax: { paid_amount: number; paid_date?: string | null }[]
     salesTaxRemitted: { gst_net: number; qst_net: number; filed_date?: string | null; period_end: string }[]
@@ -140,9 +156,11 @@ export function buildMonthlySeries(
   if (months.length === 0) return []
 
   const revenueByMonth = new Map<string, number>()
+  const workedByMonth = new Map<string, number>()
   const cashInByMonth = new Map<string, number>()
   const cashOutByMonth = new Map<string, number>()
-  const operatingByMonth = new Map<string, number>()
+  const opexByMonth = new Map<string, number>()
+  const payrollByMonth = new Map<string, number>()
   const dividendsByMonth = new Map<string, number>()
 
   const add = (map: Map<string, number>, ym: string, amount: number) => {
@@ -163,22 +181,29 @@ export function buildMonthlySeries(
     add(cashInByMonth, ym, Number(p.amount))
   }
 
+  for (const e of data.timeEntries ?? []) {
+    if (!e.billable) continue
+    const ym = monthKey(e.entry_date)
+    if (!months.includes(ym)) continue
+    const proj = relationOne<{ default_hourly_rate: number }>(e.projects)
+    if (!proj) continue
+    add(workedByMonth, ym, lineAmount(Number(e.hours), effectiveRate(e, proj)))
+  }
+
   for (const e of data.expenses) {
-    if (!e.paid || !isOperatingExpense(e)) continue
+    if (!isOperatingExpense(e)) continue
     const ym = monthKey(e.expense_date)
     if (!months.includes(ym)) continue
-    add(cashOutByMonth, ym, Number(e.total))
-    if (months.includes(ym)) {
-      add(operatingByMonth, ym, Number(e.amount))
-    }
+    add(opexByMonth, ym, Number(e.amount))
+    if (e.paid) add(cashOutByMonth, ym, Number(e.total))
   }
 
   for (const p of data.payrollRuns) {
     const ym = monthKey(p.payment_date)
     if (months.includes(ym)) {
+      add(payrollByMonth, ym, payrollEmployerTotal(p))
       add(cashOutByMonth, ym, Number(p.net_pay))
       add(cashOutByMonth, ym, Number(p.cpp_employer) + Number(p.ei_employer) + Number(p.qpip_employer) + Number(p.employer_benefits))
-      add(operatingByMonth, ym, payrollEmployerTotal(p))
     }
     if (p.remittance_status === 'remitted' && p.remittance_date) {
       const rym = monthKey(p.remittance_date)
@@ -215,18 +240,26 @@ export function buildMonthlySeries(
   let cumulativeRE = openingRE
 
   return months.map((month) => {
-    const revenue = revenueByMonth.get(month) ?? 0
+    const invoicedRevenue = revenueByMonth.get(month) ?? 0
+    const workedRevenue = workedByMonth.get(month) ?? 0
     const cashIn = cashInByMonth.get(month) ?? 0
     const cashOut = cashOutByMonth.get(month) ?? 0
-    const payrollAndOpex = operatingByMonth.get(month) ?? 0
+    const payrollCost = payrollByMonth.get(month) ?? 0
+    const operatingExpenses = opexByMonth.get(month) ?? 0
+    const totalCosts = round2(payrollCost + operatingExpenses)
     const dividends = dividendsByMonth.get(month) ?? 0
-    const operatingIncome = round2(revenue - payrollAndOpex)
+    const operatingIncome = round2(invoicedRevenue - totalCosts)
     cumulativeRE = round2(cumulativeRE + operatingIncome - dividends)
 
     return {
       month,
       label: monthLabel(month),
-      revenue,
+      revenue: invoicedRevenue,
+      invoicedRevenue,
+      workedRevenue,
+      payrollCost,
+      operatingExpenses,
+      operatingIncome,
       cashIn,
       cashOut,
       netCashFlow: round2(cashIn - cashOut),
@@ -236,5 +269,13 @@ export function buildMonthlySeries(
 }
 
 export function hasChartData(points: MonthlySeriesPoint[]) {
-  return points.some((p) => p.revenue !== 0 || p.cashIn !== 0 || p.cashOut !== 0 || p.equity !== 0)
+  return points.some(
+    (p) =>
+      p.invoicedRevenue !== 0 ||
+      p.workedRevenue !== 0 ||
+      p.cashIn !== 0 ||
+      p.cashOut !== 0 ||
+      p.payrollCost !== 0 ||
+      p.equity !== 0
+  )
 }
