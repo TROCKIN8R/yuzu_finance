@@ -6,6 +6,7 @@ import {
   cashOutTotal,
   entriesThroughDate,
   incomeFromPeriodEntries,
+  type CashFlowBreakdown,
 } from './ledgerBalances'
 import { inPeriod, type DateRange } from './fiscalPeriod'
 import type { AccountingAdjustment, OrganizationSettings } from './types'
