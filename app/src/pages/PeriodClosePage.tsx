@@ -1,7 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { monthEndForDate, formatPeriodLabel, dateOnly } from '../lib/fiscalPeriodClose'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
+import { computeUnbilledWipAsOf } from '../lib/wipAccrual'
+import type { MetricsProject, MetricsTimeEntry } from '../lib/billingMetrics'
+import { formatCad } from '../lib/format'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { PageHeader } from '../components/PageHeader'
@@ -16,11 +20,57 @@ export function PeriodClosePage() {
   const { closes, loading, reload } = usePeriodCloseGuard()
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()))
   const [notes, setNotes] = useState('')
+  const [wipEnabled, setWipEnabled] = useState(false)
+  const [wipAmount, setWipAmount] = useState(0)
+  const [wipHours, setWipHours] = useState(0)
+  const [wipLoading, setWipLoading] = useState(false)
 
   const closedSet = useMemo(() => new Set(closes.map((c) => dateOnly(c.period_end))), [closes])
+  const targetEnd = monthEndForDate(`${selectedMonth}-15`)
+
+  useEffect(() => {
+    void loadWipPreview(targetEnd)
+  }, [targetEnd])
+
+  async function loadWipPreview(periodEnd: string) {
+    setWipLoading(true)
+    const [settingsRow, invoices, timeEntries, fixedProjects] = await Promise.all([
+      supabase.from('organization_settings').select('wip_accrual_enabled').maybeSingle(),
+      supabase.from('invoices').select('id, invoice_date'),
+      supabase
+        .from('time_entries')
+        .select(
+          'entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate)'
+        ),
+      supabase
+        .from('projects')
+        .select('id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate')
+        .eq('billing_type', 'fixed'),
+    ])
+
+    const enabled = Boolean(settingsRow.data?.wip_accrual_enabled)
+    setWipEnabled(enabled)
+    if (!enabled) {
+      setWipAmount(0)
+      setWipHours(0)
+      setWipLoading(false)
+      return
+    }
+
+    const invoiceDates = new Map((invoices.data ?? []).map((inv) => [inv.id, inv.invoice_date]))
+    const wip = computeUnbilledWipAsOf(
+      (timeEntries.data ?? []) as MetricsTimeEntry[],
+      (fixedProjects.data ?? []) as MetricsProject[],
+      periodEnd,
+      invoiceDates
+    )
+    setWipAmount(wip.amount)
+    setWipHours(wip.hours)
+    setWipLoading(false)
+  }
 
   async function closePeriod() {
-    const periodEnd = monthEndForDate(`${selectedMonth}-15`)
+    const periodEnd = targetEnd
     if (closedSet.has(periodEnd)) {
       alert('Cette période est déjà clôturée.')
       return
@@ -51,8 +101,6 @@ export function PeriodClosePage() {
     await reload()
   }
 
-  const targetEnd = monthEndForDate(`${selectedMonth}-15`)
-
   return (
     <PageShell width="narrow">
       <PageHeader
@@ -76,6 +124,33 @@ export function PeriodClosePage() {
           Fin de période : <strong>{targetEnd}</strong>
           {closedSet.has(targetEnd) ? ' · déjà clôturée' : ''}
         </p>
+
+        <div className="rounded-lg border border-border bg-stone-50 p-3 text-sm space-y-1">
+          <p className="font-medium text-ink">Travail non facturé (WIP)</p>
+          {wipLoading ? (
+            <p className="text-muted">Calcul…</p>
+          ) : wipEnabled ? (
+            <>
+              <p>
+                Au {formatPeriodLabel(targetEnd)} : <strong>{formatCad(wipAmount)}</strong>
+                {wipHours > 0 ? ` (${wipHours} h horaire)` : ''}
+              </p>
+              <p className="text-xs text-muted">
+                La clôture ne modifie pas les entrées de temps ni les factures. Avec WIP activé, le grand livre constate
+                mensuellement Dr 1300 · Cr 4000 pour ce montant (voir Grand livre et États financiers).
+              </p>
+            </>
+          ) : (
+            <p className="text-muted text-xs">
+              WIP désactivé — les revenus non facturés ne sont pas constatés en comptabilité.{' '}
+              <Link to="/settings" className="text-yuzu-dark hover:underline">
+                Activer dans Paramètres
+              </Link>
+              .
+            </p>
+          )}
+        </div>
+
         <Button type="button" onClick={closePeriod} disabled={closedSet.has(targetEnd)}>
           Clôturer {formatPeriodLabel(targetEnd)}
         </Button>

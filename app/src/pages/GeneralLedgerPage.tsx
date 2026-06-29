@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { formatCad, formatDate } from '../lib/format'
+import { formatCad, formatDate, todayIso } from '../lib/format'
 import { countActiveFilters, inDateRange } from '../lib/filters'
 import {
   buildGeneralLedger,
@@ -11,6 +11,7 @@ import {
 } from '../lib/generalLedger'
 import { entriesThroughDate } from '../lib/ledgerBalances'
 import { fetchGeneralLedgerData } from '../lib/glDataLoader'
+import type { GeneralLedgerBuildInput } from '../lib/financials'
 import { exportJournalCsv, exportTrialBalanceCsv } from '../lib/exportCsv'
 import { DataTable } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
@@ -20,7 +21,7 @@ import { PageShell } from '../components/PageShell'
 import { Button } from '../components/Button'
 
 export function GeneralLedgerPage() {
-  const [entries, setEntries] = useState<JournalEntry[]>([])
+  const [glData, setGlData] = useState<GeneralLedgerBuildInput | null>(null)
   const [loading, setLoading] = useState(true)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -36,9 +37,22 @@ export function GeneralLedgerPage() {
     setLoading(true)
     const { data, warnings } = await fetchGeneralLedgerData()
     setLoadWarnings(warnings)
-    setEntries(buildGeneralLedger(data))
+    setGlData(data)
     setLoading(false)
   }
+
+  const entries = useMemo(() => {
+    if (!glData) return []
+    const periodEnd = dateTo || todayIso()
+    return buildGeneralLedger({
+      ...glData,
+      periodEnd,
+      periodStart: dateFrom || undefined,
+    })
+  }, [glData, dateFrom, dateTo])
+
+  const wipEnabled = Boolean(glData?.settings?.wip_accrual_enabled)
+  const wipEntryCount = useMemo(() => entries.filter((e) => e.sourceType === 'wip_accrual').length, [entries])
 
   const journalEntries = useMemo(() => {
     return entries.filter((e) => {
@@ -95,6 +109,20 @@ export function GeneralLedgerPage() {
             </p>
           ))}
         </div>
+      )}
+
+      {glData && !wipEnabled && (
+        <p className="mb-4 text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+          La constatation WIP est désactivée — les revenus non facturés ne sont pas portés au compte 1300. Activez-la dans
+          Paramètres → Comptabilité avancée.
+        </p>
+      )}
+
+      {wipEnabled && wipEntryCount === 0 && (
+        <p className="mb-4 text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+          WIP activé : aucune écriture de constatation pour la période affichée (pas de travail non facturé ou solde 1300
+          déjà à jour).
+        </p>
       )}
 
       <ViewToggle
