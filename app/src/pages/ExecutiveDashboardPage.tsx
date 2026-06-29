@@ -45,7 +45,7 @@ export function ExecutiveDashboardPage() {
         fetchDashboardBillingData(),
         fetchExecutiveExtras(),
         supabase.from('payments').select('amount, payment_date, invoice_id'),
-        supabase.from('expenses').select('amount, total, paid, category, payroll_run_id, expense_date'),
+        supabase.from('expenses').select('amount, total, paid, gst, qst, category, payroll_run_id, expense_date'),
         supabase
           .from('payroll_runs')
           .select(
@@ -53,7 +53,7 @@ export function ExecutiveDashboardPage() {
           ),
         supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date, partner_id').neq('status', 'void'),
         supabase.from('dividends').select('total_amount, paid_amount, declared_date, payment_date, status'),
-        supabase.from('corporate_tax_records').select('paid_amount, paid_date'),
+        supabase.from('corporate_tax_records').select('amount, paid_amount, status, paid_date'),
         supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
         supabase.from('organization_settings').select('*').maybeSingle(),
       ])
