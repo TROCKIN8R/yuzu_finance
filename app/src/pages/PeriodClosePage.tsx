@@ -71,7 +71,7 @@ export function PeriodClosePage() {
     <PageShell width="narrow">
       <PageHeader
         title="Clôture de période"
-        subtitle="Verrouille un mois comptable contre les modifications — brouillon pour révision CPA."
+        subtitle="Verrouille un mois comptable : paie, banque, factures, temps, taxes et ajustements — brouillon pour révision CPA."
       />
 
       {error && <AlertBanner variant="warning">{error}</AlertBanner>}

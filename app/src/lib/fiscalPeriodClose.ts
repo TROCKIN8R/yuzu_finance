@@ -7,6 +7,8 @@ export interface FiscalPeriodClose {
   created_at: string
 }
 
+export const PERIOD_CLOSE_REOPEN_PATH = '/period-close'
+
 /** Last calendar day of the month containing `isoDate`. */
 export function monthEndForDate(isoDate: string): string {
   const [y, m] = isoDate.split('-').map(Number)
@@ -28,4 +30,19 @@ export function formatPeriodLabel(periodEnd: string): string {
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
   ]
   return `${months[Number(m) - 1]} ${y}`
+}
+
+export function closedPeriodMessage(isoDate: string): string {
+  return `Période clôturée (${formatPeriodLabel(monthEndForDate(isoDate))}). Rouvrez le mois dans Clôture de période (${PERIOD_CLOSE_REOPEN_PATH}).`
+}
+
+export function firstClosedDateMessage(
+  dates: (string | null | undefined)[],
+  closes: Pick<FiscalPeriodClose, 'period_end'>[]
+): string | null {
+  for (const isoDate of dates) {
+    if (!isoDate) continue
+    if (isDateInClosedPeriod(isoDate, closes)) return closedPeriodMessage(isoDate)
+  }
+  return null
 }

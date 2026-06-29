@@ -13,6 +13,7 @@ import { EmptyState } from '../components/EmptyState'
 import { FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const empty = {
   period_start: todayIso().slice(0, 8) + '01',
@@ -31,6 +32,7 @@ function nets(gstC: number, qstC: number, gstI: number, qstI: number) {
 }
 
 export function SalesTaxPage() {
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<SalesTaxPeriod[]>([])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
@@ -70,6 +72,8 @@ export function SalesTaxPage() {
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
+    const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
+    if (blockIfClosed(prior?.period_start, prior?.period_end, form.period_start, form.period_end)) return
     const totals = await fetchPeriodTotals(form.period_start, form.period_end)
     const { gst_net, qst_net } = nets(totals.gst_collected, totals.qst_collected, totals.gst_itc, totals.qst_itr)
     const payload = {
@@ -88,6 +92,8 @@ export function SalesTaxPage() {
   }
 
   async function remove(id: string) {
+    const row = rows.find((r) => r.id === id)
+    if (row && blockIfClosed(row.period_start, row.period_end)) return
     if (!confirm('Supprimer cette période ?')) return
     await supabase.from('sales_tax_periods').delete().eq('id', id)
     load()

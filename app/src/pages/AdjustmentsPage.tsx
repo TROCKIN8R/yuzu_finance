@@ -10,6 +10,7 @@ import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const types: { value: AdjustmentType; label: string }[] = [
   { value: 'prepaid', label: 'Charge payée d\'avance' },
@@ -35,6 +36,7 @@ function emptyForm(type: AdjustmentType = 'prepaid') {
 }
 
 export function AdjustmentsPage() {
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<AccountingAdjustment[]>([])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm())
@@ -83,6 +85,7 @@ export function AdjustmentsPage() {
       setSaveError('Indiquez un montant mensuel supérieur à 0.')
       return
     }
+    if (blockIfClosed(form.start_date, form.end_date)) return
 
     const { error } = await supabase.from('accounting_adjustments').insert({
       adjustment_type: form.adjustment_type,
@@ -108,11 +111,14 @@ export function AdjustmentsPage() {
   }
 
   async function toggleActive(r: AccountingAdjustment) {
+    if (blockIfClosed(r.start_date, r.end_date)) return
     await supabase.from('accounting_adjustments').update({ active: !r.active }).eq('id', r.id)
     load()
   }
 
   async function remove(id: string) {
+    const row = rows.find((r) => r.id === id)
+    if (row && blockIfClosed(row.start_date, row.end_date)) return
     if (!confirm('Supprimer cet ajustement ?')) return
     await supabase.from('accounting_adjustments').delete().eq('id', id)
     load()

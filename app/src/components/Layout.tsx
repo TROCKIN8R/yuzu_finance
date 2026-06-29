@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { PeriodCloseProvider } from '../contexts/PeriodCloseContext'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
 import { AppIcon, ICON_SIZE, ICON_STROKE, LogOut, Menu, Settings, X, navIcons, type NavIconKey } from './icons'
@@ -291,7 +292,9 @@ export function Layout() {
       </aside>
 
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden min-w-0 w-full max-w-[90rem] mx-auto">
-        <Outlet />
+        <PeriodCloseProvider>
+          <Outlet />
+        </PeriodCloseProvider>
       </main>
     </div>
   )

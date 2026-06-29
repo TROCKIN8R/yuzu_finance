@@ -12,6 +12,7 @@ import { EmptyState } from '../components/EmptyState'
 import { FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const empty = {
   fiscal_year: '2025-2026',
@@ -26,6 +27,7 @@ const empty = {
 }
 
 export function CorporateTaxPage() {
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<CorporateTaxRecord[]>([])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(empty)
@@ -80,6 +82,17 @@ export function CorporateTaxPage() {
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
+    const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
+    if (
+      blockIfClosed(
+        prior?.due_date,
+        prior?.paid_date,
+        form.due_date || null,
+        form.paid_date || null
+      )
+    ) {
+      return
+    }
     const payload = {
       ...form,
       due_date: form.due_date || null,
@@ -93,6 +106,8 @@ export function CorporateTaxPage() {
   }
 
   async function remove(id: string) {
+    const row = rows.find((r) => r.id === id)
+    if (row && blockIfClosed(row.due_date, row.paid_date)) return
     if (!confirm('Supprimer cet enregistrement ?')) return
     await supabase.from('corporate_tax_records').delete().eq('id', id)
     load()

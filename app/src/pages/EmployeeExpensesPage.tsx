@@ -16,6 +16,7 @@ import { EmptyState } from '../components/EmptyState'
 import { DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'other']
 
@@ -35,6 +36,7 @@ const empty = {
 }
 
 export function EmployeeExpensesPage() {
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<EmployeeExpense[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
@@ -136,6 +138,8 @@ export function EmployeeExpensesPage() {
       alert('Sélectionnez un employé.')
       return
     }
+    const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
+    if (blockIfClosed(prior?.expense_date, form.expense_date)) return
     const total = form.amount + form.gst + form.qst
     const payload = {
       employee_id: form.employee_id,
@@ -162,6 +166,7 @@ export function EmployeeExpensesPage() {
       return
     }
     if (!confirm('Supprimer ce frais ?')) return
+    if (blockIfClosed(e.expense_date)) return
     await supabase.from('employee_expenses').delete().eq('id', e.id)
     load()
   }

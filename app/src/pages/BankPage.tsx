@@ -47,6 +47,7 @@ import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { MetricCard, MetricGrid } from '../components/MetricCard'
 import { AlertBanner } from '../components/AlertBanner'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
 
@@ -120,6 +121,7 @@ function sourceLabel(tx: BankTransaction) {
 
 export function BankPage() {
   const fileRef = useRef<HTMLInputElement>(null)
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<BankTransaction[]>([])
   const [invoices, setInvoices] = useState<InvoiceWithPaid[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
@@ -245,6 +247,9 @@ export function BankPage() {
       setImportMsg('Format CSV non reconnu. Utilisez un export Wealthsimple (chèques ou carte de crédit).')
       return
     }
+    if (blockIfClosed(...parsed.map((r) => r.transaction_date))) {
+      return
+    }
     try {
       const { inserted, duplicates } = await importBankRows(parsed)
       const parts = [
@@ -347,8 +352,10 @@ export function BankPage() {
   async function saveAssignment(e: React.FormEvent) {
     e.preventDefault()
     if (!assignTx) return
+    if (blockIfClosed(assignTx.transaction_date)) return
     try {
       if (assignKind === 'payment') {
+        if (blockIfClosed(payForm.payment_date)) return
         await assignBankPayment(
           assignTx.id,
           payForm.invoice_id,
@@ -363,6 +370,7 @@ export function BankPage() {
           alert('Indiquez un fournisseur.')
           return
         }
+        if (blockIfClosed(expForm.expense_date)) return
         await assignBankExpense(assignTx.id, {
           expense_date: expForm.expense_date,
           vendor,
@@ -378,6 +386,8 @@ export function BankPage() {
           alert('Sélectionnez une paie.')
           return
         }
+        const pr = payrollRuns.find((p) => p.id === payrollForm.payroll_run_id)
+        if (blockIfClosed(pr?.payment_date, payrollForm.remittance_date)) return
         await assignBankPayroll(
           assignTx.id,
           payrollForm.payroll_run_id,
@@ -390,6 +400,8 @@ export function BankPage() {
           alert('Sélectionnez un dividende.')
           return
         }
+        const div = dividends.find((d) => d.id === dividendForm.dividend_id)
+        if (blockIfClosed(div?.declared_date, assignTx.transaction_date)) return
         await assignBankDividend(
           assignTx.id,
           dividendForm.dividend_id,
@@ -401,12 +413,16 @@ export function BankPage() {
           alert('Sélectionnez une période TPS/TVQ.')
           return
         }
+        const period = salesTaxPeriods.find((p) => p.id === salesTaxForm.period_id)
+        if (blockIfClosed(salesTaxForm.payment_date, period?.period_end)) return
         await assignBankSalesTax(assignTx.id, salesTaxForm.period_id, salesTaxForm.payment_date)
       } else if (assignKind === 'corporate_tax') {
         if (!corpTaxForm.record_id) {
           alert('Sélectionnez un impôt société.')
           return
         }
+        const record = corpTaxRecords.find((r) => r.id === corpTaxForm.record_id)
+        if (blockIfClosed(corpTaxForm.paid_date, record?.due_date)) return
         await assignBankCorporateTax(
           assignTx.id,
           corpTaxForm.record_id,
@@ -423,12 +439,14 @@ export function BankPage() {
   }
 
   async function handleIgnore(tx: BankTransaction) {
+    if (blockIfClosed(tx.transaction_date)) return
     if (!confirm('Ignorer cette transaction (virement interne, doublon, etc.) ?')) return
     await ignoreBankTransaction(tx.id)
     load()
   }
 
   async function handleUnassign(tx: BankTransaction) {
+    if (blockIfClosed(tx.transaction_date)) return
     if (!confirm('Retirer l\'affectation ? Les enregistrements liés seront annulés ou supprimés selon le type.')) return
     try {
       await unassignBankTransaction(tx.id, tx.match_source, tx.match_id)
@@ -439,6 +457,7 @@ export function BankPage() {
   }
 
   async function handleDelete(tx: BankTransaction) {
+    if (blockIfClosed(tx.transaction_date)) return
     if (!confirm('Supprimer cette transaction bancaire ?')) return
     try {
       await deleteBankTransaction(tx.id, tx.match_source, tx.match_id)

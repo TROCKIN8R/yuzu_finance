@@ -14,6 +14,7 @@ import {
 } from '../lib/invoice'
 import { effectiveTaxSettings } from '../lib/taxes'
 import { deleteInvoice } from '../lib/invoiceActions'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { downloadInvoicePdf } from '../lib/invoicePdf'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -80,6 +81,7 @@ export function InvoicesPage() {
   const location = useLocation()
   const embedded = location.pathname.startsWith('/billing')
   const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<Invoice[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
@@ -232,6 +234,8 @@ export function InvoicesPage() {
 
     const totals = sumInvoiceLines(lines)
     const invoiceDate = todayIso()
+    const entryDates = unbilled.filter((x) => selectedEntryIds.has(x.id)).map((x) => x.entry_date)
+    if (blockIfClosed(invoiceDate, ...entryDates)) return
     const dueDate = addDays(invoiceDate, partner.payment_terms_days ?? settings.payment_terms_days)
 
     const { data: inv, error } = await supabase
@@ -293,12 +297,15 @@ export function InvoicesPage() {
   }
 
   async function updateStatus(id: string, status: InvoiceStatus) {
+    const inv = rows.find((r) => r.id === id) ?? selected
+    if (inv && blockIfClosed(inv.invoice_date)) return
     await supabase.from('invoices').update({ status }).eq('id', id)
     load()
     if (selected?.id === id) setSelected({ ...selected, status })
   }
 
   async function handleDelete(inv: Invoice) {
+    if (blockIfClosed(inv.invoice_date)) return
     if (!confirm(`Supprimer la facture ${inv.invoice_number} ? Les lignes et projets forfaitaires seront libérés.`)) return
     try {
       await deleteInvoice(inv.id)

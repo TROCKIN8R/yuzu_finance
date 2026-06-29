@@ -17,6 +17,7 @@ import { StepPanelHeader } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 import { AlertBanner } from '../components/AlertBanner'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 type CompensationOutletContext = { refreshMetrics?: () => void }
 
@@ -31,6 +32,7 @@ export function DividendsPage() {
   const location = useLocation()
   const embedded = location.pathname.startsWith('/compensation')
   const { refreshMetrics } = useOutletContext<CompensationOutletContext>() ?? {}
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<Dividend[]>([])
   const [shareholders, setShareholders] = useState<Shareholder[]>([])
   const [open, setOpen] = useState(false)
@@ -95,6 +97,7 @@ export function DividendsPage() {
       alert('Indiquez une date de déclaration.')
       return
     }
+    if (blockIfClosed(declaredDate)) return
 
     const amounts = splitDividendByShares(form.total_amount, activeShareholders)
     const perShareholder = amounts[0]
@@ -141,6 +144,7 @@ export function DividendsPage() {
       return
     }
     if (!confirm('Supprimer cette déclaration de dividendes ?')) return
+    if (row && blockIfClosed(row.declared_date, row.payment_date)) return
     await supabase.from('dividends').delete().eq('id', id)
     setDetailOpen(false)
     setSelected(null)

@@ -22,8 +22,7 @@ import {
   reimbursementTotals,
 } from '../lib/reimbursement'
 import { recalculatePayrollWithReimbursements } from '../lib/payrollForm'
-import { isDateInClosedPeriod } from '../lib/fiscalPeriodClose'
-import { useFiscalPeriodCloses } from '../hooks/useFiscalPeriodCloses'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { payrollLeviesRemittance, payrollRemittancesTotal } from '../lib/payrollRemittance'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { Badge } from '../components/Badge'
@@ -122,7 +121,7 @@ export function PayrollPage() {
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set())
   const [salaryGrossBase, setSalaryGrossBase] = useState(0)
   const [levyRates, setLevyRates] = useState({ hsf: 0.0165, cnesst: 0.01 })
-  const { closes: periodCloses } = useFiscalPeriodCloses()
+  const { blockIfClosed, isClosed } = usePeriodCloseGuard()
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
 
@@ -316,10 +315,7 @@ export function PayrollPage() {
   async function savePayroll(ev: React.FormEvent) {
     ev.preventDefault()
     if (!form || !form.employee_id) return
-    if (isDateInClosedPeriod(form.payment_date, periodCloses)) {
-      alert('Cette période est clôturée. Rouvrez le mois dans Clôture de période avant de modifier la paie.')
-      return
-    }
+    if (blockIfClosed(form.payment_date)) return
     const emp = employees.find((e) => e.id === form.employee_id)
     if (!emp) return
 
@@ -366,6 +362,8 @@ export function PayrollPage() {
   }
 
   async function removePayroll(id: string) {
+    const row = rows.find((p) => p.id === id)
+    if (row && blockIfClosed(row.payment_date)) return
     if (!confirm('Supprimer cette paie ?')) return
     try {
       await deletePayrollRun(id)
@@ -389,7 +387,7 @@ export function PayrollPage() {
     ? payrollRemittancesTotal({ ...form, ...previewLevies, employer_benefits: form.employer_benefits }) +
       payrollLeviesRemittance(previewLevies)
     : 0
-  const paymentInClosedPeriod = form ? isDateInClosedPeriod(form.payment_date, periodCloses) : false
+  const paymentInClosedPeriod = form ? isClosed(form.payment_date) : false
 
   const payrollActions = (
     <div className="flex flex-wrap gap-2">

@@ -40,7 +40,7 @@ export function OtherHubPage() {
         <HubCard
           to="/period-close"
           title="Clôture de période"
-          description="Verrouille un mois comptable après rapprochement."
+          description="Verrouille un mois : paie, banque, factures, temps, taxes, ajustements."
         />
         <HubCard to="/ledger" title="Grand livre" description="Journal des écritures et balance de vérification." />
         <HubCard

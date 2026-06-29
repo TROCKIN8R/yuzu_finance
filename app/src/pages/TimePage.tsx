@@ -19,6 +19,7 @@ import { StepPanelHeader } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 import { AlertBanner } from '../components/AlertBanner'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 type Filter = 'all' | 'unbilled' | 'invoiced'
 type BillingOutletContext = { refreshMetrics?: () => void }
@@ -39,6 +40,7 @@ export function TimePage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [open, setOpen] = useState(false)
+  const { blockIfClosed } = usePeriodCloseGuard()
   const [form, setForm] = useState({
     project_id: '',
     employee_id: '',
@@ -131,6 +133,8 @@ export function TimePage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
+    const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
+    if (blockIfClosed(prior?.entry_date, form.entry_date)) return
     const project = projects.find((p) => p.id === form.project_id)
     const internalFixed = project ? isFixedProject(project) : false
     const payload = {
@@ -157,6 +161,7 @@ export function TimePage() {
       return
     }
     if (!confirm('Supprimer cette entrée ?')) return
+    if (blockIfClosed(t.entry_date)) return
     await supabase.from('time_entries').delete().eq('id', t.id)
     load()
   }

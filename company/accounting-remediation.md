@@ -47,7 +47,7 @@
 | P4-1 | WIP accrual for unbilled time | Optional `wip_accrual_enabled`; monthly Dr 1300 Cr 4000; invoices Cr 1300 | done |
 | P4-2 | T4/RL-1 / T5 / CO-17 form generation | `/tax-exports` CSV schedules from payroll, dividends, GL | done |
 | P4-3 | HSF / CNESST payroll | Configurable rates; `hsf_employer` / `cnesst_employer` on payroll; GL 2215 | done |
-| P4-4 | Period close / lock | `fiscal_period_closes` table; `/period-close` UI; payroll save guard | done |
+| P4-4 | Period close / lock | `fiscal_period_closes` table; `/period-close` UI; blocks all financial writes in closed month | done |
 
 ## Supabase migration
 
