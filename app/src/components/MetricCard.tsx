@@ -31,7 +31,7 @@ export function TrendBadge({ change, label = 'vs mois prec.' }: { change: MomCha
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded ${color}`}>
       <span aria-hidden>{arrow}</span>
       <span>{pctText}</span>
-      <span className="text-muted font-normal">{label}</span>
+      {label ? <span className="text-muted font-normal">{label}</span> : null}
     </span>
   )
 }

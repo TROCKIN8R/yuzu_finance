@@ -2,7 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
-import { DashboardPage } from './pages/DashboardPage'
+import { ExecutiveDashboardPage } from './pages/ExecutiveDashboardPage'
+import { DashboardDetailsPage } from './pages/DashboardDetailsPage'
 import { PartnersPage } from './pages/PartnersPage'
 import { BillingPage } from './pages/BillingPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -35,7 +36,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<ExecutiveDashboardPage />} />
+          <Route path="dashboard/details" element={<DashboardDetailsPage />} />
           <Route path="partners" element={<PartnersPage />} />
           <Route path="clients" element={<Navigate to="/partners" replace />} />
           <Route path="billing" element={<BillingPage />}>

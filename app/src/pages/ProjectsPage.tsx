@@ -316,7 +316,7 @@ export function ProjectsPage() {
           </div>
           {form.billing_type === 'fixed' && (
             <p className="text-xs text-muted">
-              Les projets forfaitaires se facturent à l&apos;étape Factures. Le temps ne s&apos;y applique pas.
+              Les projets forfaitaires se facturent à l&apos;étape Factures. Le temps peut y être enregistré pour le suivi interne (non visible client).
             </p>
           )}
           <div className="flex justify-end gap-2 pt-2">

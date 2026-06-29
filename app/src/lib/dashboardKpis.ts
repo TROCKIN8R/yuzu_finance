@@ -1,6 +1,10 @@
-import { effectiveRate, lineAmount, relationOne } from './format'
-import { inPeriod, type DateRange } from './fiscalPeriod'
 import type { MonthlySeriesPoint } from './dashboardSeries'
+import {
+  averageRate,
+  computeWorkedRevenueMetrics,
+  type MetricsTimeEntry,
+} from './billingMetrics'
+import type { DateRange } from './fiscalPeriod'
 
 export interface MomChange {
   current: number
@@ -15,14 +19,6 @@ export interface ServiceKpiTrends {
   cashCollected: MomChange
   operatingIncome: MomChange
   payrollTotal: MomChange
-}
-
-type TimeEntryRow = {
-  entry_date: string
-  hours: number
-  rate_override: number | null
-  billable: boolean
-  projects?: { default_hourly_rate: number } | { default_hourly_rate: number }[] | null
 }
 
 function round2(n: number) {
@@ -41,42 +37,14 @@ export function computeMomChange(current: number, prior: number): MomChange {
   return { current, prior, pct, direction }
 }
 
-/** Previous calendar month (full month). */
-export function priorCalendarMonth(ref: Date = new Date()): DateRange {
-  const y = ref.getFullYear()
-  const m = ref.getMonth()
-  const start = new Date(y, m - 1, 1)
-  const end = new Date(y, m, 0)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const label = new Intl.DateTimeFormat('fr-CA', { month: 'long', year: 'numeric' }).format(start)
-  return {
-    start: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-01`,
-    end: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
-    label,
-  }
+export function computeWorkedRevenue(entries: MetricsTimeEntry[], period: DateRange): number {
+  return computeWorkedRevenueMetrics(entries, period).total
 }
 
-export function computeWorkedRevenue(entries: TimeEntryRow[], period: DateRange): number {
-  let total = 0
-  for (const e of entries) {
-    if (!e.billable || !inPeriod(e.entry_date, period)) continue
-    const p = relationOne<{ default_hourly_rate: number }>(e.projects)
-    if (!p) continue
-    total += lineAmount(Number(e.hours), effectiveRate(e, p))
-  }
-  return round2(total)
+export function computeWorkedHours(entries: MetricsTimeEntry[], period: DateRange): number {
+  return computeWorkedRevenueMetrics(entries, period).hours
 }
 
-export function computeWorkedHours(entries: TimeEntryRow[], period: DateRange): number {
-  let total = 0
-  for (const e of entries) {
-    if (!e.billable || !inPeriod(e.entry_date, period)) continue
-    total += Number(e.hours)
-  }
-  return round2(total)
-}
-
-/** MoM from the last two months in a chart series. */
 export function momFromSeries(
   points: MonthlySeriesPoint[],
   pick: (p: MonthlySeriesPoint) => number
@@ -104,3 +72,5 @@ export function operatingMarginPct(revenue: number, operatingIncome: number): nu
   if (revenue === 0) return null
   return round2((operatingIncome / revenue) * 100)
 }
+
+export { averageRate, computeWorkedRevenueMetrics }

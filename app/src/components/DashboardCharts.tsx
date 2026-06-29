@@ -83,11 +83,12 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
   if (points.length === 0) return <EmptyChart message="Pas assez de données" />
   const invoiced = points.map((p) => p.invoicedRevenue)
   const worked = points.map((p) => p.workedRevenue)
-  if (invoiced.every((v) => v === 0) && worked.every((v) => v === 0)) {
+  const collected = points.map((p) => p.cashIn)
+  if (invoiced.every((v) => v === 0) && worked.every((v) => v === 0) && collected.every((v) => v === 0)) {
     return <EmptyChart message="Aucun revenu sur la période" />
   }
 
-  const values = [...invoiced, ...worked]
+  const values = [...invoiced, ...worked, ...collected]
   const width = 560
   const innerW = width - PAD.left - PAD.right
   const innerH = CHART_H - PAD.top - PAD.bottom
@@ -104,11 +105,12 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
 
   const invoicedPath = linePath(invoiced)
   const workedPath = linePath(worked)
+  const collectedPath = linePath(collected)
 
   return (
     <ChartShell
       title="Prestations vs facturation"
-      subtitle="Réalisé (temps) et facturé (HT) par mois"
+      subtitle="Réalisé, facturé (HT) et encaissé par mois"
       legend={
         <>
           <span className="flex items-center gap-1.5">
@@ -116,6 +118,9 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-0.5 bg-yuzu" /> Revenus facturés
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-emerald-600" /> Encaissements
           </span>
         </>
       }
@@ -130,6 +135,7 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
         </g>
         <path d={workedPath} fill="none" stroke="#0284c7" strokeWidth={2} strokeLinejoin="round" strokeDasharray="5 3" />
         <path d={invoicedPath} fill="none" stroke="#e5a817" strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={collectedPath} fill="none" stroke="#059669" strokeWidth={2} strokeLinejoin="round" strokeDasharray="2 2" />
         {points.map((p, i) => {
           const x = PAD.left + xPos(i, points.length, innerW)
           const show = points.length <= 6 || i % Math.ceil(points.length / 6) === 0 || i === points.length - 1

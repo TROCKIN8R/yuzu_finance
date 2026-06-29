@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatCad, relationOne } from '../lib/format'
+import { formatCad } from '../lib/format'
+import { computeUnbilledWip, type MetricsProject, type MetricsTimeEntry } from '../lib/billingMetrics'
+import { FIXED_PROJECT_SELECT, TIME_ENTRY_SELECT } from '../lib/dashboardData'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { MetricCard, MetricGrid } from '../components/MetricCard'
@@ -17,35 +19,25 @@ function stepFromPath(pathname: string): BillingStep | undefined {
 export function BillingPage() {
   const location = useLocation()
   const current = stepFromPath(location.pathname)
-  const [metrics, setMetrics] = useState({ unbilledHours: 0, unbilledAmount: 0, draftInvoices: 0 })
+  const [metrics, setMetrics] = useState({ unbilledHours: 0, unbilledAmount: 0, fixedWip: 0, draftInvoices: 0 })
 
   useEffect(() => {
     loadMetrics()
   }, [location.pathname])
 
   async function loadMetrics() {
-    const [{ data: entries }, { data: drafts }] = await Promise.all([
-      supabase
-        .from('time_entries')
-        .select('hours, rate_override, projects(default_hourly_rate)')
-        .is('invoice_id', null)
-        .eq('billable', true),
+    const [{ data: entries }, { data: fixedProjects }, { data: drafts }] = await Promise.all([
+      supabase.from('time_entries').select(TIME_ENTRY_SELECT),
+      supabase.from('projects').select(FIXED_PROJECT_SELECT),
       supabase.from('invoices').select('id').eq('status', 'draft'),
     ])
 
-    let unbilledHours = 0
-    let unbilledAmount = 0
-    for (const e of entries ?? []) {
-      const p = relationOne<{ default_hourly_rate: number }>(e.projects)
-      if (!p) continue
-      const rate = e.rate_override ?? p.default_hourly_rate
-      unbilledHours += Number(e.hours)
-      unbilledAmount += Number(e.hours) * Number(rate)
-    }
+    const wip = computeUnbilledWip((entries ?? []) as MetricsTimeEntry[], (fixedProjects ?? []) as MetricsProject[])
 
     setMetrics({
-      unbilledHours: Math.round(unbilledHours * 10) / 10,
-      unbilledAmount,
+      unbilledHours: wip.hours,
+      unbilledAmount: wip.amount,
+      fixedWip: wip.fixedAmount,
       draftInvoices: drafts?.length ?? 0,
     })
   }
@@ -65,9 +57,10 @@ export function BillingPage() {
         }
       />
 
-      <MetricGrid>
-        <MetricCard label="Heures non facturées" value={`${metrics.unbilledHours} h`} />
-        <MetricCard label="Temps à facturer" value={formatCad(metrics.unbilledAmount)} />
+      <MetricGrid cols={4}>
+        <MetricCard label="Heures non facturées" value={`${metrics.unbilledHours} h`} hint="Projets horaires seulement" />
+        <MetricCard label="Temps à facturer" value={formatCad(metrics.unbilledAmount - metrics.fixedWip)} hint="Horaire non facturé" />
+        <MetricCard label="Forfaits à facturer" value={formatCad(metrics.fixedWip)} hint="Projets forfaitaires non facturés" />
         <MetricCard label="Factures brouillon" value={metrics.draftInvoices} />
       </MetricGrid>
 

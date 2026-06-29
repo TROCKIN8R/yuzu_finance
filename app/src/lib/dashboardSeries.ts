@@ -1,4 +1,12 @@
-import { effectiveRate, lineAmount, relationOne } from './format'
+import { relationOne } from './format'
+import {
+  fixedProratedRevenue,
+  hourlyEntryAmount,
+  hoursByProject,
+  isFixedProject,
+  type MetricsProject,
+  type MetricsTimeEntry,
+} from './billingMetrics'
 import { payrollEmployerTotal } from './financials'
 import type { DateRange } from './fiscalPeriod'
 import { isRevenueInvoice } from './taxes'
@@ -65,12 +73,9 @@ type DividendRow = {
   status: string
 }
 
-type TimeEntryRow = {
-  entry_date: string
-  hours: number
-  rate_override: number | null
-  billable: boolean
-  projects?: { default_hourly_rate: number } | { default_hourly_rate: number }[] | null
+type TimeEntryRow = MetricsTimeEntry & {
+  project_id: string
+  projects?: MetricsProject | MetricsProject[] | null
 }
 
 function round2(n: number) {
@@ -181,13 +186,24 @@ export function buildMonthlySeries(
     add(cashInByMonth, ym, Number(p.amount))
   }
 
-  for (const e of data.timeEntries ?? []) {
-    if (!e.billable) continue
+  const entries = data.timeEntries ?? []
+  const projectHours = hoursByProject(entries)
+
+  for (const e of entries) {
     const ym = monthKey(e.entry_date)
     if (!months.includes(ym)) continue
-    const proj = relationOne<{ default_hourly_rate: number }>(e.projects)
+    const proj = relationOne(e.projects)
     if (!proj) continue
-    add(workedByMonth, ym, lineAmount(Number(e.hours), effectiveRate(e, proj)))
+
+    if (isFixedProject(proj)) {
+      add(
+        workedByMonth,
+        ym,
+        fixedProratedRevenue(proj, Number(e.hours), projectHours.get(proj.id) ?? Number(e.hours))
+      )
+    } else if (e.billable) {
+      add(workedByMonth, ym, hourlyEntryAmount(e, proj))
+    }
   }
 
   for (const e of data.expenses) {

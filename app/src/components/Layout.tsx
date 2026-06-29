@@ -40,7 +40,8 @@ const otherModulePaths = [
 ]
 
 const mobilePageTitles: { match: (path: string) => boolean; title: string }[] = [
-  { match: (p) => p === '/', title: 'Tableau de bord' },
+  { match: (p) => p === '/', title: 'Vue exécutive' },
+  { match: (p) => p === '/dashboard/details', title: 'Tableau de bord' },
   { match: (p) => p.startsWith('/billing'), title: 'Prestations' },
   { match: (p) => p.startsWith('/compensation'), title: 'Rémunération' },
   { match: (p) => p === '/bank', title: 'Banque' },
