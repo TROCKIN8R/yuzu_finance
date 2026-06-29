@@ -60,11 +60,12 @@ export function SalesTaxPage() {
   }
 
   async function fetchPeriodTotals(periodStart: string, periodEnd: string) {
-    const [inv, exp] = await Promise.all([
+    const [inv, exp, ee] = await Promise.all([
       supabase.from('invoices').select('gst, qst, invoice_date, status').gte('invoice_date', periodStart).lte('invoice_date', periodEnd).neq('status', 'void'),
       supabase.from('expenses').select('gst, qst, expense_date').gte('expense_date', periodStart).lte('expense_date', periodEnd),
+      supabase.from('employee_expenses').select('gst, qst, expense_date').gte('expense_date', periodStart).lte('expense_date', periodEnd),
     ])
-    return calculateSalesTaxPeriod(periodStart, periodEnd, inv.data ?? [], exp.data ?? [])
+    return calculateSalesTaxPeriod(periodStart, periodEnd, inv.data ?? [], exp.data ?? [], ee.data ?? [])
   }
 
   async function save(ev: React.FormEvent) {

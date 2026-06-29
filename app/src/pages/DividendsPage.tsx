@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Dividend, Employee } from '../lib/types'
+import type { Dividend, Shareholder } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
-import { employeeDisplayName, splitDividendEqually } from '../lib/payrollCalc'
+import { splitDividendByShares } from '../lib/payrollCalc'
 import { Button, tableActionClass } from '../components/Button'
 import { Badge } from '../components/Badge'
 import { DataTable } from '../components/DataTable'
@@ -32,7 +32,7 @@ export function DividendsPage() {
   const embedded = location.pathname.startsWith('/compensation')
   const { refreshMetrics } = useOutletContext<CompensationOutletContext>() ?? {}
   const [rows, setRows] = useState<Dividend[]>([])
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [shareholders, setShareholders] = useState<Shareholder[]>([])
   const [open, setOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selected, setSelected] = useState<Dividend | null>(null)
@@ -41,7 +41,8 @@ export function DividendsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
-  const activeCount = employees.filter((e) => e.active).length
+  const activeShareholders = shareholders.filter((s) => s.active)
+  const activeCount = activeShareholders.length
 
   const filtered = useMemo(() => {
     return rows.filter((d) => {
@@ -51,9 +52,9 @@ export function DividendsPage() {
   }, [rows, search, dateFrom, dateTo])
 
   const hasFilters = !!(search || dateFrom || dateTo)
-  const previewPerEmployee =
+  const previewPerShareholder =
     form.total_amount > 0 && activeCount > 0
-      ? splitDividendEqually(form.total_amount, activeCount)[0]
+      ? splitDividendByShares(form.total_amount, activeShareholders)[0]
       : 0
 
   useEffect(() => {
@@ -61,21 +62,21 @@ export function DividendsPage() {
   }, [])
 
   async function load() {
-    const [div, emp] = await Promise.all([
+    const [div, sh] = await Promise.all([
       supabase
         .from('dividends')
-        .select('*, dividend_allocations(id, amount, employee_id, employees(first_name, last_name))')
+        .select('*, dividend_allocations(id, amount, shareholder_id, employee_id, shareholders(legal_name), employees(first_name, last_name))')
         .order('declared_date', { ascending: false }),
-      supabase.from('employees').select('*').eq('active', true).order('last_name'),
+      supabase.from('shareholders').select('*').eq('active', true).order('legal_name'),
     ])
     setRows((div.data as Dividend[]) ?? [])
-    setEmployees((emp.data as Employee[]) ?? [])
+    setShareholders((sh.data as Shareholder[]) ?? [])
     refreshMetrics?.()
   }
 
   function openNew() {
     if (activeCount === 0) {
-      alert('Ajoutez au moins un employé actif avant de déclarer des dividendes.')
+      alert('Ajoutez au moins un actionnaire actif avant de déclarer des dividendes.')
       return
     }
     setForm(emptyForm)
@@ -84,7 +85,10 @@ export function DividendsPage() {
 
   async function save(ev: React.FormEvent) {
     ev.preventDefault()
-    if (activeCount === 0) return
+    if (activeCount === 0) {
+      alert('Ajoutez au moins un actionnaire actif avant de déclarer des dividendes.')
+      return
+    }
 
     const declaredDate = form.declared_date || todayIso()
     if (!declaredDate) {
@@ -92,8 +96,8 @@ export function DividendsPage() {
       return
     }
 
-    const amounts = splitDividendEqually(form.total_amount, activeCount)
-    const perEmployee = amounts[0]
+    const amounts = splitDividendByShares(form.total_amount, activeShareholders)
+    const perShareholder = amounts[0]
 
     const { data: dividend, error } = await supabase
       .from('dividends')
@@ -102,7 +106,7 @@ export function DividendsPage() {
         status: 'declared',
         total_amount: form.total_amount,
         employee_count: activeCount,
-        amount_per_employee: perEmployee,
+        amount_per_employee: perShareholder,
         description: form.description || null,
         notes: form.notes || null,
       })
@@ -114,9 +118,10 @@ export function DividendsPage() {
       return
     }
 
-    const allocations = employees.map((e, i) => ({
+    const allocations = activeShareholders.map((s, i) => ({
       dividend_id: dividend.id,
-      employee_id: e.id,
+      shareholder_id: s.id,
+      employee_id: s.employee_id,
       amount: amounts[i],
     }))
     const { error: allocErr } = await supabase.from('dividend_allocations').insert(allocations)
@@ -168,7 +173,7 @@ export function DividendsPage() {
           title="Dividendes"
           subtitle={
             <>
-              Répartis entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
+              Répartis entre {activeCount} actionnaire{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
               {hasFilters ? ` · Total filtré : ${formatCad(totalDistributed)}` : rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
             </>
           }
@@ -181,16 +186,16 @@ export function DividendsPage() {
       )}
       {embedded && (
         <p className="text-sm text-muted mb-4">
-          Répartis entre {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
+          Répartis entre {activeCount} actionnaire{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
           {rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
         </p>
       )}
 
       {activeCount === 0 && (
         <AlertBanner>
-          Aucun employé actif —{' '}
-          <Link to="/compensation/employees" className="font-medium underline">
-            ajoutez un employé
+          Aucun actionnaire actif —{' '}
+          <Link to="/compensation/shareholders" className="font-medium underline">
+            ajoutez un actionnaire
           </Link>{' '}
           avant de distribuer des dividendes.
         </AlertBanner>
@@ -227,8 +232,8 @@ export function DividendsPage() {
                     <th className="px-4 py-3">Statut</th>
                     <th className="px-4 py-3">Payé le</th>
                     <th className="px-4 py-3">Montant total</th>
-                    <th className="px-4 py-3">Employés</th>
-                    <th className="px-4 py-3">Par employé</th>
+                    <th className="px-4 py-3">Actionnaires</th>
+                    <th className="px-4 py-3">Par action</th>
                     <th className="px-4 py-3">Description</th>
                     <th className="px-4 py-3" />
                   </tr>
@@ -288,8 +293,8 @@ export function DividendsPage() {
           </Field>
           {form.total_amount > 0 && activeCount > 0 && (
             <div className="bg-yuzu-light rounded-lg p-3 text-sm">
-              {activeCount} employé{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''} ·{' '}
-              <strong>{formatCad(previewPerEmployee)}</strong> chacun (répartition égale)
+              {activeCount} actionnaire{activeCount !== 1 ? 's' : ''} ·{' '}
+              <strong>{formatCad(previewPerShareholder)}</strong> (répartition proportionnelle aux actions)
             </div>
           )}
           <Field label="Description">
@@ -333,14 +338,17 @@ export function DividendsPage() {
             <table className="w-full">
               <thead className="text-muted text-left border-b border-border">
                 <tr>
-                  <th className="py-2">Employé</th>
+                  <th className="py-2">Actionnaire</th>
                   <th className="py-2 text-right">Montant</th>
                 </tr>
               </thead>
               <tbody>
                 {(selected.dividend_allocations ?? []).map((a) => (
                   <tr key={a.id} className="border-b border-border">
-                    <td className="py-2">{a.employees ? employeeDisplayName(a.employees) : '—'}</td>
+                    <td className="py-2">
+                      {a.shareholders?.legal_name ??
+                        (a.employees ? `${a.employees.first_name} ${a.employees.last_name}`.trim() : '—')}
+                    </td>
                     <td className="py-2 text-right">{formatCad(a.amount)}</td>
                   </tr>
                 ))}

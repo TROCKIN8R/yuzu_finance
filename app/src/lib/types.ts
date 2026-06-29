@@ -84,14 +84,30 @@ export interface Dividend {
   dividend_allocations?: DividendAllocation[]
 }
 
+export interface Shareholder {
+  id: string
+  user_id: string
+  legal_name: string
+  email: string | null
+  employee_id: string | null
+  shares_held: number
+  active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+  employees?: Pick<Employee, 'first_name' | 'last_name'>
+}
+
 export interface DividendAllocation {
   id: string
   user_id: string
   dividend_id: string
-  employee_id: string
+  employee_id: string | null
+  shareholder_id: string | null
   amount: number
   created_at: string
   employees?: Pick<Employee, 'first_name' | 'last_name'>
+  shareholders?: Pick<Shareholder, 'legal_name'>
 }
 
 export interface Expense {

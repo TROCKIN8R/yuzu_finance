@@ -48,7 +48,7 @@ export function CompensationPage() {
     })
   }
 
-  if (onEmployees) {
+  if (onEmployees || location.pathname.endsWith('/shareholders')) {
     return (
       <PageShell width="wide">
         <Outlet context={{ refreshMetrics: loadMetrics }} />

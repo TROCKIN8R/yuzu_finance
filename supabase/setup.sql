@@ -509,7 +509,34 @@ create trigger corporate_tax_records_updated_at
   for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Dividends (split equally among active employees at creation)
+-- Shareholders (dividend recipients — Québec corp)
+-- ---------------------------------------------------------------------------
+
+create table public.shareholders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  legal_name text not null,
+  email text,
+  employee_id uuid references public.employees (id) on delete set null,
+  shares_held numeric(12, 4) not null default 1 check (shares_held > 0),
+  active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index shareholders_user_id_idx on public.shareholders (user_id);
+
+create trigger shareholders_set_user_id
+  before insert on public.shareholders
+  for each row execute function public.set_user_id();
+
+create trigger shareholders_updated_at
+  before update on public.shareholders
+  for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Dividends (split among active shareholders by shares held)
 -- ---------------------------------------------------------------------------
 
 create table public.dividends (
@@ -532,11 +559,19 @@ create table public.dividend_allocations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   dividend_id uuid not null references public.dividends (id) on delete cascade,
-  employee_id uuid not null references public.employees (id) on delete restrict,
+  shareholder_id uuid references public.shareholders (id) on delete restrict,
+  employee_id uuid references public.employees (id) on delete restrict,
   amount numeric(12, 2) not null check (amount >= 0),
-  created_at timestamptz not null default now(),
-  unique (dividend_id, employee_id)
+  created_at timestamptz not null default now()
 );
+
+create unique index dividend_allocations_dividend_shareholder_idx
+  on public.dividend_allocations (dividend_id, shareholder_id)
+  where shareholder_id is not null;
+
+create unique index dividend_allocations_dividend_employee_idx
+  on public.dividend_allocations (dividend_id, employee_id)
+  where employee_id is not null;
 
 create index dividends_user_id_idx on public.dividends (user_id);
 create index dividend_allocations_dividend_id_idx on public.dividend_allocations (dividend_id);
@@ -661,6 +696,7 @@ alter table public.sales_tax_periods enable row level security;
 alter table public.corporate_tax_records enable row level security;
 alter table public.dividends enable row level security;
 alter table public.dividend_allocations enable row level security;
+alter table public.shareholders enable row level security;
 alter table public.bank_transactions enable row level security;
 alter table public.accounting_adjustments enable row level security;
 
@@ -713,6 +749,9 @@ create policy "dividends_all_own" on public.dividends
 create policy "dividend_allocations_all_own" on public.dividend_allocations
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+create policy "shareholders_all_own" on public.shareholders
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 create policy "bank_transactions_all_own" on public.bank_transactions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -738,6 +777,7 @@ revoke all on table public.sales_tax_periods from anon, public;
 revoke all on table public.corporate_tax_records from anon, public;
 revoke all on table public.dividends from anon, public;
 revoke all on table public.dividend_allocations from anon, public;
+revoke all on table public.shareholders from anon, public;
 revoke all on table public.bank_transactions from anon, public;
 revoke all on table public.accounting_adjustments from anon, public;
 
@@ -756,6 +796,7 @@ grant select, insert, update, delete on table public.sales_tax_periods to authen
 grant select, insert, update, delete on table public.corporate_tax_records to authenticated;
 grant select, insert, update, delete on table public.dividends to authenticated;
 grant select, insert, update, delete on table public.dividend_allocations to authenticated;
+grant select, insert, update, delete on table public.shareholders to authenticated;
 grant select, insert, update, delete on table public.bank_transactions to authenticated;
 grant select, insert, update, delete on table public.accounting_adjustments to authenticated;
 

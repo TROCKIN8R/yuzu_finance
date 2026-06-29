@@ -1,18 +1,16 @@
-import { invoiceBalance } from './invoice'
+import { buildGeneralLedger, filterEntriesByPeriod, type JournalEntry } from './generalLedger'
+import {
+  accountBalancesFromEntries,
+  balanceOf,
+  cashFlowFromPeriodEntries,
+  cashOutTotal,
+  entriesThroughDate,
+  incomeFromPeriodEntries,
+} from './ledgerBalances'
 import { inPeriod, type DateRange } from './fiscalPeriod'
-import { isRevenueInvoice } from './taxes'
+import type { AccountingAdjustment, OrganizationSettings } from './types'
 
-export interface CashFlowBreakdown {
-  clientPayments: number
-  expensesPaid: number
-  payrollNetToEmployee: number
-  employeeWithholdings: number
-  employerPayrollContributions: number
-  payrollRemittancesPaid: number
-  dividendsPaid: number
-  corporateTaxPaid: number
-  salesTaxRemitted: number
-}
+export type { CashFlowBreakdown } from './ledgerBalances'
 
 export interface EquityDetail {
   shareCapital: number
@@ -88,6 +86,8 @@ type PayrollRunRow = {
   net_pay: number
 }
 
+export type GeneralLedgerBuildInput = Parameters<typeof buildGeneralLedger>[0]
+
 function round2(n: number) {
   return Math.round(n * 100) / 100
 }
@@ -129,216 +129,95 @@ export function payrollRemittancesTotal(p: PayrollRunRow): number {
   return employeeDeductionsTotal(p) + employerContributionsTotal(p) - Number(p.employer_benefits)
 }
 
-function isOperatingExpense(
-  e: { category?: string; payroll_run_id?: string | null; expense_date: string },
-  period: DateRange
-) {
-  if (!inPeriod(e.expense_date, period)) return false
-  if (e.category === 'payroll' || e.payroll_run_id) return false
-  return true
+function buildLedgerEntries(data: GeneralLedgerBuildInput, period: DateRange): JournalEntry[] {
+  return buildGeneralLedger({
+    ...data,
+    periodEnd: period.end || undefined,
+  })
 }
 
 export function buildFinancialSnapshot(
-  data: {
-    payments: { amount: number; payment_date?: string }[]
-    expenses: {
-      amount: number
-      total: number
-      paid: boolean
-      gst: number
-      qst: number
-      category?: string
-      payroll_run_id?: string | null
-      expense_date: string
-    }[]
-    employeeExpenses?: {
-      amount: number
-      total: number
-      gst: number
-      qst: number
-      category?: string
-      taxable: boolean
-      payroll_run_id?: string | null
-      expense_date: string
-    }[]
+  data: GeneralLedgerBuildInput & {
     payrollRuns: PayrollRunRow[]
-    invoices: {
-      id: string
-      total: number
-      status: string
-      subtotal: number
-      gst: number
-      qst: number
-      invoice_date: string
-    }[]
-    invoicePaidMap: Record<string, number>
-    dividends?: {
-      total_amount: number
-      paid_amount?: number
-      declared_date: string
-      payment_date: string | null
-      status: string
-    }[]
-    corporateTax?: { amount: number; paid_amount: number; status: string }[]
-    salesTaxRemitted?: { gst_net: number; qst_net: number; filed_date?: string | null; period_end: string }[]
     bankTransactions?: { amount: number; transaction_date: string }[]
-    settings?: {
-      share_capital?: number
-      opening_retained_earnings?: number
-      opening_cash_balance?: number
-      estimated_corp_tax_rate?: number
-    }
+    settings?: Pick<
+      OrganizationSettings,
+      'share_capital' | 'opening_retained_earnings' | 'opening_cash_balance' | 'estimated_corp_tax_rate'
+    >
   },
   period: DateRange
 ): FinancialSnapshot {
-  const paymentsInPeriod = data.payments.filter((p) => inPeriod(p.payment_date ?? '', period))
-  const clientPayments = paymentsInPeriod.reduce((s, p) => s + Number(p.amount), 0)
-
-  const expensesInPeriod = data.expenses.filter((e) => inPeriod(e.expense_date, period))
-  const expensesPaid = expensesInPeriod.filter((e) => e.paid).reduce((s, e) => s + Number(e.total), 0)
+  const allEntries = buildLedgerEntries(data, period)
+  const asOf = period.end || '9999-12-31'
+  const asOfEntries = entriesThroughDate(allEntries, asOf)
+  const periodEntries = filterEntriesByPeriod(allEntries, period.start, period.end)
+  const balances = accountBalancesFromEntries(asOfEntries)
+  const income = incomeFromPeriodEntries(periodEntries)
+  const cashFlow = cashFlowFromPeriodEntries(periodEntries)
 
   const payrollInPeriod = data.payrollRuns.filter((p) => inPeriod(p.payment_date, period))
-  const payrollNetToEmployee = payrollInPeriod.reduce((s, p) => s + Number(p.net_pay), 0)
-  const employeeWithholdings = payrollInPeriod.reduce((s, p) => s + employeeDeductionsTotal(p), 0)
-  const employerPayrollContributions = payrollInPeriod.reduce((s, p) => s + employerContributionsTotal(p), 0)
+  const supplementalWithholdings = payrollInPeriod.reduce((s, p) => s + employeeDeductionsTotal(p), 0)
+  const supplementalEmployer = payrollInPeriod.reduce((s, p) => s + employerContributionsTotal(p), 0)
 
-  const payrollRemittancesPaid = payrollInPeriod
-    .filter((p) => p.remittance_status === 'remitted' && p.remittance_date && inPeriod(p.remittance_date, period))
-    .reduce((s, p) => s + payrollRemittancesTotal(p), 0)
-
-  const payrollRemittancesPending = data.payrollRuns
-    .filter((p) => p.remittance_status !== 'remitted')
-    .reduce((s, p) => s + payrollRemittancesTotal(p), 0)
-
-  const dividendsDeclared = (data.dividends ?? [])
-    .filter((d) => inPeriod(d.declared_date, period))
-    .reduce((s, d) => s + Number(d.total_amount), 0)
-
-  const dividendsPaid = (data.dividends ?? [])
-    .filter((d) => Number(d.paid_amount ?? 0) > 0 && d.payment_date && inPeriod(d.payment_date, period))
-    .reduce((s, d) => s + Number(d.paid_amount), 0)
-
-  const dividendsPayable = (data.dividends ?? []).reduce(
-    (s, d) => s + Math.max(0, Number(d.total_amount) - Number(d.paid_amount ?? 0)),
-    0
-  )
-
-  const corporateTaxPaid = (data.corporateTax ?? []).reduce((s, r) => s + Number(r.paid_amount), 0)
-
-  const salesTaxRemitted = (data.salesTaxRemitted ?? [])
-    .filter((t) => inPeriod(t.filed_date ?? t.period_end, period))
-    .reduce((s, t) => s + Math.max(0, Number(t.gst_net)) + Math.max(0, Number(t.qst_net)), 0)
-
-  const cashOut =
-    expensesPaid +
-    payrollNetToEmployee +
-    payrollRemittancesPaid +
-    employerPayrollContributions +
-    dividendsPaid +
-    corporateTaxPaid +
-    salesTaxRemitted
-
-  let accountsReceivable = 0
-  let revenueYtd = 0
-  let gstCollected = 0
-  let qstCollected = 0
-  for (const inv of data.invoices) {
-    if (inv.status === 'void' || !isRevenueInvoice(inv.status)) continue
-    if (!inPeriod(inv.invoice_date, period)) continue
-    revenueYtd += Number(inv.subtotal)
-    gstCollected += Number(inv.gst)
-    qstCollected += Number(inv.qst)
-    const paid = data.invoicePaidMap[inv.id] ?? 0
-    accountsReceivable += invoiceBalance(Number(inv.total), paid)
-  }
-
-  const operatingExpensesList = data.expenses.filter((e) => isOperatingExpense(e, period))
-  const employeeExpensesInPeriod = (data.employeeExpenses ?? []).filter(
-    (e) => inPeriod(e.expense_date, period) && !e.payroll_run_id && !e.taxable
-  )
-  const gstItc =
-    operatingExpensesList.reduce((s, e) => s + Number(e.gst), 0) +
-    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.gst), 0)
-  const qstItr =
-    operatingExpensesList.reduce((s, e) => s + Number(e.qst), 0) +
-    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.qst), 0)
-
-  const accountsPayable = expensesInPeriod.filter((e) => !e.paid).reduce((s, e) => s + Number(e.total), 0)
-  const gstPayable = round2(Math.max(0, gstCollected - gstItc))
-  const qstPayable = round2(Math.max(0, qstCollected - qstItr))
-  const gstReceivable = round2(Math.max(0, gstItc - gstCollected))
-  const qstReceivable = round2(Math.max(0, qstItr - qstCollected))
-  const salesTaxPayable = gstPayable + qstPayable
-
-  const corporateTaxDue = (data.corporateTax ?? [])
-    .filter((r) => r.status !== 'paid')
-    .reduce((s, r) => s + Number(r.amount) - Number(r.paid_amount), 0)
-
-  const expensesYtd =
-    operatingExpensesList.reduce((s, e) => s + Number(e.amount), 0) +
-    employeeExpensesInPeriod.reduce((s, e) => s + Number(e.amount), 0)
-
-  const employeeReimbursementsPending = (data.employeeExpenses ?? [])
-    .filter((e) => !e.payroll_run_id && !e.taxable)
-    .reduce((s, e) => s + Number(e.total), 0)
-  const payrollGross = payrollInPeriod.reduce((s, p) => s + Number(p.gross_pay), 0)
-  const payrollYtd = payrollGross + employerPayrollContributions
-  const operatingIncome = revenueYtd - expensesYtd - payrollYtd
-
-  const corpTaxRate = Number(data.settings?.estimated_corp_tax_rate ?? 0)
-  const corpTaxProvision = round2(Math.max(0, operatingIncome * corpTaxRate))
-
-  const shareCapital = Number(data.settings?.share_capital ?? 0)
-  const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
-  const retainedEarnings = round2(openingRE + operatingIncome - dividendsDeclared)
+  const cash = balanceOf(balances, '1010')
+  const accountsReceivable = balanceOf(balances, '1100')
+  const gstReceivable = balanceOf(balances, '1200')
+  const qstReceivable = balanceOf(balances, '1210')
+  const accountsPayable = balanceOf(balances, '2000')
+  const gstPayable = balanceOf(balances, '2100')
+  const qstPayable = balanceOf(balances, '2110')
+  const payrollRemittancesPending = round2(balanceOf(balances, '2200') + balanceOf(balances, '2210'))
+  const employeeReimbursementsPending = balanceOf(balances, '2060')
+  const dividendsPayable = balanceOf(balances, '2125')
+  const corporateTaxDue = balanceOf(balances, '2300')
+  const corpTaxProvision = balanceOf(balances, '2310')
+  const shareCapital = balanceOf(balances, '3000') || Number(data.settings?.share_capital ?? 0)
+  const retainedEarnings = balanceOf(balances, '3100')
   const totalEquity = round2(shareCapital + retainedEarnings)
+  const salesTaxPayable = round2(gstPayable + qstPayable)
+  const totalAssets = round2(cash + accountsReceivable + gstReceivable + qstReceivable)
+  const totalLiabilities = round2(
+    accountsPayable +
+      gstPayable +
+      qstPayable +
+      payrollRemittancesPending +
+      employeeReimbursementsPending +
+      dividendsPayable +
+      corporateTaxDue +
+      corpTaxProvision
+  )
 
-  const openingCash = Number(data.settings?.opening_cash_balance ?? 0)
-  const bookCash = round2(openingCash + clientPayments - cashOut)
+  const cashIn = cashFlow.clientPayments
+  const cashOut = cashOutTotal(cashFlow)
 
   const bankStatementBalance =
     data.bankTransactions && data.bankTransactions.length > 0
       ? round2(data.bankTransactions.reduce((s, t) => s + Number(t.amount), 0))
       : null
 
-  const totalAssets = bookCash + accountsReceivable + gstReceivable + qstReceivable
-  const totalLiabilities =
-    accountsPayable +
-    gstPayable +
-    qstPayable +
-    payrollRemittancesPending +
-    employeeReimbursementsPending +
-    dividendsPayable +
-    corporateTaxDue +
-    corpTaxProvision
+  const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
 
   return {
     period,
-    cashIn: clientPayments,
+    cashIn,
     cashOut,
-    netCash: bookCash,
+    netCash: cash,
     accountsReceivable,
     accountsPayable,
     salesTaxPayable,
-    revenueYtd,
-    expensesYtd,
-    payrollYtd,
-    assets: { cash: bookCash, accountsReceivable, total: totalAssets },
+    revenueYtd: income.revenueSubtotal,
+    expensesYtd: income.operatingExpenses,
+    payrollYtd: round2(income.payrollGross + income.employerPayrollContributions),
+    assets: { cash, accountsReceivable, total: totalAssets },
     liabilities: { accountsPayable, salesTaxPayable, total: totalLiabilities },
     equity: totalEquity,
     cashFlow: {
-      clientPayments,
-      expensesPaid,
-      payrollNetToEmployee,
-      employeeWithholdings,
-      employerPayrollContributions,
-      payrollRemittancesPaid,
-      dividendsPaid,
-      corporateTaxPaid,
-      salesTaxRemitted,
+      ...cashFlow,
+      employeeWithholdings: supplementalWithholdings,
+      employerPayrollContributions: supplementalEmployer,
     },
     balanceSheet: {
-      cash: bookCash,
+      cash,
       bankStatementBalance,
       accountsReceivable,
       gstReceivable,
@@ -356,19 +235,21 @@ export function buildFinancialSnapshot(
       equity: {
         shareCapital,
         openingRetainedEarnings: openingRE,
-        operatingIncome,
-        dividendsDistributed: dividendsDeclared,
+        operatingIncome: income.operatingIncome,
+        dividendsDistributed: income.dividendsDeclared,
         retainedEarnings,
         totalEquity,
       },
     },
     income: {
-      revenueSubtotal: revenueYtd,
-      operatingExpenses: expensesYtd,
-      payrollGross,
-      employerPayrollContributions,
-      operatingIncome,
-      dividendsDistributed: dividendsDeclared,
+      revenueSubtotal: income.revenueSubtotal,
+      operatingExpenses: income.operatingExpenses,
+      payrollGross: income.payrollGross,
+      employerPayrollContributions: income.employerPayrollContributions,
+      operatingIncome: income.operatingIncome,
+      dividendsDistributed: income.dividendsDeclared,
     },
   }
 }
+
+export type { AccountingAdjustment }

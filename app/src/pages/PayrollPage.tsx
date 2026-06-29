@@ -12,6 +12,7 @@ import {
   EMPLOYER_CONTRIBUTION_FIELDS,
   payFrequencyLabel,
   payPeriodRange,
+  periodsPerYear,
   sumEmployeeDeductions,
   sumEmployerContributions,
 } from '../lib/payrollCalc'
@@ -292,14 +293,35 @@ export function PayrollPage() {
   async function savePayroll(ev: React.FormEvent) {
     ev.preventDefault()
     if (!form || !form.employee_id) return
+    const emp = employees.find((e) => e.id === form.employee_id)
+    if (!emp) return
+
     const reimb = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
     const gross_pay = grossWithTaxableReimbursement(salaryGrossBase, reimb.taxable)
-    const formWithGross = { ...form, gross_pay }
+    const periods = periodsPerYear(emp.pay_frequency)
+    const extraTaxableAnnual = reimb.taxable * periods
+    const calc = calculatePayrollDeductions({
+      yearlySalary: Number(emp.yearly_salary),
+      payFrequency: emp.pay_frequency,
+      estimatedYearlyIncome: emp.estimated_yearly_income,
+      extraTaxableAnnual,
+    })
+    const formWithGross = {
+      ...form,
+      gross_pay,
+      federal_tax: calc.federal_tax,
+      provincial_tax: calc.provincial_tax,
+      cpp_employee: calc.cpp_employee,
+      ei_employee: calc.ei_employee,
+      qpip_employee: calc.qpip_employee,
+      cpp_employer: calc.cpp_employer,
+      ei_employer: calc.ei_employer,
+      qpip_employer: calc.qpip_employer,
+    }
     const salaryNet = calcNet(formWithGross)
     const net_pay = netPayWithReimbursement(salaryNet, reimb.nonTaxable)
     const payload = {
-      ...form,
-      gross_pay,
+      ...formWithGross,
       net_pay,
       reimbursement_total: reimb.total,
       employee_id: form.employee_id,

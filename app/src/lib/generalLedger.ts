@@ -48,6 +48,13 @@ function acct(code: string) {
   return a
 }
 
+function invoiceStatusFromPayment(p: {
+  invoices?: { invoice_number: string; status?: string } | { invoice_number: string; status?: string }[]
+}): string | undefined {
+  const inv = Array.isArray(p.invoices) ? p.invoices[0] : p.invoices
+  return inv?.status
+}
+
 function entry(
   id: string,
   date: string,
@@ -113,7 +120,7 @@ export function buildGeneralLedger(data: {
     amount: number
     invoice_id: string
     reference: string | null
-    invoices?: { invoice_number: string } | { invoice_number: string }[]
+    invoices?: { invoice_number: string; status?: string } | { invoice_number: string; status?: string }[]
   }[]
   expenses: {
     id: string
@@ -155,6 +162,9 @@ export function buildGeneralLedger(data: {
     id: string
     paid_date: string | null
     paid_amount: number
+    amount: number
+    status: string
+    due_date: string | null
     label: string
     fiscal_year: string
   }[]
@@ -169,7 +179,7 @@ export function buildGeneralLedger(data: {
   adjustments?: AccountingAdjustment[]
   settings?: Pick<
     OrganizationSettings,
-    'share_capital' | 'opening_cash_balance' | 'opening_balance_date'
+    'share_capital' | 'opening_retained_earnings' | 'opening_cash_balance' | 'opening_balance_date'
   > | null
   periodEnd?: string
 }): JournalEntry[] {
@@ -198,6 +208,7 @@ export function buildGeneralLedger(data: {
   }
 
   for (const p of data.payments) {
+    if (invoiceStatusFromPayment(p) === 'void') continue
     const invNum = Array.isArray(p.invoices)
       ? p.invoices[0]?.invoice_number
       : p.invoices?.invoice_number
@@ -341,31 +352,54 @@ export function buildGeneralLedger(data: {
   }
 
   for (const ct of data.corporateTax) {
-    if (!ct.paid_date || Number(ct.paid_amount) <= 0) continue
-    entries.push(
-      entry(
-        `ctax-${ct.id}-${ct.paid_date}`,
-        ct.paid_date,
-        'corporate_tax',
-        ct.id,
-        ct.fiscal_year,
-        `Impôt société — ${ct.label}`,
-        [jl('2300', Number(ct.paid_amount), 0), jl('1010', 0, Number(ct.paid_amount))]
+    const owed = round2(Number(ct.amount) - Number(ct.paid_amount))
+    const accrualDate = ct.due_date ?? ct.paid_date
+    if (owed > 0 && accrualDate && (ct.status === 'estimated' || ct.status === 'due')) {
+      entries.push(
+        entry(
+          `ctax-prov-${ct.id}`,
+          accrualDate,
+          'corporate_tax_provision',
+          ct.id,
+          ct.fiscal_year,
+          `Provision impôt société — ${ct.label}`,
+          [jl('5900', owed, 0), jl('2310', 0, owed)]
+        )
       )
-    )
+    }
+    if (ct.paid_date && Number(ct.paid_amount) > 0) {
+      const paid = Number(ct.paid_amount)
+      const useExpenseDirect = ct.status === 'paid' && owed <= 0
+      entries.push(
+        entry(
+          `ctax-${ct.id}-${ct.paid_date}`,
+          ct.paid_date,
+          'corporate_tax',
+          ct.id,
+          ct.fiscal_year,
+          `Impôt société — ${ct.label}`,
+          useExpenseDirect
+            ? [jl('5900', paid, 0), jl('1010', 0, paid)]
+            : [jl('2310', paid, 0), jl('1010', 0, paid)]
+        )
+      )
+    }
   }
 
   for (const st of data.salesTaxRemittances) {
     if (st.status !== 'paid') continue
     const remitDate = st.filed_date ?? st.period_end
-    const gst = Math.max(0, Number(st.gst_net))
-    const qst = Math.max(0, Number(st.qst_net))
+    const gst = Number(st.gst_net)
+    const qst = Number(st.qst_net)
     const totalRemit = round2(gst + qst)
-    if (totalRemit <= 0) continue
+    if (Math.abs(totalRemit) < 0.01) continue
     const lines: JournalLine[] = []
     if (gst > 0) lines.push(jl('2100', gst, 0))
+    else if (gst < 0) lines.push(jl('1200', 0, Math.abs(gst)))
     if (qst > 0) lines.push(jl('2110', qst, 0))
-    lines.push(jl('1010', 0, totalRemit))
+    else if (qst < 0) lines.push(jl('1210', 0, Math.abs(qst)))
+    if (totalRemit > 0) lines.push(jl('1010', 0, totalRemit))
+    else lines.push(jl('1010', Math.abs(totalRemit), 0))
     entries.push(
       entry(
         `stax-${st.id}`,
@@ -423,22 +457,29 @@ export function buildGeneralLedger(data: {
 }
 
 export function buildOpeningBalanceEntries(
-  settings: Pick<OrganizationSettings, 'share_capital' | 'opening_cash_balance' | 'opening_balance_date'> | null | undefined
+  settings: Pick<
+    OrganizationSettings,
+    'share_capital' | 'opening_retained_earnings' | 'opening_cash_balance' | 'opening_balance_date'
+  > | null | undefined
 ): JournalEntry[] {
   if (!settings) return []
 
   const shareCapital = round2(Number(settings.share_capital ?? 0))
+  const openingRE = round2(Number(settings.opening_retained_earnings ?? 0))
   const openingCash = round2(Number(settings.opening_cash_balance ?? 0))
-  if (shareCapital <= 0 && openingCash <= 0) return []
+  if (shareCapital <= 0 && openingCash <= 0 && openingRE <= 0) return []
 
   const date = settings.opening_balance_date ?? '2000-01-01'
   const entries: JournalEntry[] = []
 
-  const cashDebit = openingCash > 0 ? openingCash : shareCapital
-  const capitalCredit = shareCapital > 0 ? shareCapital : openingCash
-  if (cashDebit > 0 && capitalCredit > 0) {
-    const lines = [jl('1010', cashDebit, 0), jl('3000', 0, capitalCredit)]
-    const diff = round2(cashDebit - capitalCredit)
+  if (openingCash > 0 || shareCapital > 0 || openingRE > 0) {
+    const lines: JournalLine[] = []
+    if (openingCash > 0) lines.push(jl('1010', openingCash, 0))
+    if (shareCapital > 0) lines.push(jl('3000', 0, shareCapital))
+    if (openingRE > 0) lines.push(jl('3100', 0, openingRE))
+    const debits = round2(lines.reduce((s, l) => s + l.debit, 0))
+    const credits = round2(lines.reduce((s, l) => s + l.credit, 0))
+    const diff = round2(debits - credits)
     if (Math.abs(diff) > 0.01) {
       if (diff > 0) lines.push(jl('3100', 0, diff))
       else lines.push(jl('3100', Math.abs(diff), 0))
@@ -450,7 +491,7 @@ export function buildOpeningBalanceEntries(
         'opening',
         'settings',
         'OUVERTURE',
-        'Apport en capital — solde d\'ouverture',
+        'Soldes d\'ouverture — trésorerie, capital et BNR',
         lines
       )
     )
@@ -499,7 +540,9 @@ export function buildTrialBalance(entries: JournalEntry[]): TrialBalanceRow[] {
     const balance =
       account.type === 'asset' || account.type === 'expense'
         ? round2(debit - credit)
-        : round2(credit - debit)
+        : account.type === 'contra'
+          ? round2(credit - debit)
+          : round2(credit - debit)
     return {
       accountCode: account.code,
       accountName: account.name,

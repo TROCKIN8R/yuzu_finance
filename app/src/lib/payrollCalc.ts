@@ -1,10 +1,11 @@
 import type { PayFrequency } from './types'
 import { addDays } from './format'
 
-/** Quebec payroll estimates — 2025 rates, for planning only. */
+/** Québec payroll estimates — 2025 QPP/AE/RQAP rates, for planning only (not a payroll provider). */
 const YMPE = 71_300
-const CPP_BASIC_EXEMPTION = 3_500
-const CPP_EMPLOYEE_RATE = 0.064
+const QPP_BASIC_EXEMPTION = 3_500
+const QPP_EMPLOYEE_RATE = 0.064
+const QPP_EMPLOYER_RATE = 0.064
 const EI_MAX_INSURABLE = 65_700
 const EI_EMPLOYEE_RATE = 0.0164
 const EI_EMPLOYER_MULTIPLIER = 1.4
@@ -97,23 +98,26 @@ export interface PayrollDeductions {
 export function calculatePayrollDeductions(params: {
   yearlySalary: number
   payFrequency: PayFrequency
-  /** Used for income-tax withholding when different from salary (e.g. other income). */
   estimatedYearlyIncome?: number | null
+  /** Extra annual taxable income (e.g. taxable reimbursements annualized). */
+  extraTaxableAnnual?: number
 }): PayrollDeductions {
   const { yearlySalary, payFrequency } = params
   const periods = periodsPerYear(payFrequency)
   const gross_pay = grossPerPeriod(yearlySalary, payFrequency)
-  const taxIncome = params.estimatedYearlyIncome ?? yearlySalary
+  const extraTaxable = Number(params.extraTaxableAnnual ?? 0)
+  const taxIncome = (params.estimatedYearlyIncome ?? yearlySalary) + extraTaxable
+  const qppBase = yearlySalary + extraTaxable
 
-  const pensionableAnnual = Math.max(0, Math.min(yearlySalary, YMPE) - CPP_BASIC_EXEMPTION)
-  const cpp_employee = round2((pensionableAnnual * CPP_EMPLOYEE_RATE) / periods)
-  const cpp_employer = cpp_employee
+  const pensionableAnnual = Math.max(0, Math.min(qppBase, YMPE) - QPP_BASIC_EXEMPTION)
+  const cpp_employee = round2((pensionableAnnual * QPP_EMPLOYEE_RATE) / periods)
+  const cpp_employer = round2((pensionableAnnual * QPP_EMPLOYER_RATE) / periods)
 
-  const eiInsurable = Math.min(yearlySalary, EI_MAX_INSURABLE)
+  const eiInsurable = Math.min(qppBase, EI_MAX_INSURABLE)
   const ei_employee = round2((eiInsurable * EI_EMPLOYEE_RATE) / periods)
   const ei_employer = round2((eiInsurable * EI_EMPLOYEE_RATE * EI_EMPLOYER_MULTIPLIER) / periods)
 
-  const qpipInsurable = Math.min(yearlySalary, QPIP_MAX_INSURABLE)
+  const qpipInsurable = Math.min(qppBase, QPIP_MAX_INSURABLE)
   const qpip_employee = round2((qpipInsurable * QPIP_EMPLOYEE_RATE) / periods)
   const qpip_employer = round2((qpipInsurable * QPIP_EMPLOYER_RATE) / periods)
 
@@ -140,11 +144,28 @@ export function calculatePayrollDeductions(params: {
   }
 }
 
-export function splitDividendEqually(totalAmount: number, employeeCount: number): number[] {
-  if (employeeCount <= 0) return []
-  const base = Math.floor((totalAmount / employeeCount) * 100) / 100
-  const amounts = Array(employeeCount).fill(base)
-  const remainder = round2(totalAmount - base * employeeCount)
+export function splitDividendEqually(totalAmount: number, count: number): number[] {
+  if (count <= 0) return []
+  const base = Math.floor((totalAmount / count) * 100) / 100
+  const amounts = Array(count).fill(base)
+  const remainder = round2(totalAmount - base * count)
+  if (remainder > 0) amounts[0] = round2(amounts[0] + remainder)
+  return amounts
+}
+
+export function splitDividendByShares(
+  totalAmount: number,
+  shareholders: { shares_held: number }[]
+): number[] {
+  if (shareholders.length === 0) return []
+  const totalShares = shareholders.reduce((s, sh) => s + Number(sh.shares_held), 0)
+  if (totalShares <= 0) return splitDividendEqually(totalAmount, shareholders.length)
+
+  const amounts = shareholders.map((sh) =>
+    round2(Math.floor((totalAmount * (Number(sh.shares_held) / totalShares)) * 100) / 100)
+  )
+  const assigned = round2(amounts.reduce((s, a) => s + a, 0))
+  const remainder = round2(totalAmount - assigned)
   if (remainder > 0) amounts[0] = round2(amounts[0] + remainder)
   return amounts
 }
@@ -156,14 +177,14 @@ export function employeeDisplayName(e: { first_name: string; last_name: string }
 export const EMPLOYEE_DEDUCTION_FIELDS = [
   { key: 'federal_tax' as const, label: 'Impôt fédéral (retenue)' },
   { key: 'provincial_tax' as const, label: 'Impôt provincial (retenue)' },
-  { key: 'cpp_employee' as const, label: 'RPC — part employé' },
+  { key: 'cpp_employee' as const, label: 'RRQ / QPP — part employé' },
   { key: 'ei_employee' as const, label: 'AE — part employé' },
   { key: 'qpip_employee' as const, label: 'RQAP — part employé' },
   { key: 'other_deductions' as const, label: 'Autres déductions' },
 ]
 
 export const EMPLOYER_CONTRIBUTION_FIELDS = [
-  { key: 'cpp_employer' as const, label: 'RPC — part employeur' },
+  { key: 'cpp_employer' as const, label: 'RRQ / QPP — part employeur' },
   { key: 'ei_employer' as const, label: 'AE — part employeur' },
   { key: 'qpip_employer' as const, label: 'RQAP — part employeur' },
   { key: 'employer_benefits' as const, label: 'Avantages employeur' },

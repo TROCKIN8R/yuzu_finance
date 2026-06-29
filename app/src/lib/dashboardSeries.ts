@@ -219,7 +219,6 @@ export function buildMonthlySeries(
     if (months.includes(ym)) {
       add(payrollByMonth, ym, payrollEmployerTotal(p))
       add(cashOutByMonth, ym, Number(p.net_pay))
-      add(cashOutByMonth, ym, Number(p.cpp_employer) + Number(p.ei_employer) + Number(p.qpip_employer) + Number(p.employer_benefits))
     }
     if (p.remittance_status === 'remitted' && p.remittance_date) {
       const rym = monthKey(p.remittance_date)
@@ -248,7 +247,7 @@ export function buildMonthlySeries(
     const date = st.filed_date ?? st.period_end
     const ym = monthKey(date)
     if (!months.includes(ym)) continue
-    add(cashOutByMonth, ym, Math.max(0, Number(st.gst_net)) + Math.max(0, Number(st.qst_net)))
+    add(cashOutByMonth, ym, Number(st.gst_net) + Number(st.qst_net))
   }
 
   const shareCapital = Number(data.settings?.share_capital ?? 0)

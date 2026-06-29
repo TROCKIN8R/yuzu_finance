@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { formatCad, formatDate } from '../lib/format'
 import { countActiveFilters, inDateRange } from '../lib/filters'
 import {
@@ -10,6 +9,8 @@ import {
   journalTotals,
   type JournalEntry,
 } from '../lib/generalLedger'
+import { entriesThroughDate } from '../lib/ledgerBalances'
+import { fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { exportJournalCsv, exportTrialBalanceCsv } from '../lib/exportCsv'
 import { DataTable } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
@@ -33,63 +34,13 @@ export function GeneralLedgerPage() {
 
   async function load() {
     setLoading(true)
-    setLoadWarnings([])
-    const [invoices, payments, expenses, employeeExpenses, payroll, dividends, corpTax, salesTax, adjustments, settingsRow] =
-      await Promise.all([
-      supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
-      supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number)'),
-      supabase.from('expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, paid, payroll_run_id'),
-      supabase.from('employee_expenses').select('id, expense_date, vendor, category, description, amount, gst, qst, total, taxable, payroll_run_id'),
-      supabase
-        .from('payroll_runs')
-        .select(
-          'id, payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
-        ),
-      supabase.from('dividends').select('id, declared_date, payment_date, total_amount, paid_amount, description, status'),
-      supabase.from('corporate_tax_records').select('id, paid_date, paid_amount, label, fiscal_year'),
-      supabase.from('sales_tax_periods').select('id, period_end, filed_date, gst_net, qst_net, status'),
-      supabase.from('accounting_adjustments').select('*'),
-      supabase
-        .from('organization_settings')
-        .select('share_capital, opening_cash_balance, opening_balance_date')
-        .maybeSingle(),
-    ])
-
-    const warnings: string[] = []
-    if (adjustments.error) {
-      warnings.push(
-        adjustments.error.message.includes('accounting_adjustments')
-          ? 'Ajustements manuels non chargés — exécutez la migration 20260630150100_accounting_adjustments.sql dans Supabase.'
-          : `Ajustements non chargés : ${adjustments.error.message}`
-      )
-    }
-    if (settingsRow.error) {
-      warnings.push(
-        settingsRow.error.message.includes('opening_balance_date')
-          ? 'Soldes d\'ouverture non chargés — exécutez la migration 20260630150000_opening_balance_date.sql dans Supabase.'
-          : `Paramètres comptables non chargés : ${settingsRow.error.message}`
-      )
-    }
+    const { data, warnings } = await fetchGeneralLedgerData()
     setLoadWarnings(warnings)
-
-    setEntries(
-      buildGeneralLedger({
-        invoices: invoices.data ?? [],
-        payments: payments.data ?? [],
-        expenses: expenses.data ?? [],
-        employeeExpenses: employeeExpenses.data ?? [],
-        payrollRuns: payroll.data ?? [],
-        dividends: dividends.data ?? [],
-        corporateTax: corpTax.data ?? [],
-        salesTaxRemittances: salesTax.data ?? [],
-        adjustments: adjustments.data ?? [],
-        settings: settingsRow.data,
-      })
-    )
+    setEntries(buildGeneralLedger(data))
     setLoading(false)
   }
 
-  const filteredEntries = useMemo(() => {
+  const journalEntries = useMemo(() => {
     return entries.filter((e) => {
       if (!inDateRange(e.date, dateFrom, dateTo)) return false
       if (accountFilter && !e.lines.some((l) => l.accountCode === accountFilter)) return false
@@ -97,11 +48,21 @@ export function GeneralLedgerPage() {
     })
   }, [entries, dateFrom, dateTo, accountFilter])
 
-  const flatLines = useMemo(() => flattenJournalEntries(filteredEntries), [filteredEntries])
-  const trial = useMemo(() => buildTrialBalance(filteredEntries), [filteredEntries])
-  const totals = useMemo(() => journalTotals(filteredEntries), [filteredEntries])
+  const trialEntries = useMemo(() => {
+    const asOf = dateTo || '9999-12-31'
+    let scoped = entriesThroughDate(entries, asOf)
+    if (dateFrom) scoped = scoped.filter((e) => e.date >= dateFrom)
+    if (accountFilter) scoped = scoped.filter((e) => e.lines.some((l) => l.accountCode === accountFilter))
+    return scoped
+  }, [entries, dateFrom, dateTo, accountFilter])
+
+  const activeEntries = view === 'journal' ? journalEntries : trialEntries
+  const flatLines = useMemo(() => flattenJournalEntries(journalEntries), [journalEntries])
+  const trial = useMemo(() => buildTrialBalance(trialEntries), [trialEntries])
+  const totals = useMemo(() => journalTotals(journalEntries), [journalEntries])
 
   const hasFilters = !!(dateFrom || dateTo || accountFilter)
+  const trialAsOfLabel = dateTo ? `Soldes cumulatifs au ${formatDate(dateTo)}` : 'Soldes cumulatifs (toutes dates)'
 
   if (loading) return <div className="text-muted">Chargement…</div>
 
@@ -117,7 +78,7 @@ export function GeneralLedgerPage() {
             variant="secondary"
             onClick={() =>
               view === 'journal'
-                ? exportJournalCsv(filteredEntries)
+                ? exportJournalCsv(journalEntries)
                 : exportTrialBalanceCsv(trial)
             }
           >
@@ -141,8 +102,8 @@ export function GeneralLedgerPage() {
         onChange={setView}
         label="Affichage"
         options={[
-          { value: 'journal', label: 'Journal général' },
-          { value: 'trial', label: 'Balance de vérification' },
+          { value: 'journal', label: 'Journal (activité)' },
+          { value: 'trial', label: 'Balance (cumulatif)' },
         ]}
       />
 
@@ -150,7 +111,7 @@ export function GeneralLedgerPage() {
         hideSearch
         search=""
         onSearchChange={() => {}}
-        resultCount={filteredEntries.length}
+        resultCount={activeEntries.length}
         totalCount={entries.length}
         activeFilterCount={countActiveFilters(!!dateFrom, !!dateTo, !!accountFilter)}
         clearVisible={hasFilters}
@@ -173,7 +134,7 @@ export function GeneralLedgerPage() {
       </ListToolbar>
 
       {view === 'journal' ? (
-        filteredEntries.length === 0 ? (
+        journalEntries.length === 0 ? (
           <EmptyState message="Aucune écriture pour cette période." />
         ) : (
           <>
@@ -210,35 +171,38 @@ export function GeneralLedgerPage() {
           </>
         )
       ) : trial.length === 0 ? (
-        <EmptyState message="Aucun solde pour cette période." />
+        <EmptyState message="Aucun solde pour cette sélection." />
       ) : (
-        <DataTable minWidth={720}>
-          <thead className="bg-stone-50 text-muted text-left text-xs">
-            <tr>
-              <th className="px-3 py-3">Compte</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3 text-right">Débit</th>
-              <th className="px-3 py-3 text-right">Crédit</th>
-              <th className="px-3 py-3 text-right">Solde</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border text-sm">
-            {trial.map((row) => (
-              <tr key={row.accountCode}>
-                <td className="px-3 py-2">
-                  <span className="font-mono text-xs">{row.accountCode}</span> {row.accountName}
-                </td>
-                <td className="px-3 py-2 text-muted">{row.accountType}</td>
-                <td className="px-3 py-2 text-right">{row.debit > 0 ? formatCad(row.debit) : '—'}</td>
-                <td className="px-3 py-2 text-right">{row.credit > 0 ? formatCad(row.credit) : '—'}</td>
-                <td className="px-3 py-2 text-right font-medium">{formatCad(row.balance)}</td>
+        <>
+          <p className="text-xs text-muted mb-3">{trialAsOfLabel}</p>
+          <DataTable minWidth={720}>
+            <thead className="bg-stone-50 text-muted text-left text-xs">
+              <tr>
+                <th className="px-3 py-3">Compte</th>
+                <th className="px-3 py-3">Type</th>
+                <th className="px-3 py-3 text-right">Débit</th>
+                <th className="px-3 py-3 text-right">Crédit</th>
+                <th className="px-3 py-3 text-right">Solde</th>
               </tr>
-            ))}
-          </tbody>
-        </DataTable>
+            </thead>
+            <tbody className="divide-y divide-border text-sm">
+              {trial.map((row) => (
+                <tr key={row.accountCode}>
+                  <td className="px-3 py-2">
+                    <span className="font-mono text-xs">{row.accountCode}</span> {row.accountName}
+                  </td>
+                  <td className="px-3 py-2 text-muted">{row.accountType}</td>
+                  <td className="px-3 py-2 text-right">{row.debit > 0 ? formatCad(row.debit) : '—'}</td>
+                  <td className="px-3 py-2 text-right">{row.credit > 0 ? formatCad(row.credit) : '—'}</td>
+                  <td className="px-3 py-2 text-right font-medium">{formatCad(row.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        </>
       )}
 
-      <section className="bg-stone-50 border border-border rounded-xl p-4 text-xs text-muted space-y-2">
+      <section className="bg-stone-50 border border-border rounded-xl p-4 text-xs text-muted space-y-2 mt-6">
         <p className="font-medium text-ink">Plan comptable simplifié</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
           {CHART_OF_ACCOUNTS.map((a) => (

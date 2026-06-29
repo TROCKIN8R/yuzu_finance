@@ -1,6 +1,6 @@
 import type { ExpenseCategory } from './types'
 
-export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
+export type AccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense' | 'contra'
 
 export interface Account {
   code: string
@@ -14,7 +14,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '1200', name: 'TPS à recevoir (CTI)', type: 'asset' },
   { code: '1210', name: 'TVQ à recevoir (RTI)', type: 'asset' },
   { code: '1400', name: 'Charges payées d\'avance', type: 'asset' },
-  { code: '1500', name: 'Amortissement cumulé', type: 'asset' },
+  { code: '1500', name: 'Amortissement cumulé', type: 'contra' },
   { code: '2000', name: 'Comptes fournisseurs', type: 'liability' },
   { code: '2050', name: 'Charges à payer', type: 'liability' },
   { code: '2060', name: 'Remboursements dus à l\'employé', type: 'liability' },
@@ -22,7 +22,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '2110', name: 'TVQ à remettre', type: 'liability' },
   { code: '2125', name: 'Dividendes à payer', type: 'liability' },
   { code: '2200', name: 'Retenues à la source — impôts', type: 'liability' },
-  { code: '2210', name: 'RPC / AE / RQAP à remettre', type: 'liability' },
+  { code: '2210', name: 'RRQ / AE / RQAP à remettre', type: 'liability' },
   { code: '2300', name: 'Impôts société dus', type: 'liability' },
   { code: '2310', name: 'Provision impôts société', type: 'liability' },
   { code: '3000', name: 'Capital-actions', type: 'equity' },
@@ -39,6 +39,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '5100', name: 'Salaires et traitements', type: 'expense' },
   { code: '5110', name: 'Charges sociales employeur', type: 'expense' },
   { code: '5200', name: 'Amortissement', type: 'expense' },
+  { code: '5900', name: 'Impôt société (charge)', type: 'expense' },
 ]
 
 const EXPENSE_CATEGORY_ACCOUNTS: Record<ExpenseCategory, string> = {

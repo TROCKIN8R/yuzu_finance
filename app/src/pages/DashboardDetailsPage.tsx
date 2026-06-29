@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot, type FinancialSnapshot } from '../lib/financials'
+import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { buildMonthlySeries, hasChartData } from '../lib/dashboardSeries'
 import { computeUnbilledWip } from '../lib/billingMetrics'
 import {
@@ -38,29 +39,16 @@ export function DashboardDetailsPage() {
   async function loadAll(range: NonNullable<typeof period>, orgSettings?: OrganizationSettings) {
     setLoading(true)
     const billing = await fetchDashboardBillingData()
-
-    const [settingsRow, payments, expenses, employeeExpenses, payroll, invoices, dividends, corpTax, salesTaxPaid, bank, partners, employeeExpensesPending] =
+    const [{ data: glData, warnings: glWarnings }, extras, settingsResult, partners, employeeExpensesPending] =
       await Promise.all([
+        fetchGeneralLedgerData(),
+        fetchFinancialReportExtras(),
         orgSettings ? Promise.resolve({ data: orgSettings }) : supabase.from('organization_settings').select('*').maybeSingle(),
-        supabase.from('payments').select('invoice_id, amount, payment_date'),
-        supabase.from('expenses').select('amount, total, paid, gst, qst, category, payroll_run_id, expense_date'),
-        supabase.from('employee_expenses').select('amount, total, gst, qst, category, taxable, payroll_run_id, expense_date'),
-        supabase
-          .from('payroll_runs')
-          .select(
-            'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay, reimbursement_total'
-          ),
-        supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date').neq('status', 'void'),
-        supabase.from('dividends').select('total_amount, paid_amount, declared_date, payment_date, status'),
-        supabase.from('corporate_tax_records').select('amount, paid_amount, status'),
-        supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
-        supabase.from('bank_transactions').select('amount, transaction_date'),
         supabase.from('partners').select('id', { count: 'exact', head: true }),
         supabase.from('employee_expenses').select('total, payroll_run_id').is('payroll_run_id', null),
       ])
 
-    const paidMap: Record<string, number> = {}
-    for (const p of payments.data ?? []) paidMap[p.invoice_id] = (paidMap[p.invoice_id] ?? 0) + Number(p.amount)
+    if (glWarnings.length > 0) console.warn('GL load:', glWarnings.join('; '))
 
     const wip = computeUnbilledWip(billing.timeEntries, billing.fixedProjects)
     const workedMetrics = computeWorkedRevenueMetrics(billing.timeEntries, range)
@@ -74,39 +62,23 @@ export function DashboardDetailsPage() {
     })
 
     setChartSource({
-      payments: payments.data ?? [],
-      expenses: expenses.data ?? [],
-      payrollRuns: payroll.data ?? [],
-      invoices: invoices.data ?? [],
+      payments: glData.payments,
+      expenses: glData.expenses,
+      payrollRuns: glData.payrollRuns,
+      invoices: glData.invoices,
       timeEntries: billing.timeEntries,
-      dividends: dividends.data ?? [],
-      corporateTax: corpTax.data ?? [],
-      salesTaxRemitted: salesTaxPaid.data ?? [],
-      settings: settingsRow.data ?? undefined,
+      dividends: glData.dividends,
+      corporateTax: glData.corporateTax,
+      salesTaxRemitted: extras.salesTaxRemitted,
+      settings: settingsResult.data ?? undefined,
     })
 
     setFin(
       buildFinancialSnapshot(
         {
-          payments: payments.data ?? [],
-          expenses: expenses.data ?? [],
-          employeeExpenses: employeeExpenses.data ?? [],
-          payrollRuns: payroll.data ?? [],
-          invoices: (invoices.data ?? []) as {
-            id: string
-            total: number
-            status: string
-            subtotal: number
-            gst: number
-            qst: number
-            invoice_date: string
-          }[],
-          invoicePaidMap: paidMap,
-          dividends: dividends.data ?? [],
-          corporateTax: corpTax.data ?? [],
-          salesTaxRemitted: salesTaxPaid.data ?? [],
-          bankTransactions: bank.data ?? [],
-          settings: settingsRow.data ?? undefined,
+          ...glData,
+          bankTransactions: extras.bankTransactions,
+          settings: settingsResult.data ?? glData.settings ?? undefined,
         },
         range
       )

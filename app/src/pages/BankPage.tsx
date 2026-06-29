@@ -14,6 +14,8 @@ import type {
 } from '../lib/types'
 import { formatCad, formatDate, relationOne } from '../lib/format'
 import { buildFinancialSnapshot, payrollRemittancesTotal } from '../lib/financials'
+import { fetchGeneralLedgerData } from '../lib/glDataLoader'
+import { allTimeRange } from '../lib/fiscalPeriod'
 import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
@@ -224,18 +226,12 @@ export function BankPage() {
     setSalesTaxPeriods((salesTax.data as SalesTaxPeriod[]) ?? [])
     setCorpTaxRecords((corpTax.data as CorporateTaxRecord[]) ?? [])
 
+    const { data: glData } = await fetchGeneralLedgerData()
     const fin = buildFinancialSnapshot(
       {
-        payments: payments.map((p) => ({ amount: p.amount, payment_date: p.payment_date })),
-        expenses: expenses,
-        payrollRuns: payroll.data ?? [],
-        invoices: [],
-        invoicePaidMap: {},
-        dividends: div.data ?? [],
-        corporateTax: corpTax.data ?? [],
-        salesTaxRemitted: (salesTax.data ?? []).filter((p) => p.status === 'paid'),
+        ...glData,
         bankTransactions: bank.data ?? [],
-        settings: set.data ?? undefined,
+        settings: set.data ?? glData.settings ?? undefined,
       },
       allTimeRange()
     )

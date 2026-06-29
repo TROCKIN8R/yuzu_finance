@@ -46,7 +46,7 @@ export function CashFlowStatement({ fin, periodLabel }: { fin: FinancialSnapshot
           <div className="text-lg font-semibold">{formatCad(fin.cashOut)}</div>
         </div>
         <div className="bg-stone-50 border border-border rounded-lg p-4">
-          <div className="text-xs text-muted mb-1">Trésorerie nette estimée</div>
+          <div className="text-xs text-muted mb-1">Trésorerie comptable (GL)</div>
           <div className="text-lg font-semibold">{formatCad(fin.netCash)}</div>
         </div>
       </div>
@@ -57,8 +57,7 @@ export function CashFlowStatement({ fin, periodLabel }: { fin: FinancialSnapshot
       <StmtSection title="Décaissements" />
       <StmtRow label="Dépenses payées (TTC)" value={formatCad(cf.expensesPaid)} indent negative />
       <StmtRow label="Salaire net versé aux employés" value={formatCad(cf.payrollNetToEmployee)} indent negative />
-      <StmtRow label="Remises paie (retenues + cotisations)" value={formatCad(cf.payrollRemittancesPaid)} indent negative />
-      <StmtRow label="Cotisations employeur (cash)" value={formatCad(cf.employerPayrollContributions)} indent negative />
+      <StmtRow label="Remises paie (retenues + cotisations employeur)" value={formatCad(cf.payrollRemittancesPaid)} indent negative />
       <StmtRow label="Remises TPS/TVQ" value={formatCad(cf.salesTaxRemitted)} indent negative />
       <StmtRow label="Impôts société payés" value={formatCad(cf.corporateTaxPaid)} indent negative />
       <StmtRow label="Dividendes payés" value={formatCad(cf.dividendsPaid)} indent negative />
@@ -74,7 +73,7 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
   return (
     <div>
       <h2 className="font-semibold mb-1">Bilan simplifié</h2>
-      <p className="text-xs text-muted mb-4">{periodLabel}</p>
+      <p className="text-xs text-muted mb-4">{periodLabel} — soldes cumulatifs au grand livre</p>
 
       <StmtSection title="Actif" />
       <StmtRow label="Trésorerie comptable" value={formatCad(bs.cash)} />
@@ -130,7 +129,7 @@ export function IncomeStatement({ fin, periodLabel }: { fin: FinancialSnapshot; 
       <StmtRow label="Résultat d'exploitation" value={formatCad(inc.operatingIncome)} bold />
 
       <StmtSection title="Distributions (avoir)" />
-      <StmtRow label="Dividendes payés (hors P&L)" value={formatCad(inc.dividendsDistributed)} indent />
+      <StmtRow label="Dividendes déclarés (période, hors P&L)" value={formatCad(inc.dividendsDistributed)} indent />
     </div>
   )
 }

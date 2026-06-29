@@ -13,7 +13,7 @@ export function CompensationWorkflowNav({ current }: { current?: CompensationSte
       ariaLabel="Étapes rémunération"
       steps={steps}
       currentId={current}
-      asideLink={{ to: '/compensation/employees', label: 'Employés' }}
+      asideLink={{ to: '/compensation/shareholders', label: 'Actionnaires' }}
     />
   )
 }

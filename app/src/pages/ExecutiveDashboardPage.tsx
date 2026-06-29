@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot } from '../lib/financials'
+import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { buildMonthlySeries, hasChartData } from '../lib/dashboardSeries'
 import {
   averageRate,
@@ -40,43 +41,18 @@ export function ExecutiveDashboardPage() {
 
   async function load(range: NonNullable<typeof period>) {
     setLoading(true)
-    const [billing, extras, payments, expenses, payroll, invoices, dividends, corpTax, salesTaxPaid, settingsRow] =
-      await Promise.all([
-        fetchDashboardBillingData(),
-        fetchExecutiveExtras(),
-        supabase.from('payments').select('amount, payment_date, invoice_id'),
-        supabase.from('expenses').select('amount, total, paid, gst, qst, category, payroll_run_id, expense_date'),
-        supabase
-          .from('payroll_runs')
-          .select(
-            'payment_date, remittance_status, remittance_date, gross_pay, federal_tax, provincial_tax, cpp_employee, ei_employee, qpip_employee, cpp_employer, ei_employer, qpip_employer, other_deductions, employer_benefits, net_pay'
-          ),
-        supabase.from('invoices').select('id, total, status, subtotal, gst, qst, invoice_date, partner_id').neq('status', 'void'),
-        supabase.from('dividends').select('total_amount, paid_amount, declared_date, payment_date, status'),
-        supabase.from('corporate_tax_records').select('amount, paid_amount, status, paid_date'),
-        supabase.from('sales_tax_periods').select('gst_net, qst_net, filed_date, period_end').eq('status', 'paid'),
-        supabase.from('organization_settings').select('*').maybeSingle(),
-      ])
+    const [billing, extras, { data: glData }, reportExtras, settingsRow] = await Promise.all([
+      fetchDashboardBillingData(),
+      fetchExecutiveExtras(),
+      fetchGeneralLedgerData(),
+      fetchFinancialReportExtras(),
+      supabase.from('organization_settings').select('*').maybeSingle(),
+    ])
 
     const fin = buildFinancialSnapshot(
       {
-        payments: payments.data ?? [],
-        expenses: expenses.data ?? [],
-        payrollRuns: payroll.data ?? [],
-        invoices: (invoices.data ?? []) as {
-          id: string
-          total: number
-          status: string
-          subtotal: number
-          gst: number
-          qst: number
-          invoice_date: string
-        }[],
-        invoicePaidMap: {},
-        dividends: dividends.data ?? [],
-        corporateTax: corpTax.data ?? [],
-        salesTaxRemitted: salesTaxPaid.data ?? [],
-        settings: settingsRow.data ?? undefined,
+        ...glData,
+        settings: settingsRow.data ?? glData.settings ?? undefined,
       },
       range
     )
@@ -85,18 +61,18 @@ export function ExecutiveDashboardPage() {
     const wip = computeUnbilledWip(billing.timeEntries, billing.fixedProjects)
     const series = buildMonthlySeries(
       {
-        payments: payments.data ?? [],
-        expenses: expenses.data ?? [],
-        payrollRuns: payroll.data ?? [],
-        invoices: (invoices.data ?? []).map((inv) => ({
+        payments: glData.payments,
+        expenses: glData.expenses,
+        payrollRuns: glData.payrollRuns,
+        invoices: glData.invoices.map((inv) => ({
           subtotal: inv.subtotal,
           invoice_date: inv.invoice_date,
           status: inv.status,
         })),
         timeEntries: billing.timeEntries,
-        dividends: dividends.data ?? [],
-        corporateTax: corpTax.data ?? [],
-        salesTaxRemitted: salesTaxPaid.data ?? [],
+        dividends: glData.dividends,
+        corporateTax: glData.corporateTax,
+        salesTaxRemitted: reportExtras.salesTaxRemitted,
         settings: settingsRow.data ?? undefined,
       },
       range
@@ -111,7 +87,7 @@ export function ExecutiveDashboardPage() {
       buildPartnerBreakdown(
         billing.timeEntries,
         extras.invoices as { id: string; partner_id: string; subtotal: number; invoice_date: string; status: string }[],
-        (payments.data ?? []) as { amount: number; payment_date?: string | null; invoice_id: string }[],
+        glData.payments as { amount: number; payment_date?: string | null; invoice_id: string }[],
         billing.partners,
         range
       )
@@ -121,7 +97,7 @@ export function ExecutiveDashboardPage() {
         billing.timeEntries,
         extras.lines as { invoice_id: string; subtotal: number; unit_label: string }[],
         extras.invoices as { id: string; partner_id: string; subtotal: number; invoice_date: string; status: string }[],
-        (payments.data ?? []) as { amount: number; payment_date?: string | null; invoice_id: string }[],
+        glData.payments as { amount: number; payment_date?: string | null; invoice_id: string }[],
         range
       )
     )
