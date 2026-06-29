@@ -1,40 +1,30 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
-import {
-  IconGrid,
-  IconLandmark,
-  IconLayoutDashboard,
-  IconLogOut,
-  IconMenu,
-  IconReceipt,
-  IconSettings,
-  IconUsers,
-  IconWallet,
-} from './icons'
+import { AppIcon, ICON_SIZE, ICON_STROKE, LogOut, Menu, Settings, X, navIcons, type NavIconKey } from './icons'
 
 type NavItem = {
   to: string
   label: string
   end?: boolean
-  icon: ComponentType<{ className?: string }>
+  icon: NavIconKey
 }
 
 const primaryNav: { section: string; links: NavItem[] }[] = [
   {
     section: 'Facturation',
     links: [
-      { to: '/partners', label: 'Partenaires', icon: IconUsers },
-      { to: '/billing/projects', label: 'Prestation → Encaissement', icon: IconReceipt },
+      { to: '/partners', label: 'Partenaires', icon: 'partners' },
+      { to: '/billing/projects', label: 'Prestations', icon: 'prestations' },
     ],
   },
   {
     section: 'Finances',
     links: [
-      { to: '/bank', label: 'Banque', icon: IconLandmark },
-      { to: '/compensation/payroll', label: 'Rémunération', icon: IconWallet },
-      { to: '/other', label: 'Autre', icon: IconGrid },
+      { to: '/bank', label: 'Banque', icon: 'bank' },
+      { to: '/compensation/payroll', label: 'Rémunération', icon: 'compensation' },
+      { to: '/other', label: 'Autre', icon: 'other' },
     ],
   },
 ]
@@ -51,7 +41,7 @@ const otherModulePaths = [
 
 const mobilePageTitles: { match: (path: string) => boolean; title: string }[] = [
   { match: (p) => p === '/', title: 'Tableau de bord' },
-  { match: (p) => p.startsWith('/billing'), title: 'Prestation → Encaissement' },
+  { match: (p) => p.startsWith('/billing'), title: 'Prestations' },
   { match: (p) => p.startsWith('/compensation'), title: 'Rémunération' },
   { match: (p) => p === '/bank', title: 'Banque' },
   { match: (p) => p === '/partners', title: 'Partenaires' },
@@ -133,7 +123,7 @@ function ProfileHeader({
         aria-label="Paramètres"
         title="Paramètres"
       >
-        <IconSettings />
+        <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
       </NavLink>
     </div>
   )
@@ -185,6 +175,8 @@ export function Layout() {
     navigate('/login')
   }
 
+  const MenuToggleIcon = menuOpen ? X : Menu
+
   return (
     <div className="min-h-screen min-h-[100dvh] flex flex-col md:flex-row">
       <header className="md:hidden sticky top-0 z-30 flex items-center justify-between gap-2 px-3 py-2 bg-white border-b border-border safe-top">
@@ -195,7 +187,7 @@ export function Layout() {
           aria-expanded={menuOpen}
           aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
         >
-          <IconMenu open={menuOpen} />
+          <MenuToggleIcon size={ICON_SIZE.menu} strokeWidth={ICON_STROKE.menu} aria-hidden />
         </button>
         <div className="flex flex-col items-center min-w-0 flex-1 px-1">
           <span className="font-semibold text-sm truncate w-full text-center">{pageTitle}</span>
@@ -206,7 +198,7 @@ export function Layout() {
           aria-label="Paramètres"
           title="Paramètres"
         >
-          <IconSettings />
+          <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
         </NavLink>
       </header>
 
@@ -236,7 +228,7 @@ export function Layout() {
               className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-stone-100"
               aria-label="Fermer"
             >
-              <IconMenu open />
+              <X size={ICON_SIZE.menu} strokeWidth={ICON_STROKE.menu} aria-hidden />
             </button>
           </div>
           <ProfileHeader
@@ -256,7 +248,7 @@ export function Layout() {
                 onClick={() => setMenuOpen(false)}
                 className={({ isActive }) => navLinkClass(isActive)}
               >
-                <IconLayoutDashboard className={location.pathname === '/' ? 'opacity-100' : 'opacity-70'} />
+                <AppIcon icon={navIcons.dashboard} muted={location.pathname !== '/'} />
                 Tableau de bord
               </NavLink>
             </div>
@@ -268,7 +260,6 @@ export function Layout() {
               <div className={navGroupClass()}>
                 {group.links.map((l) => {
                   const active = isNavItemActive(l.to, location.pathname)
-                  const Icon = l.icon
                   return (
                     <NavLink
                       key={l.to}
@@ -277,7 +268,7 @@ export function Layout() {
                       onClick={() => setMenuOpen(false)}
                       className={navLinkClass(active)}
                     >
-                      <Icon className={active ? 'opacity-100' : 'opacity-70'} />
+                      <AppIcon icon={navIcons[l.icon]} muted={!active} />
                       {l.label}
                     </NavLink>
                   )
@@ -292,7 +283,7 @@ export function Layout() {
             className="w-full justify-start gap-2.5 px-3 min-h-[44px] md:min-h-0 text-sm text-stone-600"
             onClick={signOut}
           >
-            <IconLogOut className="opacity-70" />
+            <LogOut size={ICON_SIZE.nav} strokeWidth={ICON_STROKE.nav} className="shrink-0 opacity-70" aria-hidden />
             Déconnexion
           </Button>
         </div>

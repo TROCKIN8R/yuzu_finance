@@ -53,7 +53,7 @@ export function BillingPage() {
   return (
     <PageShell width="wide">
       <PageHeader
-        title="Prestation à encaissement"
+        title="Prestations"
         subtitle={
           <>
             Cycle de facturation —{' '}
