@@ -12,8 +12,13 @@ const EI_EMPLOYER_MULTIPLIER = 1.4
 const QPIP_MAX_INSURABLE = 98_000
 const QPIP_EMPLOYEE_RATE = 0.00494
 const QPIP_EMPLOYER_RATE = 0.00692
-const FEDERAL_BASIC = 15_705
-const QUEBEC_BASIC = 18_056
+/** 2025 federal basic personal amount (max; phases down above $177,882). */
+const FEDERAL_BPA_MAX = 16_129
+const FEDERAL_BPA_MIN = 14_538
+const FEDERAL_BPA_PHASE_START = 177_882
+const FEDERAL_BPA_PHASE_END = 253_414
+/** 2025 Quebec basic personal amount. */
+const QUEBEC_BPA = 18_571
 
 const FEDERAL_BRACKETS: [number, number][] = [
   [57_375, 0.15],
@@ -82,6 +87,28 @@ function progressiveTax(taxableIncome: number, brackets: [number, number][]): nu
   return tax
 }
 
+function federalBasicPersonalAmount(netIncome: number): number {
+  if (netIncome <= FEDERAL_BPA_PHASE_START) return FEDERAL_BPA_MAX
+  if (netIncome >= FEDERAL_BPA_PHASE_END) return FEDERAL_BPA_MIN
+  const additional = FEDERAL_BPA_MAX - FEDERAL_BPA_MIN
+  const reduction =
+    ((netIncome - FEDERAL_BPA_PHASE_START) / (FEDERAL_BPA_PHASE_END - FEDERAL_BPA_PHASE_START)) *
+    additional
+  return FEDERAL_BPA_MAX - reduction
+}
+
+/** Progressive tax on full income minus non-refundable basic personal credit at the lowest bracket rate. */
+function incomeTaxWithBasicCredit(
+  income: number,
+  brackets: [number, number][],
+  basicAmount: number
+): number {
+  if (income <= 0) return 0
+  const lowestRate = brackets[0][1]
+  const grossTax = progressiveTax(income, brackets)
+  return Math.max(0, grossTax - basicAmount * lowestRate)
+}
+
 export interface PayrollDeductions {
   gross_pay: number
   federal_tax: number
@@ -121,8 +148,12 @@ export function calculatePayrollDeductions(params: {
   const qpip_employee = round2((qpipInsurable * QPIP_EMPLOYEE_RATE) / periods)
   const qpip_employer = round2((qpipInsurable * QPIP_EMPLOYER_RATE) / periods)
 
-  const federalAnnual = progressiveTax(Math.max(0, taxIncome - FEDERAL_BASIC), FEDERAL_BRACKETS)
-  const provincialAnnual = progressiveTax(Math.max(0, taxIncome - QUEBEC_BASIC), QUEBEC_BRACKETS)
+  const federalAnnual = incomeTaxWithBasicCredit(
+    taxIncome,
+    FEDERAL_BRACKETS,
+    federalBasicPersonalAmount(taxIncome)
+  )
+  const provincialAnnual = incomeTaxWithBasicCredit(taxIncome, QUEBEC_BRACKETS, QUEBEC_BPA)
   const federal_tax = round2(federalAnnual / periods)
   const provincial_tax = round2(provincialAnnual / periods)
 

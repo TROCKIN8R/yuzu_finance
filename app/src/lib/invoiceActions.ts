@@ -1,7 +1,9 @@
 import { supabase } from './supabase'
+import { assertPeriodOpenForDate } from './fiscalPeriodClose'
 import { deriveInvoiceStatus } from './invoice'
 
-export async function deleteInvoice(invoiceId: string) {
+export async function deleteInvoice(invoiceId: string, invoiceDate: string) {
+  await assertPeriodOpenForDate(invoiceDate)
   await supabase.from('invoice_line_items').delete().eq('invoice_id', invoiceId)
   await supabase.from('time_entries').update({ invoice_id: null }).eq('invoice_id', invoiceId)
   await supabase.from('projects').update({ invoice_id: null }).eq('invoice_id', invoiceId)

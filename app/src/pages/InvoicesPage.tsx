@@ -308,7 +308,7 @@ export function InvoicesPage() {
     if (blockIfClosed(inv.invoice_date)) return
     if (!confirm(`Supprimer la facture ${inv.invoice_number} ? Les lignes et projets forfaitaires seront libérés.`)) return
     try {
-      await deleteInvoice(inv.id)
+      await deleteInvoice(inv.id, inv.invoice_date)
       setDetailOpen(false)
       setSelected(null)
       load()

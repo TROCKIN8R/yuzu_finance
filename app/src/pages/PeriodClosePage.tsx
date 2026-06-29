@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { monthEndForDate, formatPeriodLabel, type FiscalPeriodClose } from '../lib/fiscalPeriodClose'
+import { monthEndForDate, formatPeriodLabel, dateOnly } from '../lib/fiscalPeriodClose'
+import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
-import { AlertBanner } from '../components/AlertBanner'
 import { EmptyState } from '../components/EmptyState'
 
 function monthKey(d: Date) {
@@ -13,33 +13,11 @@ function monthKey(d: Date) {
 }
 
 export function PeriodClosePage() {
-  const [closes, setCloses] = useState<FiscalPeriodClose[]>([])
+  const { closes, loading, reload } = usePeriodCloseGuard()
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()))
   const [notes, setNotes] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  const closedSet = useMemo(() => new Set(closes.map((c) => c.period_end)), [closes])
-
-  useEffect(() => {
-    void load()
-  }, [])
-
-  async function load() {
-    setLoading(true)
-    setError(null)
-    const { data, error: loadErr } = await supabase.from('fiscal_period_closes').select('*').order('period_end', { ascending: false })
-    if (loadErr) {
-      setError(
-        loadErr.message.includes('fiscal_period_closes')
-          ? 'Table fiscal_period_closes manquante — exécutez la migration 20260703150000_p4_accounting_features.sql.'
-          : loadErr.message
-      )
-    } else {
-      setCloses((data as FiscalPeriodClose[]) ?? [])
-    }
-    setLoading(false)
-  }
+  const closedSet = useMemo(() => new Set(closes.map((c) => dateOnly(c.period_end))), [closes])
 
   async function closePeriod() {
     const periodEnd = monthEndForDate(`${selectedMonth}-15`)
@@ -52,17 +30,25 @@ export function PeriodClosePage() {
       notes: notes.trim() || null,
     })
     if (insertErr) {
-      alert(insertErr.message)
+      alert(
+        insertErr.message.includes('fiscal_period_closes')
+          ? 'Table fiscal_period_closes manquante — exécutez la migration 20260703150000_p4_accounting_features.sql.'
+          : insertErr.message
+      )
       return
     }
     setNotes('')
-    await load()
+    await reload()
   }
 
   async function reopen(periodEnd: string) {
     if (!confirm(`Rouvrir ${formatPeriodLabel(periodEnd)} ?`)) return
-    await supabase.from('fiscal_period_closes').delete().eq('period_end', periodEnd)
-    await load()
+    const { error } = await supabase.from('fiscal_period_closes').delete().eq('period_end', periodEnd)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    await reload()
   }
 
   const targetEnd = monthEndForDate(`${selectedMonth}-15`)
@@ -73,8 +59,6 @@ export function PeriodClosePage() {
         title="Clôture de période"
         subtitle="Verrouille un mois comptable : paie, banque, factures, temps, taxes et ajustements — brouillon pour révision CPA."
       />
-
-      {error && <AlertBanner variant="warning">{error}</AlertBanner>}
 
       <div className="card p-4 space-y-4 mb-6">
         <Field label="Mois à clôturer">
