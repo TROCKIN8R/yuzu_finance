@@ -95,6 +95,9 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'TVQ à remettre', value: cad(bs.qstPayable), indent: true },
     { label: 'Remises paie en attente', value: cad(bs.payrollRemittancesPending), indent: true }
   )
+  if (bs.chargesPayable > 0) {
+    lines.push({ label: 'Charges à payer (avantages employeur)', value: cad(bs.chargesPayable), indent: true })
+  }
   if (bs.dividendsPayable > 0) {
     lines.push({ label: 'Dividendes à payer', value: cad(bs.dividendsPayable), indent: true })
   }

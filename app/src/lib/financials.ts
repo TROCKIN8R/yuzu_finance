@@ -33,6 +33,7 @@ export interface BalanceSheetDetail {
   gstPayable: number
   qstPayable: number
   payrollRemittancesPending: number
+  chargesPayable: number
   employeeReimbursementsPending: number
   dividendsPayable: number
   corporateTaxDue: number
@@ -126,9 +127,7 @@ export function payrollEmployerTotal(p: Pick<
   return Number(p.gross_pay) + employerContributionsTotal(p)
 }
 
-export function payrollRemittancesTotal(p: PayrollRunRow): number {
-  return employeeDeductionsTotal(p) + employerContributionsTotal(p) - Number(p.employer_benefits)
-}
+export { payrollRemittancesTotal } from './payrollRemittance'
 
 function buildLedgerEntries(data: GeneralLedgerBuildInput, period: DateRange): JournalEntry[] {
   return buildGeneralLedger({
@@ -168,6 +167,7 @@ export function buildFinancialSnapshot(
   const gstPayable = balanceOf(balances, '2100')
   const qstPayable = balanceOf(balances, '2110')
   const payrollRemittancesPending = round2(balanceOf(balances, '2200') + balanceOf(balances, '2210'))
+  const chargesPayable = balanceOf(balances, '2050')
   const employeeReimbursementsPending = balanceOf(balances, '2060')
   const dividendsPayable = balanceOf(balances, '2125')
   const corporateTaxDue = balanceOf(balances, '2300')
@@ -182,6 +182,7 @@ export function buildFinancialSnapshot(
       gstPayable +
       qstPayable +
       payrollRemittancesPending +
+      chargesPayable +
       employeeReimbursementsPending +
       dividendsPayable +
       corporateTaxDue +
@@ -228,6 +229,7 @@ export function buildFinancialSnapshot(
       gstPayable,
       qstPayable,
       payrollRemittancesPending,
+      chargesPayable,
       employeeReimbursementsPending,
       dividendsPayable,
       corporateTaxDue,

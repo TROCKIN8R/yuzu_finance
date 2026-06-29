@@ -7,6 +7,11 @@ import {
   type AccountType,
 } from './chartOfAccounts'
 import { lastDayOfMonth, monthsInRange } from './fiscalPeriod'
+import {
+  employerPayrollExpenseContributions,
+  payrollIncomeTaxWithheld,
+  payrollStatutoryRemittance,
+} from './payrollRemittance'
 import type { AccountingAdjustment, OrganizationSettings } from './types'
 
 export type { AccountType, Account } from './chartOfAccounts'
@@ -95,12 +100,6 @@ type PayrollRow = {
   reimbursement_total?: number
   remittance_status?: string
   remittance_date?: string | null
-}
-
-function employerContributionsTotal(p: Pick<PayrollRow, 'cpp_employer' | 'ei_employer' | 'qpip_employer' | 'employer_benefits'>) {
-  return (
-    Number(p.cpp_employer) + Number(p.ei_employer) + Number(p.qpip_employer) + Number(p.employer_benefits)
-  )
 }
 
 export function buildGeneralLedger(data: {
@@ -269,16 +268,10 @@ export function buildGeneralLedger(data: {
   for (const pr of data.payrollRuns) {
     const linked = (data.employeeExpenses ?? []).filter((e) => e.payroll_run_id === pr.id && !e.taxable)
     const nonTaxReimb = linked.reduce((s, e) => s + Number(e.total), 0)
-    const employerContrib = employerContributionsTotal(pr)
-    const incomeTax = Number(pr.federal_tax) + Number(pr.provincial_tax) + Number(pr.other_deductions)
-    const statutory =
-      Number(pr.cpp_employee) +
-      Number(pr.ei_employee) +
-      Number(pr.qpip_employee) +
-      Number(pr.cpp_employer) +
-      Number(pr.ei_employer) +
-      Number(pr.qpip_employer) +
-      Number(pr.employer_benefits)
+    const employerContrib = employerPayrollExpenseContributions(pr)
+    const incomeTax = payrollIncomeTaxWithheld(pr)
+    const statutory = payrollStatutoryRemittance(pr)
+    const benefits = Number(pr.employer_benefits)
 
     const payrollLines: JournalLine[] = [
       jl('5100', Number(pr.gross_pay), 0),
@@ -287,6 +280,7 @@ export function buildGeneralLedger(data: {
       jl('2200', 0, incomeTax),
       jl('2210', 0, statutory),
     ]
+    if (benefits > 0) payrollLines.push(jl('2050', 0, benefits))
     if (nonTaxReimb > 0) payrollLines.push(jl('2060', nonTaxReimb, 0))
 
     entries.push(

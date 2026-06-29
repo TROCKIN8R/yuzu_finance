@@ -12,16 +12,15 @@ import {
   EMPLOYER_CONTRIBUTION_FIELDS,
   payFrequencyLabel,
   payPeriodRange,
-  periodsPerYear,
   sumEmployeeDeductions,
   sumEmployerContributions,
 } from '../lib/payrollCalc'
 import { deletePayrollRun, linkReimbursements } from '../lib/payrollActions'
 import {
-  grossWithTaxableReimbursement,
   netPayWithReimbursement,
   reimbursementTotals,
 } from '../lib/reimbursement'
+import { recalculatePayrollWithReimbursements } from '../lib/payrollForm'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -181,9 +180,26 @@ export function PayrollPage() {
     return all
   }
 
-  function syncGrossWithReimbursements(base: number, expenses: EmployeeExpense[], selected: Set<string>, current: PayrollForm) {
-    const { taxable } = reimbursementTotals(expenses, selected)
-    return { ...current, gross_pay: grossWithTaxableReimbursement(base, taxable) }
+  function applyPayrollRecalc(
+    emp: Employee,
+    base: number,
+    expenses: EmployeeExpense[],
+    selected: Set<string>,
+    current: PayrollForm
+  ) {
+    const updated = recalculatePayrollWithReimbursements({
+      emp,
+      salaryGrossBase: base,
+      expenses,
+      selectedIds: selected,
+      paymentDate: current.payment_date,
+    })
+    return {
+      ...current,
+      ...updated,
+      other_deductions: current.other_deductions,
+      employer_benefits: current.employer_benefits,
+    }
   }
 
   function toggleExpenseSelection(id: string) {
@@ -191,7 +207,10 @@ export function PayrollPage() {
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelectedExpenseIds(next)
-    if (form) setForm(syncGrossWithReimbursements(salaryGrossBase, reimbursableExpenses, next, form))
+    if (!form) return
+    const emp = employees.find((e) => e.id === form.employee_id)
+    if (!emp) return
+    setForm(applyPayrollRecalc(emp, salaryGrossBase, reimbursableExpenses, next, form))
   }
 
   async function openNewPayroll(emp?: Employee) {
@@ -251,22 +270,13 @@ export function PayrollPage() {
     if (!form) return
     const emp = employees.find((e) => e.id === form.employee_id)
     if (!emp) return
-    const range = payPeriodRange(form.payment_date, emp.pay_frequency)
     const calc = calculatePayrollDeductions({
       yearlySalary: Number(emp.yearly_salary),
       payFrequency: emp.pay_frequency,
       estimatedYearlyIncome: emp.estimated_yearly_income,
     })
-    setForm({
-      ...form,
-      pay_period_start: range.start,
-      pay_period_end: range.end,
-      ...calc,
-      gross_pay: grossWithTaxableReimbursement(calc.gross_pay, reimbursementTotals(reimbursableExpenses, selectedExpenseIds).taxable),
-      other_deductions: form.other_deductions,
-      employer_benefits: form.employer_benefits,
-    })
     setSalaryGrossBase(calc.gross_pay)
+    setForm(applyPayrollRecalc(emp, calc.gross_pay, reimbursableExpenses, selectedExpenseIds, form))
   }
 
   async function onPayrollEmployeeChange(employeeId: string) {
@@ -297,26 +307,18 @@ export function PayrollPage() {
     if (!emp) return
 
     const reimb = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
-    const gross_pay = grossWithTaxableReimbursement(salaryGrossBase, reimb.taxable)
-    const periods = periodsPerYear(emp.pay_frequency)
-    const extraTaxableAnnual = reimb.taxable * periods
-    const calc = calculatePayrollDeductions({
-      yearlySalary: Number(emp.yearly_salary),
-      payFrequency: emp.pay_frequency,
-      estimatedYearlyIncome: emp.estimated_yearly_income,
-      extraTaxableAnnual,
+    const recalc = recalculatePayrollWithReimbursements({
+      emp,
+      salaryGrossBase,
+      expenses: reimbursableExpenses,
+      selectedIds: selectedExpenseIds,
+      paymentDate: form.payment_date,
     })
     const formWithGross = {
       ...form,
-      gross_pay,
-      federal_tax: calc.federal_tax,
-      provincial_tax: calc.provincial_tax,
-      cpp_employee: calc.cpp_employee,
-      ei_employee: calc.ei_employee,
-      qpip_employee: calc.qpip_employee,
-      cpp_employer: calc.cpp_employer,
-      ei_employer: calc.ei_employer,
-      qpip_employer: calc.qpip_employer,
+      ...recalc,
+      other_deductions: form.other_deductions,
+      employer_benefits: form.employer_benefits,
     }
     const salaryNet = calcNet(formWithGross)
     const net_pay = netPayWithReimbursement(salaryNet, reimb.nonTaxable)

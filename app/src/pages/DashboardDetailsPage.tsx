@@ -185,7 +185,7 @@ export function DashboardDetailsPage() {
       <DashboardSection title="Paie et charges">
         <MetricGrid cols={4}>
           <KpiCard label="Salaire brut" value={formatCad(fin.income.payrollGross)} sub="Rémunération sur la période" to="/payroll" />
-          <KpiCard label="Charges patronales" value={formatCad(fin.income.employerPayrollContributions)} sub="CPP, AE, QPIP, avantages" to="/payroll" />
+          <KpiCard label="Charges patronales" value={formatCad(fin.income.employerPayrollContributions)} sub="RRQ, AE, RQAP, avantages" to="/payroll" />
           <KpiCard label="Coût total de la paie" value={formatCad(fin.payrollYtd)} sub="Brut + charges patronales" trend={trends.payrollTotal} to="/payroll" />
           <KpiCard label="Remises en attente" value={formatCad(fin.balanceSheet.payrollRemittancesPending)} sub="Retenues et cotisations à remettre" to="/payroll" />
         </MetricGrid>

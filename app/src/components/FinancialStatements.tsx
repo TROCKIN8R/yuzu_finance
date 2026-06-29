@@ -93,6 +93,9 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtRow label="TPS à remettre" value={formatCad(bs.gstPayable)} indent />
       <StmtRow label="TVQ à remettre" value={formatCad(bs.qstPayable)} indent />
       <StmtRow label="Remises paie en attente" value={formatCad(bs.payrollRemittancesPending)} />
+      {bs.chargesPayable > 0 && (
+        <StmtRow label="Charges à payer (avantages employeur)" value={formatCad(bs.chargesPayable)} indent />
+      )}
       {bs.dividendsPayable > 0 && (
         <StmtRow label="Dividendes à payer" value={formatCad(bs.dividendsPayable)} indent />
       )}

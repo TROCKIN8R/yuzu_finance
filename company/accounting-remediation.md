@@ -28,7 +28,9 @@
 |----|-------|---------------------|--------|
 | P2-1 | Dividends split among employees not shareholders | `shareholders` table; allocations by shares held | done |
 | P2-2 | Payroll uses CPP not QPP labels/rates | QPP labels/rates; planning disclaimer retained | done |
-| P2-3 | Taxable reimbursement withholdings stale | Recalculate withholdings when taxable reimbursements change gross | done |
+| P2-3 | Taxable reimbursement withholdings stale | Recalculate withholdings when taxable reimbursements change gross (save + live toggle) | done |
+| P2-4 | Employer benefits in statutory remittance GL | `2210` excludes `employer_benefits`; benefits accrue to `2050` | done |
+| P2-5 | Taxable reimb gross uses TTC not HT | Taxable reimb added to gross at `amount` (pre-tax); non-tax at `total` | done |
 
 ## P3 — Presentation & charts
 
