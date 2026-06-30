@@ -87,13 +87,35 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     })
   }
   lines.push(
-    { label: 'Comptes clients (CC)', value: cad(bs.accountsReceivable), indent: true },
+    { label: 'Comptes clients (CC)', value: cad(bs.accountsReceivable), indent: true }
+  )
+  if (fin.billing.collectionRatePct != null) {
+    lines.push({
+      label: "Taux d'encaissement (TTC cumulatif)",
+      value: `${fin.billing.collectionRatePct.toFixed(1)} %`,
+      indent: true,
+    })
+  }
+  lines.push(
     { label: 'TPS à recevoir (CTI)', value: cad(bs.gstReceivable), indent: true },
     { label: 'TVQ à recevoir (RTI)', value: cad(bs.qstReceivable), indent: true },
-    { label: 'Total actif', value: cad(bs.totalAssets), bold: true },
-    { label: 'PASSIF', value: '' },
-    { label: 'Comptes fournisseurs', value: cad(bs.accountsPayable), indent: true }
   )
+  if (bs.unbilledRevenue !== 0) {
+    lines.push({
+      label: bs.unbilledRevenue > 0 ? 'Revenus non facturés (WIP)' : "Ajustement WIP (constaté d'avance)",
+      value: cad(bs.unbilledRevenue),
+      indent: true,
+    })
+  }
+  if (bs.prepaidExpenses > 0) {
+    lines.push({ label: 'Charges payées d\'avance', value: cad(bs.prepaidExpenses), indent: true })
+  }
+  if (bs.accumDepreciation > 0) {
+    lines.push({ label: 'Amortissement cumulé', value: cad(-bs.accumDepreciation), indent: true })
+  }
+  lines.push({ label: 'Total actif', value: cad(bs.totalAssets), bold: true })
+  lines.push({ label: 'PASSIF', value: '' })
+  lines.push({ label: 'Comptes fournisseurs', value: cad(bs.accountsPayable), indent: true })
   if (bs.employeeReimbursementsPending > 0) {
     lines.push({ label: 'Remboursements employé dus', value: cad(bs.employeeReimbursementsPending), indent: true })
   }
@@ -105,6 +127,9 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
   if (bs.chargesPayable > 0) {
     lines.push({ label: 'Charges à payer (avantages employeur)', value: cad(bs.chargesPayable), indent: true })
   }
+  if (bs.employerLeviesPending > 0) {
+    lines.push({ label: 'HSF / CNESST à remettre', value: cad(bs.employerLeviesPending), indent: true })
+  }
   if (bs.dividendsPayable > 0) {
     lines.push({ label: 'Dividendes à payer', value: cad(bs.dividendsPayable), indent: true })
   }
@@ -114,11 +139,15 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Total passif', value: cad(bs.totalLiabilities), bold: true },
     { label: 'AVOIR', value: '' },
     { label: 'Capital-actions', value: cad(eq.shareCapital), indent: true },
-    { label: "BNR d'ouverture", value: cad(eq.openingRetainedEarnings), indent: true },
-    { label: 'Résultat de la période', value: cad(eq.operatingIncome), indent: true },
-    { label: 'Dividendes déclarés (période)', value: cad(-eq.dividendsDistributed), indent: true },
-    { label: 'BNR cumulé', value: cad(eq.retainedEarnings), indent: true },
-    { label: 'Total avoir', value: cad(eq.totalEquity), bold: true }
+    { label: 'BNR — solde GL (ouverture et dividendes)', value: cad(eq.retainedEarningsGl), indent: true },
+    { label: 'Résultat cumulatif non clôturé', value: cad(eq.unclosedNetIncome), indent: true },
+    { label: 'Total avoir', value: cad(eq.totalEquity), bold: true },
+    {
+      label: 'Passif + Avoir (contrôle)',
+      value: cad(bs.totalLiabilities + eq.totalEquity),
+      bold: true,
+      indent: true,
+    }
   )
   return lines
 }

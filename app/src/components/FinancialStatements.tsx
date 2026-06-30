@@ -48,6 +48,7 @@ export function CashFlowStatement({ fin, periodLabel }: { fin: FinancialSnapshot
         <div className="bg-stone-50 border border-border rounded-lg p-4">
           <div className="text-xs text-muted mb-1">Trésorerie comptable (GL)</div>
           <div className="text-lg font-semibold">{formatCad(fin.netCash)}</div>
+          <div className="text-[10px] text-muted mt-1">Solde cumulatif — pas le flux net de la période</div>
         </div>
       </div>
 
@@ -89,10 +90,27 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
         />
       )}
       <StmtRow label="Comptes clients (CC)" value={formatCad(bs.accountsReceivable)} />
+      {fin.billing.collectionRatePct != null && (
+        <StmtRow
+          label="Taux d'encaissement (factures TTC, cumulatif)"
+          value={`${fin.billing.collectionRatePct.toFixed(1)} %`}
+          indent
+        />
+      )}
       <StmtRow label="TPS à recevoir (CTI)" value={formatCad(bs.gstReceivable)} indent />
       <StmtRow label="TVQ à recevoir (RTI)" value={formatCad(bs.qstReceivable)} indent />
-      {bs.unbilledRevenue > 0 && (
-        <StmtRow label="Revenus non facturés (WIP)" value={formatCad(bs.unbilledRevenue)} indent />
+      {bs.unbilledRevenue !== 0 && (
+        <StmtRow
+          label={bs.unbilledRevenue > 0 ? 'Revenus non facturés (WIP)' : 'Ajustement WIP (constaté d\'avance)'}
+          value={formatCad(bs.unbilledRevenue)}
+          indent
+        />
+      )}
+      {bs.prepaidExpenses > 0 && (
+        <StmtRow label="Charges payées d\'avance" value={formatCad(bs.prepaidExpenses)} indent />
+      )}
+      {bs.accumDepreciation > 0 && (
+        <StmtRow label="Amortissement cumulé" value={formatCad(-bs.accumDepreciation)} indent negative />
       )}
       <StmtRow label="Total actif" value={formatCad(bs.totalAssets)} bold />
 
@@ -119,11 +137,35 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
 
       <StmtSection title="Avoir" />
       <StmtRow label="Capital-actions" value={formatCad(eq.shareCapital)} indent />
-      <StmtRow label="BNR d'ouverture" value={formatCad(eq.openingRetainedEarnings)} indent />
-      <StmtRow label="Résultat de la période" value={formatCad(eq.operatingIncome)} indent />
-      <StmtRow label="Dividendes déclarés (période)" value={formatCad(eq.dividendsDistributed)} indent negative />
-      <StmtRow label="BNR cumulé" value={formatCad(eq.retainedEarnings)} indent />
+      <StmtRow label="BNR — solde GL (ouverture et dividendes)" value={formatCad(eq.retainedEarningsGl)} indent />
+      <StmtRow label="Résultat cumulatif non clôturé" value={formatCad(eq.unclosedNetIncome)} indent />
       <StmtRow label="Total avoir" value={formatCad(eq.totalEquity)} bold />
+      <StmtRow
+        label="Passif + Avoir (contrôle)"
+        value={formatCad(bs.totalLiabilities + eq.totalEquity)}
+        bold
+        indent
+      />
+      {Math.abs(bs.equationGap) <= 0.05 ? (
+        <p className="text-xs text-emerald-700 mt-2">
+          Équilibre comptable — total actif = passif + avoir (écart {formatCad(bs.equationGap)}).
+        </p>
+      ) : (
+        <p className="text-xs text-red-700 mt-2">
+          Écart bilan : actif {formatCad(bs.totalAssets)} − (passif + avoir){' '}
+          {formatCad(bs.totalLiabilities + eq.totalEquity)} = {formatCad(bs.equationGap)} — brouillon à réviser.
+        </p>
+      )}
+      <p className="text-xs text-muted mt-2">
+        L&apos;avoir inclut le résultat cumulatif non clôturé (comptes 4xxx/5xxx) tant que la clôture annuelle
+        n&apos;est pas passée au BNR (3100).
+      </p>
+      <p className="text-xs text-muted mt-3">
+        Résultat de la période (état des résultats) : {formatCad(eq.periodOperatingIncome)}
+        {eq.periodDividendsDeclared > 0
+          ? ` · Dividendes déclarés : ${formatCad(eq.periodDividendsDeclared)}`
+          : ''}
+      </p>
     </div>
   )
 }

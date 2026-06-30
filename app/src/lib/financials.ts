@@ -2,6 +2,7 @@ import { buildGeneralLedger, filterEntriesByPeriod, type JournalEntry } from './
 import {
   accountBalancesFromEntries,
   balanceOf,
+  balanceSheetTotals,
   cashFlowFromPeriodEntries,
   cashOutTotal,
   entriesThroughDate,
@@ -16,10 +17,13 @@ export type { CashFlowBreakdown } from './ledgerBalances'
 
 export interface EquityDetail {
   shareCapital: number
-  openingRetainedEarnings: number
-  operatingIncome: number
-  dividendsDistributed: number
-  retainedEarnings: number
+  /** GL 3100 — opening BNR and dividend declarations */
+  retainedEarningsGl: number
+  /** Revenue and expense accounts not yet closed to 3100 */
+  unclosedNetIncome: number
+  /** Period operating income (for rollforward note) */
+  periodOperatingIncome: number
+  periodDividendsDeclared: number
   totalEquity: number
 }
 
@@ -32,6 +36,8 @@ export interface BalanceSheetDetail {
   gstReceivable: number
   qstReceivable: number
   unbilledRevenue: number
+  prepaidExpenses: number
+  accumDepreciation: number
   totalAssets: number
   accountsPayable: number
   gstPayable: number
@@ -44,6 +50,8 @@ export interface BalanceSheetDetail {
   corporateTaxDue: number
   corpTaxProvision: number
   totalLiabilities: number
+  /** Assets − (liabilities + equity); should be ~0 */
+  equationGap: number
   equity: EquityDetail
 }
 
@@ -57,6 +65,13 @@ export interface IncomeDetail {
   employerPayrollContributions: number
   operatingIncome: number
   dividendsDistributed: number
+}
+
+/** Lifetime billing vs collections through period end (subledger). */
+export interface BillingDetail {
+  invoicedTtcCumulative: number
+  collectedTtcCumulative: number
+  collectionRatePct: number | null
 }
 
 export interface FinancialSnapshot {
@@ -76,6 +91,7 @@ export interface FinancialSnapshot {
   cashFlow: CashFlowBreakdown
   balanceSheet: BalanceSheetDetail
   income: IncomeDetail
+  billing: BillingDetail
 }
 
 type PayrollRunRow = {
@@ -149,10 +165,41 @@ function buildLedgerEntries(data: GeneralLedgerBuildInput, period: DateRange): J
   })
 }
 
+function buildBillingCollection(
+  invoices: { id: string; invoice_date: string; status: string; total: number }[],
+  payments: { invoice_id: string; payment_date?: string | null; amount: number }[],
+  asOf: string
+): BillingDetail {
+  const revenueInvoices = invoices.filter(
+    (i) => isRevenueInvoice(i.status) && i.invoice_date <= asOf
+  )
+  const invoicedTtcCumulative = round2(revenueInvoices.reduce((s, i) => s + Number(i.total), 0))
+  const invoiceIds = new Set(revenueInvoices.map((i) => i.id))
+  const collectedTtcCumulative = round2(
+    payments
+      .filter(
+        (p) =>
+          invoiceIds.has(p.invoice_id) &&
+          p.payment_date &&
+          p.payment_date <= asOf
+      )
+      .reduce((s, p) => s + Number(p.amount), 0)
+  )
+  return {
+    invoicedTtcCumulative,
+    collectedTtcCumulative,
+    collectionRatePct:
+      invoicedTtcCumulative > 0
+        ? round2((collectedTtcCumulative / invoicedTtcCumulative) * 100)
+        : null,
+  }
+}
+
 export function buildFinancialSnapshot(
   data: GeneralLedgerBuildInput & {
     payrollRuns: PayrollRunRow[]
     bankTransactions?: { amount: number; transaction_date: string }[]
+    payments?: { id: string; invoice_id: string; payment_date?: string | null; amount: number }[]
     settings?: Pick<
       OrganizationSettings,
       | 'share_capital'
@@ -170,6 +217,7 @@ export function buildFinancialSnapshot(
   const asOfEntries = entriesThroughDate(allEntries, asOf)
   const periodEntries = filterEntriesByPeriod(allEntries, period.start, period.end)
   const balances = accountBalancesFromEntries(asOfEntries)
+  const bs = balanceSheetTotals(balances)
   const income = incomeFromPeriodEntries(periodEntries)
   const cashFlow = cashFlowFromPeriodEntries(periodEntries)
 
@@ -177,11 +225,22 @@ export function buildFinancialSnapshot(
   const supplementalWithholdings = payrollInPeriod.reduce((s, p) => s + employeeDeductionsTotal(p), 0)
   const supplementalEmployer = payrollInPeriod.reduce((s, p) => s + employerContributionsTotal(p), 0)
 
-  const cash = balanceOf(balances, '1010')
-  const accountsReceivable = balanceOf(balances, '1100')
-  const gstReceivable = balanceOf(balances, '1200')
-  const qstReceivable = balanceOf(balances, '1210')
-  const unbilledRevenue = balanceOf(balances, '1300')
+  const {
+    cash,
+    accountsReceivable,
+    gstReceivable,
+    qstReceivable,
+    unbilledRevenue,
+    prepaidExpenses,
+    accumDepreciation,
+    totalAssets,
+    totalLiabilities,
+    shareCapital,
+    retainedEarningsGl,
+    unclosedNetIncome,
+    totalEquity,
+    equationGap,
+  } = bs
   const accountsPayable = balanceOf(balances, '2000')
   const gstPayable = balanceOf(balances, '2100')
   const qstPayable = balanceOf(balances, '2110')
@@ -192,23 +251,7 @@ export function buildFinancialSnapshot(
   const dividendsPayable = balanceOf(balances, '2125')
   const corporateTaxDue = balanceOf(balances, '2300')
   const corpTaxProvision = balanceOf(balances, '2310')
-  const shareCapital = balanceOf(balances, '3000') || Number(data.settings?.share_capital ?? 0)
-  const retainedEarnings = balanceOf(balances, '3100')
-  const totalEquity = round2(shareCapital + retainedEarnings)
   const salesTaxPayable = round2(gstPayable + qstPayable)
-  const totalAssets = round2(cash + accountsReceivable + gstReceivable + qstReceivable + unbilledRevenue)
-  const totalLiabilities = round2(
-    accountsPayable +
-      gstPayable +
-      qstPayable +
-      payrollRemittancesPending +
-      chargesPayable +
-      employerLeviesPending +
-      employeeReimbursementsPending +
-      dividendsPayable +
-      corporateTaxDue +
-      corpTaxProvision
-  )
 
   const cashIn = cashFlow.clientPayments
   const cashOut = cashOutTotal(cashFlow)
@@ -227,7 +270,7 @@ export function buildFinancialSnapshot(
       .reduce((s, i) => s + Number(i.subtotal), 0)
   )
 
-  const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
+  const billing = buildBillingCollection(data.invoices ?? [], data.payments ?? [], asOf)
 
   return {
     period,
@@ -256,6 +299,8 @@ export function buildFinancialSnapshot(
       gstReceivable,
       qstReceivable,
       unbilledRevenue,
+      prepaidExpenses,
+      accumDepreciation,
       totalAssets,
       accountsPayable,
       gstPayable,
@@ -268,12 +313,13 @@ export function buildFinancialSnapshot(
       corporateTaxDue,
       corpTaxProvision,
       totalLiabilities,
+      equationGap,
       equity: {
         shareCapital,
-        openingRetainedEarnings: openingRE,
-        operatingIncome: income.operatingIncome,
-        dividendsDistributed: income.dividendsDeclared,
-        retainedEarnings,
+        retainedEarningsGl,
+        unclosedNetIncome,
+        periodOperatingIncome: income.operatingIncome,
+        periodDividendsDeclared: income.dividendsDeclared,
         totalEquity,
       },
     },
@@ -286,6 +332,7 @@ export function buildFinancialSnapshot(
       operatingIncome: income.operatingIncome,
       dividendsDistributed: income.dividendsDeclared,
     },
+    billing,
   }
 }
 

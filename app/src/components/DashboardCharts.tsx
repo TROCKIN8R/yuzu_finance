@@ -178,7 +178,7 @@ export function ProfitabilityChart({ points }: { points: MonthlySeriesPoint[] })
   return (
     <ChartShell
       title="Rentabilité d'exploitation"
-      subtitle="Revenus facturés, coûts et résultat par mois"
+      subtitle="Revenus facturés (date facture), coûts et résultat GL par mois"
       legend={
         <>
           <span className="flex items-center gap-1.5">
@@ -377,7 +377,8 @@ export function CapitalChart({
 
   const total = equity.totalEquity
   const capPct = total > 0 ? (equity.shareCapital / total) * 100 : 0
-  const rePct = total > 0 ? (equity.retainedEarnings / total) * 100 : 100
+  const reTotal = equity.retainedEarningsGl + equity.unclosedNetIncome
+  const rePct = total > 0 ? (reTotal / total) * 100 : 100
 
   return (
     <ChartShell
@@ -424,11 +425,11 @@ export function CapitalChart({
           {capPct > 0 && (
             <div className="bg-violet-500 h-full" style={{ width: `${capPct}%` }} title={`Capital-actions ${formatCad(equity.shareCapital)}`} />
           )}
-          <div className="bg-violet-300 h-full" style={{ width: `${rePct}%` }} title={`BNR ${formatCad(equity.retainedEarnings)}`} />
+          <div className="bg-violet-300 h-full" style={{ width: `${rePct}%` }} title={`BNR ${formatCad(reTotal)}`} />
         </div>
         <div className="flex justify-between text-[10px] text-muted">
           <span>Capital-actions {formatCad(equity.shareCapital)}</span>
-          <span>BNR {formatCad(equity.retainedEarnings)}</span>
+          <span>BNR {formatCad(reTotal)}</span>
         </div>
       </div>
     </ChartShell>

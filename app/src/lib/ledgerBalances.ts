@@ -45,6 +45,60 @@ export function balanceOf(balances: Map<string, number>, code: string): number {
   return balances.get(code) ?? 0
 }
 
+/** Net income still in revenue/expense accounts (not yet closed to 3100). */
+export function cumulativeNetIncome(balances: Map<string, number>): number {
+  let net = 0
+  for (const account of CHART_OF_ACCOUNTS) {
+    const b = balanceOf(balances, account.code)
+    if (account.type === 'revenue') net += b
+    if (account.type === 'expense') net -= b
+  }
+  return round2(net)
+}
+
+const ASSET_BS_CODES = ['1010', '1100', '1200', '1210', '1300', '1400'] as const
+const LIABILITY_BS_CODES = [
+  '2000', '2050', '2060', '2100', '2110', '2125', '2200', '2210', '2215', '2300', '2310',
+] as const
+const EQUITY_BS_CODES = ['3000', '3100'] as const
+
+export function balanceSheetTotals(balances: Map<string, number>) {
+  const cash = balanceOf(balances, '1010')
+  const accountsReceivable = balanceOf(balances, '1100')
+  const gstReceivable = balanceOf(balances, '1200')
+  const qstReceivable = balanceOf(balances, '1210')
+  const unbilledRevenue = balanceOf(balances, '1300')
+  const prepaidExpenses = balanceOf(balances, '1400')
+  const accumDepreciation = balanceOf(balances, '1500')
+  const totalAssets = round2(
+    ASSET_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0) - accumDepreciation
+  )
+  const totalLiabilities = round2(
+    LIABILITY_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0)
+  )
+  const shareCapital = balanceOf(balances, '3000')
+  const retainedEarningsGl = balanceOf(balances, '3100')
+  const unclosedNetIncome = cumulativeNetIncome(balances)
+  const totalEquity = round2(shareCapital + retainedEarningsGl + unclosedNetIncome)
+  const equationGap = round2(totalAssets - (totalLiabilities + totalEquity))
+  return {
+    cash,
+    accountsReceivable,
+    gstReceivable,
+    qstReceivable,
+    unbilledRevenue,
+    prepaidExpenses,
+    accumDepreciation,
+    totalAssets,
+    totalLiabilities,
+    shareCapital,
+    retainedEarningsGl,
+    unclosedNetIncome,
+    totalEquity,
+    equationGap,
+  }
+}
+
 const OPERATING_EXPENSE_CODES = new Set(['5010', '5020', '5030', '5040', '5050', '5090', '5200'])
 
 export interface PeriodIncomeDetail {

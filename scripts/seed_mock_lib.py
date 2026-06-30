@@ -284,6 +284,7 @@ def build_bank_from_operations(
     sales_tax_periods: list[dict],
     dividends: list[dict],
     corp_tax: list[dict],
+    adjustments: list[dict] | None = None,
 ) -> list[dict]:
     rows = [bank_row(tag, "2026-01-02", "Solde d'ouverture mock", opening, "manual", None)]
     for pay in payments:
@@ -320,4 +321,18 @@ def build_bank_from_operations(
         pa = float(ct.get("paid_amount") or 0)
         if pa > 0 and ct.get("paid_date"):
             rows.append(bank_row(tag, ct["paid_date"], ct["label"], -pa, "corporate_tax", ct["id"]))
+    for adj in adjustments or []:
+        if adj.get("adjustment_type") != "manual":
+            continue
+        amt = float(adj.get("total_amount") or adj.get("monthly_amount") or 0)
+        if amt <= 0:
+            continue
+        if adj.get("credit_account") == "1010":
+            rows.append(
+                bank_row(tag, adj["start_date"], adj["description"], -amt, "manual", adj.get("id"))
+            )
+        elif adj.get("debit_account") == "1010":
+            rows.append(
+                bank_row(tag, adj["start_date"], adj["description"], amt, "manual", adj.get("id"))
+            )
     return rows

@@ -4,6 +4,7 @@ import type { Partner, Invoice, InvoiceLineItem, OrganizationSettings } from './
 import { formatDate } from './format'
 import type { InvoiceLineDraft } from './invoice'
 import { invoiceCopy, partnerInvoiceLanguage } from './invoiceI18n'
+import { formatPartnerPaymentTerms } from './partners'
 import { resolvePaymentInstructions } from './paymentInstructions'
 
 interface PdfInput {
@@ -121,6 +122,8 @@ export async function downloadInvoicePdf({ invoice, partner, settings, lines }: 
   doc.text(`${t.date} : ${formatDate(invoice.invoice_date, lang)}`, 120, y)
   y += 6
   doc.text(`${t.dueDate} : ${formatDate(invoice.due_date, lang)}`, margin, y)
+  y += 6
+  doc.text(`${t.paymentTerms} : ${formatPartnerPaymentTerms(partner, lang, settings)}`, margin, y)
   y += 10
 
   doc.setFontSize(10)

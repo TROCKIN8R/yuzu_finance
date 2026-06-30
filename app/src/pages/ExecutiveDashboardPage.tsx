@@ -20,7 +20,6 @@ import {
   fetchExecutiveExtras,
 } from '../lib/dashboardData'
 import { useDashboardPeriod } from '../hooks/useDashboardPeriod'
-import { inPeriod } from '../lib/fiscalPeriod'
 import { RevenueTrendChart } from '../components/DashboardCharts'
 import { ExecutiveBreakdownPanel } from '../components/ExecutiveBreakdownPanel'
 import { KpiCard, MetricGrid, TrendBadge } from '../components/MetricCard'
@@ -33,6 +32,7 @@ export function ExecutiveDashboardPage() {
   const [recognized, setRecognized] = useState(0)
   const [collected, setCollected] = useState(0)
   const [unbilled, setUnbilled] = useState(0)
+  const [collectionRate, setCollectionRate] = useState<number | null>(null)
   const [monthlySeries, setMonthlySeries] = useState<ReturnType<typeof buildMonthlySeries>>([])
   const [partnerRows, setPartnerRows] = useState<ReturnType<typeof buildPartnerBreakdown>>([])
   const [serviceRows, setServiceRows] = useState<ReturnType<typeof buildServiceTypeBreakdown>>([])
@@ -84,13 +84,10 @@ export function ExecutiveDashboardPage() {
       )
 
       setWorked(workedMetrics)
-      setInvoiced(
-        extras.invoices
-          .filter((i) => i.status !== 'void' && i.status !== 'draft' && inPeriod(i.invoice_date, range))
-          .reduce((s, i) => s + Number(i.subtotal), 0)
-      )
+      setInvoiced(fin.income.invoicedSubtotal)
       setRecognized(fin.income.revenueSubtotal)
       setCollected(fin.cashIn)
+      setCollectionRate(fin.billing.collectionRatePct)
       setUnbilled(wip.amount)
       setMonthlySeries(series)
       setPartnerRows(
@@ -191,7 +188,11 @@ export function ExecutiveDashboardPage() {
         <KpiCard
           label="Encaissements"
           value={formatCad(collected)}
-          sub="Paiements clients"
+          sub={
+            collectionRate != null
+              ? `Période · ${collectionRate.toFixed(1)} % encaissé (TTC cumul.)`
+              : 'Paiements clients (période)'
+          }
           trend={trends.cashCollected}
           to="/billing/invoices"
         />

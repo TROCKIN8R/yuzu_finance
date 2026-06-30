@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
-import { customerPartners, INVOICE_LANGUAGE_LABELS } from '../lib/partners'
+import { customerPartners, INVOICE_LANGUAGE_LABELS, resolvePartnerPaymentTerms } from '../lib/partners'
 import { partnerInvoiceLanguage } from '../lib/invoiceI18n'
 import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
@@ -236,7 +236,8 @@ export function InvoicesPage() {
     const invoiceDate = todayIso()
     const entryDates = unbilled.filter((x) => selectedEntryIds.has(x.id)).map((x) => x.entry_date)
     if (blockIfClosed(invoiceDate, ...entryDates)) return
-    const dueDate = addDays(invoiceDate, partner.payment_terms_days ?? settings.payment_terms_days)
+    const { days: paymentTermsDays } = resolvePartnerPaymentTerms(partner, settings)
+    const dueDate = addDays(invoiceDate, paymentTermsDays)
 
     const { data: inv, error } = await supabase
       .from('invoices')

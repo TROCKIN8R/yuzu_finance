@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Seed mock calendar year 2026 (Q1–Q4) with bank–GL parity for CPA-style validation.
+Seed mock calendar year 2026 — time-based billing, ~92% collected, bank–GL parity.
 Draft for owner/CPA review — uses Supabase service role from app/.env.local.
 
 Usage:
@@ -24,7 +24,6 @@ from seed_mock_lib import (  # noqa: E402
     HSF_RATE,
     QST_RATE,
     Supabase,
-    bank_row,
     biweekly_pay_dates,
     build_bank_from_operations,
     calc_payroll,
@@ -40,7 +39,48 @@ from seed_mock_lib import (  # noqa: E402
 )
 
 TAG = "[MOCK-FY2026]"
-OPENING_CASH = 25000.0
+OPENING_CASH = 35_000.0
+YEARLY_SALARY = 75_000.0
+TARGET_REVENUE_HT = 150_000.0
+FIXED_PROJECT_HT = 20_000.0
+HOURLY_RATE = 175.0
+AUDIT_HOURLY_RATE = 195.0
+AUDIT_HOURS = 42.0
+COLLECTION_RATE = 0.92
+DIVIDEND_INTERIM = 5_000.0
+DIVIDEND_YEAR_END = 10_000.0
+EMPLOYER_BENEFITS_PER_PERIOD = 95.0
+
+RETAINER_HOURS_YEAR = round2(
+    (TARGET_REVENUE_HT - FIXED_PROJECT_HT - AUDIT_HOURS * AUDIT_HOURLY_RATE) / HOURLY_RATE
+)
+
+
+def month_start(year: int, month: int) -> str:
+    return f"{year}-{month:02d}-01"
+
+
+def add_days(iso: str, days: int) -> str:
+    return (date.fromisoformat(iso) + timedelta(days=days)).isoformat()
+
+
+def monthly_time_entries(
+    project_id: str,
+    year: int,
+    hours_target: float,
+    desc: str,
+) -> list[tuple[str, str, float, str]]:
+    specs: list[tuple[str, str, float, str]] = []
+    per_month = round2(hours_target / 12)
+    h1 = round2(per_month * 0.35)
+    h2 = round2(per_month * 0.35)
+    h3 = round2(per_month - h1 - h2)
+    for m in range(1, 13):
+        base = month_start(year, m)
+        specs.append((project_id, add_days(base, 7), h1, f"{desc} — début de mois"))
+        specs.append((project_id, add_days(base, 14), h2, f"{desc} — mi-mois"))
+        specs.append((project_id, add_days(base, 21), h3, f"{desc} — fin de mois"))
+    return specs
 
 
 def existing_mock(sb: Supabase, user_id: str) -> bool:
@@ -64,6 +104,32 @@ def invoice_lines_for_entries(entries: list[dict], rate: float) -> list[dict]:
 
 def sum_tax_fields(lines: list[dict]) -> dict[str, float]:
     return {k: round2(sum(l[k] for l in lines)) for k in ("subtotal", "gst", "qst", "total")}
+
+
+def assign_collection(invoice_plans: list[dict], rate: float = COLLECTION_RATE) -> None:
+    """Oldest invoices paid first until rate × total TTC is collected."""
+    invoice_plans.sort(key=lambda p: p["invoice_date"])
+    total_ttc = round2(sum(p["total"] for p in invoice_plans))
+    budget = round2(total_ttc * rate)
+    consumed = 0.0
+    for i, plan in enumerate(invoice_plans):
+        inv_total = plan["total"]
+        if consumed >= budget - 0.01:
+            plan["paid_amount"] = 0.0
+            plan["status"] = "sent"
+            plan["payment_date"] = None
+            continue
+        room = round2(budget - consumed)
+        if inv_total <= room + 0.01:
+            plan["paid_amount"] = inv_total
+            plan["status"] = "paid"
+            consumed = round2(consumed + inv_total)
+        else:
+            plan["paid_amount"] = room
+            plan["status"] = "partial"
+            consumed = budget
+        if plan["paid_amount"] > 0:
+            plan["payment_date"] = add_days(plan["invoice_date"], 15 + (i % 4) * 5)
 
 
 def sales_tax_period(
@@ -110,14 +176,14 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
                 "gst_rate": GST_RATE,
                 "qst_rate": QST_RATE,
                 "opening_cash_balance": OPENING_CASH,
-                "opening_retained_earnings": 15000,
-                "opening_balance_date": "2025-12-31",
+                "opening_retained_earnings": 22000,
+                "opening_balance_date": "2026-01-01",
                 "share_capital": 100,
                 "hsf_rate": HSF_RATE,
                 "cnesst_rate": CNESST_RATE,
                 "wip_accrual_enabled": True,
-                "fiscal_year_end_month": 6,
-                "fiscal_year_end_day": 30,
+                "fiscal_year_end_month": 12,
+                "fiscal_year_end_day": 31,
             },
             params={"user_id": f"eq.{user_id}"},
         )
@@ -138,8 +204,8 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
 
     employees = ins("employees", [{
         "first_name": "Alex", "last_name": "Demo", "email": "alex@yuzu-demo.ca",
-        "yearly_salary": 95000, "pay_frequency": "biweekly", "active": True,
-        "hire_date": "2025-01-15", "notes": f"{TAG} owner-employee",
+        "yearly_salary": YEARLY_SALARY, "pay_frequency": "biweekly", "active": True,
+        "hire_date": "2026-01-02", "notes": f"{TAG} owner-employee",
     }])
     emp = employees[0]
 
@@ -149,60 +215,23 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
     }])
 
     projects = ins("projects", [
-        {"partner_id": acme["id"], "name": "ERP Migration Phase 1", "status": "active",
-         "default_hourly_rate": 145, "billing_type": "hourly", "notes": TAG},
-        {"partner_id": acme["id"], "name": "Security Audit", "status": "completed",
-         "default_hourly_rate": 160, "billing_type": "hourly", "notes": TAG},
-        {"partner_id": northwind["id"], "name": "API Integration (fixed)", "status": "active",
-         "default_hourly_rate": 0, "billing_type": "fixed", "fixed_price": 12000, "notes": TAG},
-        {"partner_id": acme["id"], "name": "ERP Migration Phase 2", "status": "active",
-         "default_hourly_rate": 150, "billing_type": "hourly", "notes": TAG},
+        {"partner_id": acme["id"], "name": "Support ERP & intégrations", "status": "active",
+         "default_hourly_rate": HOURLY_RATE, "billing_type": "hourly", "notes": TAG},
+        {"partner_id": acme["id"], "name": "Audit de sécurité annuel", "status": "completed",
+         "default_hourly_rate": AUDIT_HOURLY_RATE, "billing_type": "hourly", "notes": TAG},
+        {"partner_id": northwind["id"], "name": "API Integration (forfait)", "status": "completed",
+         "default_hourly_rate": 0, "billing_type": "fixed", "fixed_price": FIXED_PROJECT_HT, "notes": TAG},
     ])
-    proj_erp, proj_audit, proj_fixed, proj_erp2 = projects
+    proj_retainer, proj_audit, proj_fixed = projects
 
-    time_specs = [
-        # Q1
-        (proj_erp["id"], "2026-01-06", 6, "Sprint planning & architecture review"),
-        (proj_erp["id"], "2026-01-08", 7.5, "Data migration scripts"),
-        (proj_erp["id"], "2026-01-13", 8, "Legacy ETL mapping"),
-        (proj_erp["id"], "2026-01-15", 6, "Stakeholder workshop"),
-        (proj_erp["id"], "2026-01-20", 7, "UAT support"),
-        (proj_erp["id"], "2026-01-22", 5.5, "Bug fixes post-UAT"),
-        (proj_erp["id"], "2026-02-03", 8, "Phase 1 go-live support"),
-        (proj_erp["id"], "2026-02-10", 6.5, "Performance tuning"),
-        (proj_erp["id"], "2026-02-17", 7, "Documentation & handoff"),
-        (proj_erp["id"], "2026-03-02", 5, "Phase 2 discovery"),
-        (proj_erp["id"], "2026-03-09", 6, "Requirements gathering"),
-        (proj_erp["id"], "2026-03-16", 4, "Client sync"),
-        (proj_audit["id"], "2026-01-27", 8, "Penetration test review"),
-        (proj_audit["id"], "2026-01-29", 6, "Remediation report"),
-        (proj_audit["id"], "2026-02-24", 4, "Follow-up verification"),
-        (proj_fixed["id"], "2026-02-05", 3, "API spec review (internal)"),
-        (proj_fixed["id"], "2026-02-12", 4, "Webhook implementation"),
-        (proj_fixed["id"], "2026-03-05", 5, "Integration testing"),
-        # Q2
-        (proj_erp2["id"], "2026-04-07", 7, "Phase 2 sprint 1"),
-        (proj_erp2["id"], "2026-04-14", 8, "Core module build"),
-        (proj_erp2["id"], "2026-04-21", 6, "Integration tests"),
-        (proj_erp2["id"], "2026-05-05", 7.5, "UAT cycle 2"),
-        (proj_erp2["id"], "2026-05-19", 5, "Client training"),
-        (proj_erp2["id"], "2026-06-02", 6, "Go-live support"),
-        (proj_fixed["id"], "2026-05-12", 4, "API maintenance"),
-        (proj_fixed["id"], "2026-06-18", 3, "Monitoring setup"),
-        # Q3
-        (proj_erp2["id"], "2026-07-08", 6, "Hypercare week 1"),
-        (proj_erp2["id"], "2026-07-22", 7, "Performance fixes"),
-        (proj_erp2["id"], "2026-08-05", 5.5, "Change requests"),
-        (proj_erp2["id"], "2026-08-19", 6, "Security patch review"),
-        (proj_erp2["id"], "2026-09-09", 8, "Quarterly review"),
-        (proj_audit["id"], "2026-09-23", 4, "Annual audit follow-up"),
-        # Q4
-        (proj_erp2["id"], "2026-10-06", 6, "Year-end enhancements"),
-        (proj_erp2["id"], "2026-10-20", 7, "Reporting module"),
-        (proj_erp2["id"], "2026-11-03", 5, "Data cleanup"),
-        (proj_erp2["id"], "2026-11-17", 6.5, "Client workshops"),
-        (proj_erp2["id"], "2026-12-01", 4, "Handoff documentation"),
-        (proj_fixed["id"], "2026-12-15", 3, "SLA review"),
+    time_specs = monthly_time_entries(proj_retainer["id"], 2026, RETAINER_HOURS_YEAR, "Services professionnels")
+    time_specs += [
+        (proj_audit["id"], "2026-01-14", 16, "Revue architecture & menaces"),
+        (proj_audit["id"], "2026-01-21", 14, "Tests d'intrusion & rapport"),
+        (proj_audit["id"], "2026-02-04", 12, "Suivi remédiation"),
+        (proj_fixed["id"], "2026-02-10", 6, "Spécification API (interne)"),
+        (proj_fixed["id"], "2026-03-05", 8, "Implémentation webhooks"),
+        (proj_fixed["id"], "2026-04-08", 5, "Tests d'intégration"),
     ]
     time_entries = ins("time_entries", [
         {"project_id": pid, "employee_id": emp["id"], "entry_date": d, "hours": h,
@@ -213,87 +242,115 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
     def entries_for(proj_id: str, start: str, end: str) -> list[dict]:
         return [e for e in time_entries if e["project_id"] == proj_id and start <= e["entry_date"] <= end]
 
-    # --- Invoices ---
-    inv_specs: list[tuple] = []
-    q1_erp_jan = entries_for(proj_erp["id"], "2026-01-01", "2026-01-31")
-    q1_erp_feb = entries_for(proj_erp["id"], "2026-02-01", "2026-02-28")
-    q1_audit = entries_for(proj_audit["id"], "2026-01-01", "2026-03-31")
-    inv_specs.append(("YUZU-2026-0001", acme["id"], "2026-01-31", "2026-03-02", "paid", invoice_lines_for_entries(q1_erp_jan, 145)))
-    inv_specs.append(("YUZU-2026-0002", acme["id"], "2026-02-28", "2026-03-30", "paid", invoice_lines_for_entries(q1_erp_feb, 145)))
-    inv_specs.append(("YUZU-2026-0003", acme["id"], "2026-02-05", "2026-03-07", "paid", invoice_lines_for_entries(q1_audit, 160)))
-    inv4_tax = sales_tax(12000)
-    inv_specs.append(("YUZU-2026-0004", northwind["id"], "2026-03-15", "2026-03-30", "paid", "fixed", inv4_tax, proj_fixed["id"]))
-    q2_lines = invoice_lines_for_entries(entries_for(proj_erp2["id"], "2026-04-01", "2026-06-30"), 150)
-    inv_specs.append(("YUZU-2026-0005", acme["id"], "2026-06-30", "2026-07-30", "paid", q2_lines))
-    q3_lines = invoice_lines_for_entries(entries_for(proj_erp2["id"], "2026-07-01", "2026-09-30"), 150)
-    inv_specs.append(("YUZU-2026-0006", acme["id"], "2026-09-30", "2026-10-30", "paid", q3_lines))
-    q4_lines = invoice_lines_for_entries(entries_for(proj_erp2["id"], "2026-10-01", "2026-12-31"), 150)
-    inv_specs.append(("YUZU-2026-0007", acme["id"], "2026-12-15", "2026-01-14", "sent", q4_lines))
+    # --- Invoices: every hour worked is billed ---
+    invoice_plans: list[dict] = []
 
-    invoice_payloads = []
-    line_payloads = []
-    for spec in inv_specs:
-        num, partner, inv_date, due, status = spec[:5]
-        if spec[5] == "fixed":
-            tot = spec[6]
-        else:
-            tot = sum_tax_fields(spec[5])
-        invoice_payloads.append({
-            "partner_id": partner, "invoice_number": num, "invoice_date": inv_date,
-            "due_date": due, "include_sales_tax": True, "status": status, "notes": TAG, **tot,
+    for m in range(1, 13):
+        start = month_start(2026, m)
+        end = month_end(2026, m)
+        month_entries = entries_for(proj_retainer["id"], start, end)
+        lines = invoice_lines_for_entries(month_entries, HOURLY_RATE)
+        tot = sum_tax_fields(lines)
+        invoice_plans.append({
+            "number": f"YUZU-2026-{m:04d}",
+            "partner_id": acme["id"],
+            "invoice_date": end,
+            "due_date": add_days(end, 30),
+            "lines": lines,
+            "line_kind": "time",
+            "fixed_project_id": None,
+            **tot,
         })
 
-    invoices = ins("invoices", invoice_payloads)
+    audit_entries = entries_for(proj_audit["id"], "2026-01-01", "2026-02-28")
+    audit_lines = invoice_lines_for_entries(audit_entries, AUDIT_HOURLY_RATE)
+    invoice_plans.append({
+        "number": "YUZU-2026-0013",
+        "partner_id": acme["id"],
+        "invoice_date": "2026-02-28",
+        "due_date": "2026-03-30",
+        "lines": audit_lines,
+        "line_kind": "time",
+        "fixed_project_id": None,
+        **sum_tax_fields(audit_lines),
+    })
+
+    fixed_tax = sales_tax(FIXED_PROJECT_HT)
+    invoice_plans.append({
+        "number": "YUZU-2026-0014",
+        "partner_id": northwind["id"],
+        "invoice_date": "2026-04-15",
+        "due_date": "2026-05-15",
+        "lines": None,
+        "line_kind": "fixed",
+        "fixed_project_id": proj_fixed["id"],
+        "fixed_tax": fixed_tax,
+        **fixed_tax,
+    })
+
+    assign_collection(invoice_plans)
+
+    invoices = ins("invoices", [
+        {
+            "partner_id": p["partner_id"],
+            "invoice_number": p["number"],
+            "invoice_date": p["invoice_date"],
+            "due_date": p["due_date"],
+            "include_sales_tax": True,
+            "status": p["status"],
+            "notes": TAG,
+            "subtotal": p["subtotal"],
+            "gst": p["gst"],
+            "qst": p["qst"],
+            "total": p["total"],
+        }
+        for p in invoice_plans
+    ])
     inv_by_num = {i["invoice_number"]: i for i in invoices}
 
-    for spec in inv_specs:
-        num = spec[0]
-        inv = inv_by_num[num]
-        if spec[5] == "fixed":
-            tax, proj_id = spec[6], spec[7]
+    line_payloads: list[dict] = []
+    for plan in invoice_plans:
+        inv = inv_by_num[plan["number"]]
+        if plan["line_kind"] == "fixed":
+            tax = plan["fixed_tax"]
+            proj_id = plan["fixed_project_id"]
             line_payloads.append({
                 "invoice_id": inv["id"], "project_id": proj_id, "time_entry_id": None,
-                "line_date": inv["invoice_date"], "description": "API Integration — forfait",
+                "line_date": plan["invoice_date"],
+                "description": "Intégration API — forfait (livraison complète)",
                 "quantity": 1, "unit_label": "forfait", "unit_price": tax["subtotal"],
                 "sort_order": 0, **tax,
             })
+            if not dry_run:
+                sb.update("projects", "id", proj_id, {"invoice_id": inv["id"]})
+                for e in time_entries:
+                    if e["project_id"] == proj_id:
+                        sb.update("time_entries", "id", e["id"], {"invoice_id": inv["id"]})
         else:
-            lines = spec[5]
-            for ln in lines:
+            for ln in plan["lines"]:
                 line_payloads.append({**ln, "invoice_id": inv["id"]})
-            for e in time_entries:
-                if any(ln.get("time_entry_id") == e["id"] for ln in lines):
-                    if not dry_run:
+            if not dry_run:
+                for e in time_entries:
+                    if any(ln.get("time_entry_id") == e["id"] for ln in plan["lines"]):
                         sb.update("time_entries", "id", e["id"], {"invoice_id": inv["id"]})
 
     ins("invoice_line_items", line_payloads)
 
-    inv1 = inv_by_num["YUZU-2026-0001"]
-    inv2 = inv_by_num["YUZU-2026-0002"]
-    inv3 = inv_by_num["YUZU-2026-0003"]
-    inv4 = inv_by_num["YUZU-2026-0004"]
-    inv5 = inv_by_num["YUZU-2026-0005"]
-    inv6 = inv_by_num["YUZU-2026-0006"]
-    inv7 = inv_by_num["YUZU-2026-0007"]
+    payment_rows: list[dict] = []
+    for plan in invoice_plans:
+        if plan.get("paid_amount", 0) <= 0:
+            continue
+        inv = inv_by_num[plan["number"]]
+        payment_rows.append({
+            "invoice_id": inv["id"],
+            "payment_date": plan["payment_date"],
+            "amount": plan["paid_amount"],
+            "method": "virement",
+            "reference": f"EFT-{plan['number'][-4:]}",
+            "notes": TAG if plan["status"] == "paid" else f"{TAG} partiel",
+        })
+    payments = ins("payments", payment_rows)
 
-    payments = ins("payments", [
-        {"invoice_id": inv1["id"], "payment_date": "2026-02-14", "amount": float(inv1["total"]),
-         "method": "virement", "reference": "EFT-ACME-001", "notes": TAG},
-        {"invoice_id": inv2["id"], "payment_date": "2026-03-18", "amount": float(inv2["total"]),
-         "method": "virement", "reference": "EFT-ACME-002", "notes": TAG},
-        {"invoice_id": inv3["id"], "payment_date": "2026-02-20", "amount": float(inv3["total"]),
-         "method": "chèque", "reference": "CHQ-8842", "notes": TAG},
-        {"invoice_id": inv4["id"], "payment_date": "2026-03-20", "amount": round2(float(inv4["total"]) * 0.5),
-         "method": "virement", "reference": "EFT-NW-001", "notes": f"{TAG} partial"},
-        {"invoice_id": inv4["id"], "payment_date": "2026-04-25", "amount": round2(float(inv4["total"]) * 0.5),
-         "method": "virement", "reference": "EFT-NW-002", "notes": f"{TAG} balance"},
-        {"invoice_id": inv5["id"], "payment_date": "2026-07-22", "amount": float(inv5["total"]),
-         "method": "virement", "reference": "EFT-ACME-003", "notes": TAG},
-        {"invoice_id": inv6["id"], "payment_date": "2026-10-28", "amount": float(inv6["total"]),
-         "method": "virement", "reference": "EFT-ACME-004", "notes": TAG},
-    ])
-
-    # --- Employee expenses ---
     ee_specs = [
         ("2026-01-18", "Uber", "travel", "Client site visit", 28.50, False),
         ("2026-02-04", "Staples", "office", "Printer supplies", 67.89, False),
@@ -303,38 +360,37 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
         ("2026-08-14", "Staples", "office", "Supplies Q3", 54.25, False),
         ("2026-11-22", "Restaurant Biz", "travel", "Team lunch (taxable)", 92.00, True),
     ]
-    ee_rows = []
-    for d, vendor, cat, desc, total_incl, taxable in ee_specs:
-        tax = purchase_tax_from_total(total_incl)
-        ee_rows.append({
+    employee_expenses = ins("employee_expenses", [
+        {
             "employee_id": emp["id"], "expense_date": d, "vendor": vendor, "category": cat,
-            "description": desc, "amount": tax["subtotal"], "gst": tax["gst"], "qst": tax["qst"],
-            "total": tax["total"], "taxable": taxable, "notes": TAG,
-        })
-    employee_expenses = ins("employee_expenses", ee_rows)
+            "description": desc,
+            "amount": (t := purchase_tax_from_total(amt))["subtotal"],
+            "gst": t["gst"], "qst": t["qst"], "total": t["total"],
+            "taxable": taxable, "notes": TAG,
+        }
+        for d, vendor, cat, desc, amt, taxable in ee_specs
+    ])
 
     reimb_schedule = {
-        "2026-01-24": [0],
-        "2026-02-21": [1, 2],
-        "2026-03-21": [3],
-        "2026-05-16": [4],
-        "2026-08-22": [5],
-        "2026-11-28": [6],
+        "2026-01-24": [0], "2026-02-21": [1, 2], "2026-03-21": [3],
+        "2026-05-16": [4], "2026-08-22": [5], "2026-11-28": [6],
     }
 
-    pay_dates = biweekly_pay_dates(2026)
     payroll_runs: list[dict] = []
-    for i, pd in enumerate(pay_dates):
+    for i, pd in enumerate(biweekly_pay_dates(2026)):
         start, end = pay_period_range(pd)
         reimb_idxs = reimb_schedule.get(pd, [])
-        reimb_ids = [employee_expenses[j]["id"] for j in reimb_idxs]
-        taxable_reimb = sum(float(employee_expenses[j]["amount"]) for j in reimb_idxs if employee_expenses[j]["taxable"])
-        non_tax_reimb = sum(float(employee_expenses[j]["total"]) for j in reimb_idxs if not employee_expenses[j]["taxable"])
-        calc = calc_payroll(95000, 26, taxable_reimb * 26 if taxable_reimb else 0.0)
+        taxable_reimb = sum(
+            float(employee_expenses[j]["amount"]) for j in reimb_idxs if employee_expenses[j]["taxable"]
+        )
+        non_tax_reimb = sum(
+            float(employee_expenses[j]["total"]) for j in reimb_idxs if not employee_expenses[j]["taxable"]
+        )
+        calc = calc_payroll(YEARLY_SALARY, 26, taxable_reimb * 26 if taxable_reimb else 0.0)
         gross = round2(calc["gross_pay"] + taxable_reimb)
         net = payroll_net_with_reimb(gross, calc, non_tax_reimb)
         levies = calculate_employer_levies(gross)
-        remitted = i < len(pay_dates) - 1  # last run pending remittance
+        remitted = i < 25
         rows = ins("payroll_runs", [{
             "employee_id": emp["id"], "pay_period_start": start, "pay_period_end": end,
             "payment_date": pd, "gross_pay": gross, "net_pay": net,
@@ -342,7 +398,7 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
             "remittance_status": "remitted" if remitted else "pending",
             "remittance_date": (date.fromisoformat(pd) + timedelta(days=3)).isoformat() if remitted else None,
             "remittance_reference": f"RP-{pd}" if remitted else None,
-            "employer_benefits": 125.00,
+            "employer_benefits": EMPLOYER_BENEFITS_PER_PERIOD,
             "notes": TAG,
             **{k: calc[k] for k in calc if k not in ("gross_pay", "net_pay", "hsf_employer", "cnesst_employer")},
             **levies,
@@ -370,66 +426,70 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
     ]
     expenses = ins("expenses", [
         {"expense_date": d, "vendor": v, "category": c, "description": desc,
-         "amount": purchase_tax_from_total(amt)["subtotal"],
-         "gst": purchase_tax_from_total(amt)["gst"],
-         "qst": purchase_tax_from_total(amt)["qst"],
-         "total": purchase_tax_from_total(amt)["total"],
+         "amount": (t := purchase_tax_from_total(amt))["subtotal"],
+         "gst": t["gst"], "qst": t["qst"], "total": t["total"],
          "paid": paid, "notes": TAG}
         for d, v, c, desc, amt, paid in exp_specs
     ])
 
     dividends = ins("dividends", [
         {
-            "declared_date": "2026-03-25", "payment_date": "2026-03-28", "status": "paid",
-            "total_amount": 5000, "paid_amount": 5000, "employee_count": 1, "amount_per_employee": 5000,
-            "description": "Interim dividend Q1", "notes": TAG,
+            "declared_date": "2026-06-25", "payment_date": "2026-06-28", "status": "paid",
+            "total_amount": DIVIDEND_INTERIM, "paid_amount": DIVIDEND_INTERIM,
+            "employee_count": 1, "amount_per_employee": DIVIDEND_INTERIM,
+            "description": "Dividende intérimaire", "notes": TAG,
         },
         {
             "declared_date": "2026-12-20", "payment_date": "2026-12-23", "status": "paid",
-            "total_amount": 8000, "paid_amount": 8000, "employee_count": 1, "amount_per_employee": 8000,
-            "description": "Year-end dividend", "notes": TAG,
+            "total_amount": DIVIDEND_YEAR_END, "paid_amount": DIVIDEND_YEAR_END,
+            "employee_count": 1, "amount_per_employee": DIVIDEND_YEAR_END,
+            "description": "Dividende de fin d'année", "notes": TAG,
         },
     ])
-    for i, div in enumerate(dividends):
+    for div in dividends:
         ins("dividend_allocations", [{
             "dividend_id": div["id"], "shareholder_id": shareholders[0]["id"],
             "employee_id": emp["id"], "amount": float(div["total_amount"]),
         }])
 
-    all_invoices = list(invoices)
     sales_tax_periods = ins("sales_tax_periods", [
         sales_tax_period("2026-01-01", "2026-03-31", "2026-04-30", "2026-04-16",
-                         all_invoices, expenses, employee_expenses),
+                         invoices, expenses, employee_expenses),
         sales_tax_period("2026-04-01", "2026-06-30", "2026-07-31", "2026-07-18",
-                         all_invoices, expenses, employee_expenses),
+                         invoices, expenses, employee_expenses),
         sales_tax_period("2026-07-01", "2026-09-30", "2026-10-31", "2026-10-20",
-                         all_invoices, expenses, employee_expenses),
+                         invoices, expenses, employee_expenses),
         sales_tax_period("2026-10-01", "2026-12-31", "2027-01-31", "2027-01-15",
-                         all_invoices, expenses, employee_expenses),
+                         invoices, expenses, employee_expenses),
     ])
 
     corp_tax = ins("corporate_tax_records", [
         {
-            "fiscal_year": "FY2026", "label": "Acompte provisionnel T2 (mars)", "tax_authority": "CRA",
-            "due_date": "2026-03-31", "amount": 3500, "paid_amount": 3500,
-            "paid_date": "2026-03-28", "status": "paid", "notes": TAG,
+            "fiscal_year": "FY2026", "label": "Acompte provisionnel T2 (juin)", "tax_authority": "CRA",
+            "due_date": "2026-06-30", "amount": 4500, "paid_amount": 4500,
+            "paid_date": "2026-06-28", "status": "paid", "notes": TAG,
         },
         {
             "fiscal_year": "FY2026", "label": "Acompte provisionnel T2 (déc)", "tax_authority": "CRA",
-            "due_date": "2026-12-31", "amount": 4200, "paid_amount": 4200,
+            "due_date": "2026-12-31", "amount": 5500, "paid_amount": 5500,
             "paid_date": "2026-12-28", "status": "paid", "notes": TAG,
         },
     ])
 
-    ins("accounting_adjustments", [
+    adjustments = ins("accounting_adjustments", [
         {
-            "adjustment_type": "prepaid", "description": "Assurance responsabilité annuelle",
+            "adjustment_type": "manual", "description": "Assurance responsabilité — paiement annuel prépayé",
+            "start_date": "2026-01-01", "total_amount": 2400,
+            "debit_account": "1400", "credit_account": "1010", "notes": TAG,
+        },
+        {
+            "adjustment_type": "prepaid", "description": "Assurance responsabilité — amortissement mensuel",
             "start_date": "2026-01-01", "end_date": "2026-12-31", "total_amount": 2400,
             "monthly_amount": 200, "debit_account": "5040", "credit_account": "1400", "notes": TAG,
         },
         {
             "adjustment_type": "accrual", "description": "Bonus annuel provisionné",
-            "start_date": "2026-01-01", "end_date": "2026-12-31", "total_amount": 5000,
+            "start_date": "2026-01-01", "end_date": "2026-12-31", "total_amount": 3000,
             "debit_account": "5100", "credit_account": "2050", "notes": TAG,
         },
         {
@@ -439,15 +499,29 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
         },
     ])
 
-    # Fiscal period closes — all months of 2026
-    closes = [{"period_end": month_end(2026, m), "notes": f"{TAG} month close"} for m in range(1, 13)]
-    ins("fiscal_period_closes", closes)
+    ins("fiscal_period_closes", [
+        {"period_end": month_end(2026, m), "notes": f"{TAG} month close"} for m in range(1, 13)
+    ])
 
-    bank_rows = build_bank_from_operations(
+    ins("bank_transactions", build_bank_from_operations(
         TAG, OPENING_CASH, payments, expenses, payroll_runs,
-        sales_tax_periods, dividends, corp_tax,
+        sales_tax_periods, dividends, corp_tax, adjustments,
+    ))
+
+    total_ht = round2(sum(p["subtotal"] for p in invoice_plans))
+    total_ttc = round2(sum(p["total"] for p in invoice_plans))
+    total_paid = round2(sum(p.get("paid_amount", 0) for p in invoice_plans))
+    open_ar = round2(total_ttc - total_paid)
+    print(
+        f"Revenu facturé: {total_ht:,.2f} $ HT · salaire {YEARLY_SALARY:,.0f} $ · "
+        f"dividendes {DIVIDEND_INTERIM + DIVIDEND_YEAR_END:,.0f} $"
     )
-    ins("bank_transactions", bank_rows)
+    print(
+        f"Encaissements: {total_paid:,.2f} $ / {total_ttc:,.2f} $ TTC "
+        f"({round2(total_paid / total_ttc * 100) if total_ttc else 0}% · CC ouvert {open_ar:,.2f} $)"
+    )
+    invoiced_count = len(time_entries)
+    print(f"Toutes les {invoiced_count} entrées de temps sont facturées (0 $ WIP non facturé)")
 
     return counts
 

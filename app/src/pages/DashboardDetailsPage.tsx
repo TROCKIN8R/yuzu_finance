@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot, type FinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
-import { buildMonthlySeries, hasChartData } from '../lib/dashboardSeries'
+import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData } from '../lib/dashboardSeries'
 import { computeUnbilledWip } from '../lib/billingMetrics'
 import {
   averageRate,
@@ -31,6 +31,7 @@ export function DashboardDetailsPage() {
   const [worked, setWorked] = useState({ total: 0, hourly: 0, fixed: 0, hours: 0, hourlyHours: 0, fixedHours: 0 })
   const [chartSource, setChartSource] = useState<Parameters<typeof buildMonthlySeries>[0] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (period) loadAll(period, settings ?? undefined)
@@ -38,6 +39,7 @@ export function DashboardDetailsPage() {
 
   async function loadAll(range: NonNullable<typeof period>, orgSettings?: OrganizationSettings) {
     setLoading(true)
+    setError(null)
     try {
       const billing = await fetchDashboardBillingData()
       const [{ data: glData, warnings: glWarnings }, extras, settingsResult, partners, employeeExpensesPending] =
@@ -87,6 +89,7 @@ export function DashboardDetailsPage() {
     } catch (err) {
       console.error('Dashboard details load failed:', err)
       setFin(null)
+      setError(err instanceof Error ? err.message : 'Erreur lors du chargement du tableau de bord.')
     } finally {
       setLoading(false)
     }
@@ -97,9 +100,28 @@ export function DashboardDetailsPage() {
     return buildMonthlySeries(chartSource, period)
   }, [chartSource, period])
 
+  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(monthlySeries), [monthlySeries])
+
   const trends = useMemo(() => buildServiceKpiTrends(monthlySeries), [monthlySeries])
 
-  if (!ready || !period || loading || !fin) return <div className="text-muted">Chargement…</div>
+  if (!ready || !period || loading || !fin) {
+    if (error) {
+      return (
+        <div className="max-w-xl mx-auto ui-card p-6 space-y-3">
+          <h1 className="text-lg font-semibold">Tableau de bord — détails</h1>
+          <p className="text-sm text-red-700">{error}</p>
+          <button
+            type="button"
+            className="text-sm font-medium px-3 py-2 rounded-lg border border-border bg-white hover:border-yuzu/50"
+            onClick={() => period && loadAll(period, settings ?? undefined)}
+          >
+            Réessayer
+          </button>
+        </div>
+      )
+    }
+    return <div className="text-muted">Chargement…</div>
+  }
 
   const eq = fin.balanceSheet.equity
   const invoicedRevenue = fin.income.invoicedSubtotal
@@ -107,6 +129,7 @@ export function DashboardDetailsPage() {
   const billingGap = Math.round((worked.total - invoicedRevenue) * 100) / 100
   const margin = operatingMarginPct(recognizedRevenue, fin.income.operatingIncome)
   const periodNetCash = fin.cashIn - fin.cashOut
+  const bankVariance = fin.balanceSheet.bankReconciliationVariance
   const hourlyAvg = averageRate(worked.hourly, worked.hourlyHours)
   const fixedAvg = averageRate(worked.fixed, worked.fixedHours)
 
@@ -150,14 +173,22 @@ export function DashboardDetailsPage() {
           <KpiCard
             label="Revenus facturés"
             value={formatCad(invoicedRevenue)}
-            sub="Montants HT sur la période"
+            sub={
+              Math.abs(invoicedRevenue - recognizedRevenue) > 0.01
+                ? `HT date facture · GL ${formatCad(recognizedRevenue)}`
+                : 'Montants HT sur la période'
+            }
             trend={trends.invoicedRevenue}
             to="/billing/invoices"
           />
           <KpiCard
             label="Encaissements"
             value={formatCad(fin.cashIn)}
-            sub="Paiements clients reçus"
+            sub={
+              fin.billing.collectionRatePct != null
+                ? `Période · ${fin.billing.collectionRatePct.toFixed(1)} % encaissé (TTC cumul.)`
+                : 'Paiements clients reçus (période)'
+            }
             trend={trends.cashCollected}
             to="/billing/invoices"
           />
@@ -183,9 +214,18 @@ export function DashboardDetailsPage() {
             trend={trends.operatingIncome}
             to="/financial-reports"
           />
-          <KpiCard label="Marge d'exploitation" value={margin != null ? `${margin.toFixed(1)} %` : '—'} sub="Résultat / revenus facturés" />
+          <KpiCard label="Marge d'exploitation" value={margin != null ? `${margin.toFixed(1)} %` : '—'} sub="Résultat / revenus comptabilisés (GL)" />
           <KpiCard label="Dépenses d'exploitation" value={formatCad(fin.income.operatingExpenses)} sub="Hors paie" to="/expenses" />
-          <KpiCard label="Comptes à recevoir" value={formatCad(fin.accountsReceivable)} sub="Factures impayées (période)" to="/billing/invoices" />
+          <KpiCard
+            label="Comptes à recevoir"
+            value={formatCad(fin.accountsReceivable)}
+            sub={
+              fin.billing.collectionRatePct != null
+                ? `Solde GL cumulatif · ${fin.billing.collectionRatePct.toFixed(1)} % encaissé (TTC)`
+                : 'Solde GL cumulatif'
+            }
+            to="/billing/invoices"
+          />
         </MetricGrid>
       </DashboardSection>
 
@@ -200,7 +240,16 @@ export function DashboardDetailsPage() {
 
       <DashboardSection title="Trésorerie">
         <MetricGrid cols={4}>
-          <KpiCard label="Trésorerie (livre)" value={formatCad(fin.balanceSheet.cash)} sub="Solde estimé cumulatif" to="/bank" />
+          <KpiCard
+            label="Trésorerie (livre)"
+            value={formatCad(fin.balanceSheet.cash)}
+            sub={
+              bankVariance != null && Math.abs(bankVariance) > 0.01
+                ? `Solde GL · écart relevé ${formatCad(bankVariance)}`
+                : 'Solde GL cumulatif'
+            }
+            to="/bank"
+          />
           <KpiCard label="Flux net (période)" value={formatCad(periodNetCash)} sub={`Entrées ${formatCad(fin.cashIn)} · Sorties ${formatCad(fin.cashOut)}`} />
           <KpiCard label="Avoir total" value={formatCad(fin.equity)} sub="Capital-actions + BNR estimés" to="/financial-reports" />
           <KpiCard label="Taxes de vente à payer" value={formatCad(fin.salesTaxPayable)} sub="TPS + TVQ nettes" to="/sales-tax" />
@@ -219,7 +268,7 @@ export function DashboardDetailsPage() {
       <DashboardSection title={`Tendances — ${period.label}`}>
         {hasChartData(monthlySeries) ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <RevenueTrendChart points={monthlySeries} />
+            <RevenueTrendChart points={cumulativeSeries} cumulative />
             <ProfitabilityChart points={monthlySeries} />
             <CashFlowChart points={monthlySeries} />
             <PayrollTrendChart points={monthlySeries} />
