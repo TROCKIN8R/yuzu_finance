@@ -281,8 +281,10 @@ export function buildGeneralLedger(data: {
   }
 
   for (const pr of data.payrollRuns) {
-    const linked = (data.employeeExpenses ?? []).filter((e) => e.payroll_run_id === pr.id && !e.taxable)
-    const nonTaxReimb = linked.reduce((s, e) => s + Number(e.total), 0)
+    const linkedExpenses = (data.employeeExpenses ?? []).filter((e) => e.payroll_run_id === pr.id)
+    const nonTaxLinked = linkedExpenses.filter((e) => !e.taxable)
+    const nonTaxReimb = nonTaxLinked.reduce((s, e) => s + Number(e.total), 0)
+    const taxableReimb = linkedExpenses.filter((e) => e.taxable).reduce((s, e) => s + Number(e.amount), 0)
     const employerContrib = employerPayrollExpenseContributions(pr)
     const incomeTax = payrollIncomeTaxWithheld(pr)
     const statutory = payrollStatutoryRemittance(pr)
@@ -299,6 +301,8 @@ export function buildGeneralLedger(data: {
     if (levies > 0) payrollLines.push(jl('2215', 0, levies))
     if (benefits > 0) payrollLines.push(jl('2050', 0, benefits))
     if (nonTaxReimb > 0) payrollLines.push(jl('2060', nonTaxReimb, 0))
+    // Taxable reimbursements are in gross_pay but not paid as extra cash (net excludes them).
+    if (taxableReimb > 0) payrollLines.push(jl('5100', 0, taxableReimb))
 
     entries.push(
       entry(

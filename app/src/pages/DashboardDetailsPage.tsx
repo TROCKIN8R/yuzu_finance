@@ -38,52 +38,58 @@ export function DashboardDetailsPage() {
 
   async function loadAll(range: NonNullable<typeof period>, orgSettings?: OrganizationSettings) {
     setLoading(true)
-    const billing = await fetchDashboardBillingData()
-    const [{ data: glData, warnings: glWarnings }, extras, settingsResult, partners, employeeExpensesPending] =
-      await Promise.all([
-        fetchGeneralLedgerData(),
-        fetchFinancialReportExtras(),
-        orgSettings ? Promise.resolve({ data: orgSettings }) : supabase.from('organization_settings').select('*').maybeSingle(),
-        supabase.from('partners').select('id', { count: 'exact', head: true }),
-        supabase.from('employee_expenses').select('total, payroll_run_id').is('payroll_run_id', null),
-      ])
+    try {
+      const billing = await fetchDashboardBillingData()
+      const [{ data: glData, warnings: glWarnings }, extras, settingsResult, partners, employeeExpensesPending] =
+        await Promise.all([
+          fetchGeneralLedgerData(),
+          fetchFinancialReportExtras(),
+          orgSettings ? Promise.resolve({ data: orgSettings }) : supabase.from('organization_settings').select('*').maybeSingle(),
+          supabase.from('partners').select('id', { count: 'exact', head: true }),
+          supabase.from('employee_expenses').select('total, payroll_run_id').is('payroll_run_id', null),
+        ])
 
-    if (glWarnings.length > 0) console.warn('GL load:', glWarnings.join('; '))
+      if (glWarnings.length > 0) console.warn('GL load:', glWarnings.join('; '))
 
-    const wip = computeUnbilledWip(billing.timeEntries, billing.fixedProjects)
-    const workedMetrics = computeWorkedRevenueMetrics(billing.timeEntries, range)
+      const wip = computeUnbilledWip(billing.timeEntries, billing.fixedProjects)
+      const workedMetrics = computeWorkedRevenueMetrics(billing.timeEntries, range)
 
-    setWorked(workedMetrics)
-    setOps({
-      partners: partners.count ?? 0,
-      unbilledHours: wip.hours,
-      unbilledAmount: wip.amount,
-      pendingReimbursement: (employeeExpensesPending.data ?? []).reduce((s, e) => s + Number(e.total), 0),
-    })
+      setWorked(workedMetrics)
+      setOps({
+        partners: partners.count ?? 0,
+        unbilledHours: wip.hours,
+        unbilledAmount: wip.amount,
+        pendingReimbursement: (employeeExpensesPending.data ?? []).reduce((s, e) => s + Number(e.total), 0),
+      })
 
-    setChartSource({
-      payments: glData.payments,
-      expenses: glData.expenses,
-      payrollRuns: glData.payrollRuns,
-      invoices: glData.invoices,
-      timeEntries: billing.timeEntries,
-      dividends: glData.dividends,
-      corporateTax: glData.corporateTax,
-      salesTaxRemitted: extras.salesTaxRemitted,
-      settings: settingsResult.data ?? undefined,
-    })
+      setChartSource({
+        payments: glData.payments,
+        expenses: glData.expenses,
+        payrollRuns: glData.payrollRuns,
+        invoices: glData.invoices,
+        timeEntries: billing.timeEntries,
+        dividends: glData.dividends,
+        corporateTax: glData.corporateTax,
+        salesTaxRemitted: extras.salesTaxRemitted,
+        settings: settingsResult.data ?? undefined,
+      })
 
-    setFin(
-      buildFinancialSnapshot(
-        {
-          ...glData,
-          bankTransactions: extras.bankTransactions,
-          settings: settingsResult.data ?? glData.settings ?? undefined,
-        },
-        range
+      setFin(
+        buildFinancialSnapshot(
+          {
+            ...glData,
+            bankTransactions: extras.bankTransactions,
+            settings: settingsResult.data ?? glData.settings ?? undefined,
+          },
+          range
+        )
       )
-    )
-    setLoading(false)
+    } catch (err) {
+      console.error('Dashboard details load failed:', err)
+      setFin(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const monthlySeries = useMemo(() => {

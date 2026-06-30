@@ -10,15 +10,23 @@ export function useDashboardPeriod() {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    fetchOrganizationSettings().then((orgSettings) => {
-      setSettings(orgSettings)
-      const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
-      const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
-      const ranges = periodPresets(fyeMonth, fyeDay)
-      setPresets(ranges)
-      setPeriod(ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0] ?? currentFiscalYearRangeFixed(fyeMonth, fyeDay))
-      setReady(true)
-    })
+    fetchOrganizationSettings()
+      .then((orgSettings) => {
+        setSettings(orgSettings)
+        const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
+        const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
+        const ranges = periodPresets(fyeMonth, fyeDay)
+        setPresets(ranges)
+        setPeriod(ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0] ?? currentFiscalYearRangeFixed(fyeMonth, fyeDay))
+        setReady(true)
+      })
+      .catch((err) => {
+        console.error('Dashboard period init failed:', err)
+        const ranges = periodPresets(6, 30)
+        setPresets(ranges)
+        setPeriod(ranges[0] ?? currentFiscalYearRangeFixed(6, 30))
+        setReady(true)
+      })
   }, [])
 
   return { period, setPeriod, presets, settings, ready }
