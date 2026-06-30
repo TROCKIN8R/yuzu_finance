@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { OrganizationSettings } from './types'
 import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
+import { isRevenueInvoice } from './taxes'
 
 export const TIME_ENTRY_SELECT =
   'entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate, name, partners(legal_name))'
@@ -27,8 +28,6 @@ export async function fetchDashboardBillingData(): Promise<DashboardRawData> {
     partners: partners.data ?? [],
   }
 }
-
-import { isRevenueInvoice } from '../lib/taxes'
 
 export async function fetchExecutiveExtras() {
   const [invoices, payments, lines] = await Promise.all([
