@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Partner, PartnerKind, InvoiceLanguage } from '../lib/types'
 import { matchesSearch, countActiveFilters } from '../lib/filters'
-import { INVOICE_LANGUAGE_LABELS, PARTNER_KIND_LABELS } from '../lib/partners'
+import { INVOICE_LANGUAGE_LABELS, PARTNER_KIND_LABELS, formatPartnerPaymentTerms } from '../lib/partners'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
@@ -25,6 +25,7 @@ const empty: Partial<Partner> = {
   country: 'Canada',
   language: 'fr' as InvoiceLanguage,
   payment_terms_days: 30,
+  late_penalty_monthly_pct: 0.02,
   notes: '',
 }
 
@@ -95,6 +96,7 @@ export function PartnersPage() {
       country: form.country || null,
       language: form.language ?? 'fr',
       payment_terms_days: form.payment_terms_days ?? 30,
+      late_penalty_monthly_pct: form.late_penalty_monthly_pct ?? 0.02,
       notes: form.notes || null,
     }
     if (editingId) {
@@ -154,6 +156,7 @@ export function PartnersPage() {
                   <th className="px-4 py-3 font-medium">Contact</th>
                   <th className="px-4 py-3 font-medium">Courriel</th>
                   <th className="px-4 py-3 font-medium">Langue facture</th>
+                  <th className="px-4 py-3 font-medium">Conditions paiement</th>
                   <th className="px-4 py-3 font-medium">Ville</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -169,6 +172,11 @@ export function PartnersPage() {
                     <td className="px-4 py-3 text-muted">{p.email ?? '—'}</td>
                     <td className="px-4 py-3 text-muted">
                       {p.kind === 'provider' ? '—' : INVOICE_LANGUAGE_LABELS[p.language === 'en' ? 'en' : 'fr']}
+                    </td>
+                    <td className="px-4 py-3 text-muted">
+                      {p.kind === 'provider'
+                        ? '—'
+                        : formatPartnerPaymentTerms(p, p.language === 'en' ? 'en' : 'fr')}
                     </td>
                     <td className="px-4 py-3 text-muted">{p.city ?? '—'}</td>
                     <td className="px-4 py-3 text-right">
@@ -269,13 +277,35 @@ export function PartnersPage() {
                 </select>
                 <p className="text-xs text-muted mt-1">Détermine la langue du PDF (titres, colonnes, taxes).</p>
               </Field>
-              <Field label="Délai de paiement (jours)">
-                <input
-                  type="number"
-                  className={inputClass}
-                  value={form.payment_terms_days ?? 30}
-                  onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })}
-                />
+              <Field label="Conditions de paiement">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted block mb-1">Délai net (jours)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputClass}
+                      value={form.payment_terms_days ?? 30}
+                      onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted block mb-1">Pénalité mensuelle (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className={inputClass}
+                      value={Number(((form.late_penalty_monthly_pct ?? 0.02) * 100).toFixed(4))}
+                      onChange={(e) =>
+                        setForm({ ...form, late_penalty_monthly_pct: Number(e.target.value) / 100 })
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted mt-1">
+                  Par défaut : Net 30, pénalité de 2 % par mois. Affiché sur les factures PDF.
+                </p>
               </Field>
             </>
           )}
