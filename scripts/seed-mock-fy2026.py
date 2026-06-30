@@ -177,13 +177,13 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
                 "qst_rate": QST_RATE,
                 "opening_cash_balance": OPENING_CASH,
                 "opening_retained_earnings": 22000,
-                "opening_balance_date": "2025-12-31",
+                "opening_balance_date": "2026-01-01",
                 "share_capital": 100,
                 "hsf_rate": HSF_RATE,
                 "cnesst_rate": CNESST_RATE,
                 "wip_accrual_enabled": True,
-                "fiscal_year_end_month": 6,
-                "fiscal_year_end_day": 30,
+                "fiscal_year_end_month": 12,
+                "fiscal_year_end_day": 31,
             },
             params={"user_id": f"eq.{user_id}"},
         )
@@ -192,20 +192,20 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
     partners = ins("partners", [
         {"legal_name": "Acme Consulting Ltée", "kind": "customer", "contact_name": "Marie Tremblay",
          "email": "marie@acme-demo.ca", "city": "Montréal", "province": "QC", "language": "fr",
-         "payment_terms_days": 30, "late_penalty_monthly_pct": 0.02, "notes": f"{TAG} client A"},
+         "payment_terms_days": 30, "notes": f"{TAG} client A"},
         {"legal_name": "Northwind Solutions Inc.", "kind": "customer", "contact_name": "James Lee",
          "email": "billing@northwind-demo.ca", "city": "Toronto", "province": "ON", "language": "en",
-         "payment_terms_days": 15, "late_penalty_monthly_pct": 0.02, "notes": f"{TAG} client B"},
+         "payment_terms_days": 15, "notes": f"{TAG} client B"},
         {"legal_name": "CloudHost Pro", "kind": "provider", "contact_name": "Support",
          "email": "invoices@cloudhost-demo.ca", "city": "Montréal", "province": "QC", "language": "fr",
-         "payment_terms_days": 30, "late_penalty_monthly_pct": 0.02, "notes": f"{TAG} supplier"},
+         "payment_terms_days": 30, "notes": f"{TAG} supplier"},
     ])
     acme, northwind, cloudhost = partners
 
     employees = ins("employees", [{
         "first_name": "Alex", "last_name": "Demo", "email": "alex@yuzu-demo.ca",
         "yearly_salary": YEARLY_SALARY, "pay_frequency": "biweekly", "active": True,
-        "hire_date": "2025-01-15", "notes": f"{TAG} owner-employee",
+        "hire_date": "2026-01-02", "notes": f"{TAG} owner-employee",
     }])
     emp = employees[0]
 
@@ -476,9 +476,14 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
         },
     ])
 
-    ins("accounting_adjustments", [
+    adjustments = ins("accounting_adjustments", [
         {
-            "adjustment_type": "prepaid", "description": "Assurance responsabilité annuelle",
+            "adjustment_type": "manual", "description": "Assurance responsabilité — paiement annuel prépayé",
+            "start_date": "2026-01-01", "total_amount": 2400,
+            "debit_account": "1400", "credit_account": "1010", "notes": TAG,
+        },
+        {
+            "adjustment_type": "prepaid", "description": "Assurance responsabilité — amortissement mensuel",
             "start_date": "2026-01-01", "end_date": "2026-12-31", "total_amount": 2400,
             "monthly_amount": 200, "debit_account": "5040", "credit_account": "1400", "notes": TAG,
         },
@@ -500,7 +505,7 @@ def seed(user_id: str, sb: Supabase, dry_run: bool = False) -> dict[str, int]:
 
     ins("bank_transactions", build_bank_from_operations(
         TAG, OPENING_CASH, payments, expenses, payroll_runs,
-        sales_tax_periods, dividends, corp_tax,
+        sales_tax_periods, dividends, corp_tax, adjustments,
     ))
 
     total_ht = round2(sum(p["subtotal"] for p in invoice_plans))

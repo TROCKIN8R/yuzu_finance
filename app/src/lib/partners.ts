@@ -28,16 +28,16 @@ export function providerPartners(partners: Partner[]) {
 }
 
 const DEFAULT_PAYMENT_TERMS_DAYS = 30
-const DEFAULT_LATE_PENALTY_MONTHLY_PCT = 0.02
+const DEFAULT_INVOICE_PENALTY_MONTHLY_PCT = 0.02
 
 export function resolvePartnerPaymentTerms(
-  partner: Pick<Partner, 'payment_terms_days' | 'late_penalty_monthly_pct'>,
-  settings?: Pick<OrganizationSettings, 'payment_terms_days' | 'late_penalty_monthly_pct'> | null
+  partner: Pick<Partner, 'payment_terms_days' | 'invoice_penalty_monthly_pct'>,
+  settings?: Pick<OrganizationSettings, 'payment_terms_days' | 'invoice_penalty_monthly_pct'> | null
 ) {
   return {
     days: partner.payment_terms_days ?? settings?.payment_terms_days ?? DEFAULT_PAYMENT_TERMS_DAYS,
-    latePenaltyMonthlyPct:
-      partner.late_penalty_monthly_pct ?? settings?.late_penalty_monthly_pct ?? DEFAULT_LATE_PENALTY_MONTHLY_PCT,
+    invoicePenaltyMonthlyPct:
+      partner.invoice_penalty_monthly_pct ?? settings?.invoice_penalty_monthly_pct ?? DEFAULT_INVOICE_PENALTY_MONTHLY_PCT,
   }
 }
 
@@ -46,13 +46,21 @@ function formatPenaltyPct(pct: number) {
   return Number.isInteger(display) ? String(display) : display.toFixed(2).replace(/\.?0+$/, '')
 }
 
-export function formatPartnerPaymentTerms(
-  partner: Pick<Partner, 'payment_terms_days' | 'late_penalty_monthly_pct'>,
-  lang: InvoiceLanguage,
-  settings?: Pick<OrganizationSettings, 'payment_terms_days' | 'late_penalty_monthly_pct'> | null
+export function formatInvoicePenaltyPercent(
+  partner: Pick<Partner, 'invoice_penalty_monthly_pct'>,
+  settings?: Pick<OrganizationSettings, 'invoice_penalty_monthly_pct'> | null
 ) {
-  const { days, latePenaltyMonthlyPct } = resolvePartnerPaymentTerms(partner, settings)
-  const penalty = formatPenaltyPct(latePenaltyMonthlyPct)
+  const { invoicePenaltyMonthlyPct } = resolvePartnerPaymentTerms(partner, settings)
+  return `${formatPenaltyPct(invoicePenaltyMonthlyPct)} %`
+}
+
+export function formatPartnerPaymentTerms(
+  partner: Pick<Partner, 'payment_terms_days' | 'invoice_penalty_monthly_pct'>,
+  lang: InvoiceLanguage,
+  settings?: Pick<OrganizationSettings, 'payment_terms_days' | 'invoice_penalty_monthly_pct'> | null
+) {
+  const { days, invoicePenaltyMonthlyPct } = resolvePartnerPaymentTerms(partner, settings)
+  const penalty = formatPenaltyPct(invoicePenaltyMonthlyPct)
   if (lang === 'en') {
     return `Net ${days}, ${penalty}% monthly penalty`
   }

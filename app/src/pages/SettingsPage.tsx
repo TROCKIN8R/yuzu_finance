@@ -37,7 +37,7 @@ const defaults: OrganizationSettingsForm = {
   qst_rate: 0.09975,
   invoice_prefix: 'YUZU',
   payment_terms_days: 30,
-  late_penalty_monthly_pct: 0.02,
+  invoice_penalty_monthly_pct: 0.02,
   payment_instructions: null,
   interac_email: DEFAULT_BILLING_EMAIL,
   bank_institution: '',
@@ -206,14 +206,14 @@ export function SettingsPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Préfixe factures"><input className={inputClass} value={form.invoice_prefix} onChange={(e) => setForm({ ...form, invoice_prefix: e.target.value })} /></Field>
             <Field label="Délai paiement (jours)"><input type="number" className={inputClass} value={form.payment_terms_days} onChange={(e) => setForm({ ...form, payment_terms_days: Number(e.target.value) })} /></Field>
-            <Field label="Pénalité mensuelle (%)">
+            <Field label="Pénalité facture (%)">
               <input
                 type="number"
                 min={0}
                 step={0.01}
                 className={inputClass}
-                value={Number((form.late_penalty_monthly_pct * 100).toFixed(4))}
-                onChange={(e) => setForm({ ...form, late_penalty_monthly_pct: Number(e.target.value) / 100 })}
+                value={Number((form.invoice_penalty_monthly_pct * 100).toFixed(4))}
+                onChange={(e) => setForm({ ...form, invoice_penalty_monthly_pct: Number(e.target.value) / 100 })}
               />
             </Field>
           </div>

@@ -238,7 +238,7 @@ export interface Partner {
   country: string | null
   language: InvoiceLanguage | null
   payment_terms_days: number
-  late_penalty_monthly_pct: number
+  invoice_penalty_monthly_pct: number
   notes: string | null
   created_at: string
   updated_at: string
@@ -354,7 +354,7 @@ export interface OrganizationSettings {
   qst_rate: number
   invoice_prefix: string
   payment_terms_days: number
-  late_penalty_monthly_pct: number
+  invoice_penalty_monthly_pct: number
   payment_instructions: string | null
   interac_email: string | null
   bank_institution: string | null

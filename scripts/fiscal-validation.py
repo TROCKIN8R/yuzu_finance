@@ -5,6 +5,7 @@ Draft for owner/CPA review. Read-only via Supabase service role.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import sys
@@ -15,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 Q1 = ("2026-01-01", "2026-03-31")
-FY2026 = ("2025-07-01", "2026-06-30")  # default FYE Jun 30
+FY2026 = ("2026-01-01", "2026-12-31")  # calendar year mock (Dec 31 FYE)
 
 
 def load_env(path: Path) -> None:
@@ -52,6 +53,23 @@ EXPENSE_ACCT = {
     "software": "5010", "office": "5020", "travel": "5030", "professional": "5040",
     "marketing": "5050", "payroll": "5060", "other": "5090",
 }
+
+ACCOUNT_TYPES: dict[str, str] = {
+    "1010": "asset", "1100": "asset", "1200": "asset", "1210": "asset", "1300": "asset", "1400": "asset",
+    "1500": "contra",
+    "2000": "liability", "2050": "liability", "2060": "liability", "2100": "liability", "2110": "liability",
+    "2125": "liability", "2200": "liability", "2210": "liability", "2215": "liability", "2300": "liability",
+    "2310": "liability",
+    "3000": "equity", "3100": "equity",
+    "4000": "revenue",
+    "5010": "expense", "5020": "expense", "5030": "expense", "5040": "expense", "5050": "expense",
+    "5060": "expense", "5090": "expense", "5100": "expense", "5110": "expense", "5200": "expense", "5900": "expense",
+}
+
+ASSET_BS_CODES = ("1010", "1100", "1200", "1210", "1300", "1400")
+LIAB_BS_CODES = (
+    "2000", "2050", "2060", "2100", "2110", "2125", "2200", "2210", "2215", "2300", "2310",
+)
 
 
 @dataclass
@@ -102,7 +120,52 @@ def entry_balance(lines: list[tuple[str, float, float]]) -> float:
     return round2(sum(d for _, d, _ in lines) - sum(c for _, _, c in lines))
 
 
-def build_gl_entries(data: dict) -> tuple[list[dict], dict[str, float]]:
+def account_balances(entries: list[dict]) -> dict[str, float]:
+    totals: dict[str, list[float]] = {}
+    for e in entries:
+        for code, d, c in e["lines"]:
+            cur = totals.setdefault(code, [0.0, 0.0])
+            cur[0] += d
+            cur[1] += c
+    balances: dict[str, float] = {}
+    for code, (debit, credit) in totals.items():
+        kind = ACCOUNT_TYPES.get(code, "asset")
+        if kind in ("asset", "expense"):
+            balances[code] = round2(debit - credit)
+        elif kind == "contra":
+            balances[code] = round2(credit - debit)
+        else:
+            balances[code] = round2(credit - debit)
+    return balances
+
+
+def balance_sheet_totals(entries: list[dict]) -> dict[str, float]:
+    bal = account_balances(entries)
+    accum = bal.get("1500", 0.0)
+    total_assets = round2(sum(bal.get(c, 0.0) for c in ASSET_BS_CODES) - accum)
+    total_liabilities = round2(sum(bal.get(c, 0.0) for c in LIAB_BS_CODES))
+    share_capital = bal.get("3000", 0.0)
+    retained_gl = bal.get("3100", 0.0)
+    unclosed = round2(
+        sum(bal.get(c, 0.0) for c, t in ACCOUNT_TYPES.items() if t == "revenue")
+        - sum(bal.get(c, 0.0) for c, t in ACCOUNT_TYPES.items() if t == "expense")
+    )
+    total_equity = round2(share_capital + retained_gl + unclosed)
+    gap = round2(total_assets - total_liabilities - total_equity)
+    return {
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "total_equity": total_equity,
+        "equation_gap": gap,
+        "cash": bal.get("1010", 0.0),
+        "ar": bal.get("1100", 0.0),
+        "wip": bal.get("1300", 0.0),
+        "prepaid": bal.get("1400", 0.0),
+        "revenue": bal.get("4000", 0.0),
+    }
+
+
+def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[dict], dict[str, float]]:
     """Simplified GL mirror of app/src/lib/generalLedger.ts"""
     settings = data["settings"][0] if data["settings"] else {}
     wip = bool(settings.get("wip_accrual_enabled"))
@@ -339,7 +402,7 @@ def build_gl_entries(data: dict) -> tuple[list[dict], dict[str, float]]:
         if adj["adjustment_type"] == "accrual":
             amt = float(adj.get("total_amount") or adj.get("monthly_amount") or 0)
             post_date = adj.get("end_date") or adj["start_date"]
-            if amt > 0:
+            if amt > 0 and post_date <= period_end:
                 post(
                     f"adj-{adj['id'][:8]}",
                     post_date,
@@ -351,13 +414,47 @@ def build_gl_entries(data: dict) -> tuple[list[dict], dict[str, float]]:
         monthly = float(adj.get("monthly_amount") or 0)
         if monthly <= 0:
             continue
-        post(
-            f"adj-{adj['id'][:8]}",
-            adj["start_date"],
-            "adjustment",
-            [(adj["debit_account"], monthly, 0), (adj["credit_account"], 0, monthly)],
-            adj["description"],
-        )
+        end = adj.get("end_date") or adj["start_date"]
+        y, m = int(adj["start_date"][:4]), int(adj["start_date"][5:7])
+        ey, em = int(end[:4]), int(end[5:7])
+        pe_y, pe_m = int(period_end[:4]), int(period_end[5:7])
+        while (y, m) <= (ey, em) and (y, m) <= (pe_y, pe_m):
+            last = calendar.monthrange(y, m)[1]
+            post_date = f"{y}-{m:02d}-{last}"
+            post(
+                f"adj-{adj['id'][:8]}-{y}{m:02d}",
+                post_date,
+                "adjustment",
+                [(adj["debit_account"], monthly, 0), (adj["credit_account"], 0, monthly)],
+                adj["description"],
+            )
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+
+    # WIP year-end true-up when all time is invoiced (mirrors app wipAccrual at period end)
+    if wip:
+        unbilled = [e for e in data.get("time_entries", []) if not e.get("invoice_id")]
+        bal_1300 = round2(acct_bal.get("1300", 0))
+        if not unbilled and abs(bal_1300) > 0.01:
+            if bal_1300 < 0:
+                amt = abs(bal_1300)
+                post(
+                    "wip-trueup",
+                    period_end,
+                    "wip_accrual",
+                    [("1300", amt, 0), ("4000", 0, amt)],
+                    "WIP true-up — revenue recognition",
+                )
+            else:
+                post(
+                    "wip-trueup",
+                    period_end,
+                    "wip_accrual",
+                    [("4000", bal_1300, 0), ("1300", 0, bal_1300)],
+                    "WIP true-up — revenue recognition",
+                )
 
     return entries, acct_bal
 
@@ -367,7 +464,7 @@ def validate(data: dict) -> ValidationReport:
     settings = data["settings"][0] if data["settings"] else {}
 
     try:
-        entries, acct = build_gl_entries(data)
+        entries, _acct_bal = build_gl_entries(data)
     except ValueError as e:
         r.add("error", "GL", str(e))
         return r
@@ -385,28 +482,44 @@ def validate(data: dict) -> ValidationReport:
     if abs(total_debit - total_credit) > 0.05:
         r.add("error", "GL", f"Trial balance out of balance: DR {total_debit:.2f} vs CR {total_credit:.2f}")
 
-    # Balance sheet equation (normal balances)
-    assets = acct.get("1010", 0) + acct.get("1100", 0) + acct.get("1200", 0) + acct.get("1210", 0) + acct.get("1300", 0)
-    liabilities = sum(acct.get(c, 0) for c in ("2000", "2050", "2060", "2100", "2110", "2125", "2200", "2210", "2215", "2300", "2310"))
-    # liability accounts stored as credit-normal in our naive acct_bal (debit-credit) — flip sign
-    liab_codes = ("2000", "2050", "2060", "2100", "2110", "2125", "2200", "2210", "2215", "2300", "2310")
-    liabilities = sum(-acct.get(c, 0) for c in liab_codes)
-    equity = -(acct.get("3000", 0) + acct.get("3100", 0))
-    r.metrics["cash_gl"] = round2(acct.get("1010", 0))
-    r.metrics["ar_gl"] = round2(acct.get("1100", 0))
-    r.metrics["wip_gl"] = round2(acct.get("1300", 0))
-    r.metrics["revenue_gl"] = round2(-acct.get("4000", 0))
-    r.metrics["gst_payable"] = round2(-acct.get("2100", 0))
-    r.metrics["qst_payable"] = round2(-acct.get("2110", 0))
+    ASSET_CODES = ASSET_BS_CODES
+    LIAB_CODES = LIAB_BS_CODES
+    EXPENSE_CODES = tuple(c for c, t in ACCOUNT_TYPES.items() if t == "expense")
+
+    bs = balance_sheet_totals(entries)
+    total_assets = bs["total_assets"]
+    total_liabilities = bs["total_liabilities"]
+    total_equity = bs["total_equity"]
+    bs_gap = bs["equation_gap"]
+    acct = account_balances(entries)
+    r.metrics["bs_total_assets"] = total_assets
+    r.metrics["bs_total_liabilities"] = total_liabilities
+    r.metrics["bs_total_equity"] = total_equity
+    r.metrics["bs_equation_gap"] = bs_gap
+    if abs(bs_gap) > 0.05:
+        r.add(
+            "error",
+            "Balance sheet",
+            f"Bilan déséquilibré: actif {total_assets:.2f} − passif {total_liabilities:.2f} "
+            f"− avoir {total_equity:.2f} = {bs_gap:.2f}",
+        )
+
+    r.metrics["cash_gl"] = round2(bs["cash"])
+    r.metrics["ar_gl"] = round2(bs["ar"])
+    r.metrics["wip_gl"] = round2(bs["wip"])
+    r.metrics["prepaid_gl"] = round2(bs["prepaid"])
+    r.metrics["revenue_gl"] = round2(bs["revenue"])
+    r.metrics["gst_payable"] = round2(acct.get("2100", 0))
+    r.metrics["qst_payable"] = round2(acct.get("2110", 0))
 
     # --- AR subledger ---
     inv_total = sum(float(i["total"]) for i in data["invoices"] if is_revenue_invoice(i["status"]))
     pay_total = sum(float(p["amount"]) for p in data["payments"])
     ar_expected = round2(inv_total - pay_total)
-    if abs(ar_expected - acct.get("1100", 0)) > 0.05:
+    if abs(ar_expected - bs["ar"]) > 0.05:
         r.add(
             "error", "AR",
-            f"AR mismatch: invoices−payments = {ar_expected:.2f}, GL 1100 = {acct.get('1100', 0):.2f}",
+            f"AR mismatch: invoices−payments = {ar_expected:.2f}, GL 1100 = {bs['ar']:.2f}",
         )
     r.metrics["collection_rate_pct"] = round2(pay_total / inv_total * 100) if inv_total else 0
     r.metrics["ar_expected"] = ar_expected
@@ -424,10 +537,10 @@ def validate(data: dict) -> ValidationReport:
     # --- Cash: bank import vs GL ---
     bank_sum = round2(sum(float(b["amount"]) for b in data["bank"]))
     r.metrics["bank_import_net"] = bank_sum
-    if data["bank"] and abs(bank_sum - acct.get("1010", 0)) > 0.05:
+    if data["bank"] and abs(bank_sum - bs["cash"]) > 0.05:
         r.add(
             "error", "Cash",
-            f"Bank import net ({bank_sum:.2f}) ≠ GL cash 1010 ({acct.get('1010', 0):.2f}). "
+            f"Bank import net ({bank_sum:.2f}) ≠ GL cash 1010 ({bs['cash']:.2f}). "
             "Every cash movement should have a matching bank transaction.",
         )
 

@@ -76,7 +76,7 @@ create table public.organization_settings (
   qst_rate numeric(6, 5) not null default 0.09975,
   invoice_prefix text not null default 'YUZU',
   payment_terms_days integer not null default 30,
-  late_penalty_monthly_pct numeric(6, 5) not null default 0.02,
+  invoice_penalty_monthly_pct numeric(6, 5) not null default 0.02,
   payment_instructions text,
   interac_email text,
   bank_institution text,
@@ -121,7 +121,7 @@ create table public.partners (
   country text default 'Canada',
   language text not null default 'fr' check (language in ('fr', 'en')),
   payment_terms_days integer not null default 30,
-  late_penalty_monthly_pct numeric(6, 5) not null default 0.02,
+  invoice_penalty_monthly_pct numeric(6, 5) not null default 0.02,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
