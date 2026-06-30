@@ -60,7 +60,6 @@ const ASSET_BS_CODES = ['1010', '1100', '1200', '1210', '1300', '1400'] as const
 const LIABILITY_BS_CODES = [
   '2000', '2050', '2060', '2100', '2110', '2125', '2200', '2210', '2215', '2300', '2310',
 ] as const
-const EQUITY_BS_CODES = ['3000', '3100'] as const
 
 export function balanceSheetTotals(balances: Map<string, number>) {
   const cash = balanceOf(balances, '1010')

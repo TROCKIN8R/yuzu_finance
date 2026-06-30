@@ -50,8 +50,11 @@ export function formatInvoicePenaltyPercent(
   partner: Pick<Partner, 'invoice_penalty_monthly_pct'>,
   settings?: Pick<OrganizationSettings, 'invoice_penalty_monthly_pct'> | null
 ) {
-  const { invoicePenaltyMonthlyPct } = resolvePartnerPaymentTerms(partner, settings)
-  return `${formatPenaltyPct(invoicePenaltyMonthlyPct)} %`
+  const pct =
+    partner.invoice_penalty_monthly_pct ??
+    settings?.invoice_penalty_monthly_pct ??
+    DEFAULT_INVOICE_PENALTY_MONTHLY_PCT
+  return `${formatPenaltyPct(pct)} %`
 }
 
 export function formatPartnerPaymentTerms(

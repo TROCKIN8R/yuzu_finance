@@ -29,7 +29,8 @@ export interface MonthlySeriesPoint {
 
 export interface EquityBreakdown {
   shareCapital: number
-  retainedEarnings: number
+  retainedEarningsGl: number
+  unclosedNetIncome: number
   totalEquity: number
 }
 
