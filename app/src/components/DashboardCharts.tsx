@@ -79,7 +79,13 @@ function gridLines(min: number, max: number, height: number, width: number) {
   return lines
 }
 
-export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) {
+export function RevenueTrendChart({
+  points,
+  cumulative = false,
+}: {
+  points: MonthlySeriesPoint[]
+  cumulative?: boolean
+}) {
   if (points.length === 0) return <EmptyChart message="Pas assez de données" />
   const invoiced = points.map((p) => p.invoicedRevenue)
   const worked = points.map((p) => p.workedRevenue)
@@ -110,7 +116,11 @@ export function RevenueTrendChart({ points }: { points: MonthlySeriesPoint[] }) 
   return (
     <ChartShell
       title="Prestations vs facturation"
-      subtitle="Réalisé, facturé (HT) et encaissé par mois"
+      subtitle={
+        cumulative
+          ? 'Cumul sur la période — réalisé, facturé (HT) et encaissé'
+          : 'Réalisé, facturé (HT) et encaissé par mois'
+      }
       legend={
         <>
           <span className="flex items-center gap-1.5">

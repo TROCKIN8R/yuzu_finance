@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
-import { buildMonthlySeries, hasChartData } from '../lib/dashboardSeries'
+import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData } from '../lib/dashboardSeries'
 import {
   averageRate,
   buildPartnerBreakdown,
@@ -120,6 +120,7 @@ export function ExecutiveDashboardPage() {
   }
 
   const trends = useMemo(() => buildServiceKpiTrends(monthlySeries), [monthlySeries])
+  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(monthlySeries), [monthlySeries])
   const hourlyAvg = averageRate(worked.hourly, worked.hourlyHours)
   const fixedAvg = averageRate(worked.fixed, worked.fixedHours)
 
@@ -213,7 +214,7 @@ export function ExecutiveDashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[240px]">
         <div className="xl:col-span-2">
           {hasChartData(monthlySeries) ? (
-            <RevenueTrendChart points={monthlySeries} />
+            <RevenueTrendChart points={cumulativeSeries} cumulative />
           ) : (
             <div className="ui-card p-8 text-center text-sm text-muted h-full flex items-center justify-center">
               Les tendances apparaîtront lorsque vous aurez des prestations, factures ou encaissements.
