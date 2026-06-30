@@ -7,7 +7,6 @@ import {
   CHART_OF_ACCOUNTS,
   flattenJournalEntries,
   journalTotals,
-  type JournalEntry,
 } from '../lib/generalLedger'
 import { entriesThroughDate } from '../lib/ledgerBalances'
 import { fetchGeneralLedgerData } from '../lib/glDataLoader'
