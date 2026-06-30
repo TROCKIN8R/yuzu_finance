@@ -28,6 +28,7 @@ export function FinancialReportsPage() {
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
   const [view, setView] = useState<ReportView>('income')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     load()
@@ -39,17 +40,24 @@ export function FinancialReportsPage() {
 
   async function load() {
     setLoading(true)
-    const { data: settingsRow } = await supabase.from('organization_settings').select('*').maybeSingle()
-    const orgSettings = settingsRow ?? null
-    setSettings(orgSettings)
-    const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
-    const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
-    const ranges = periodPresets(fyeMonth, fyeDay)
-    setPresets(ranges)
-    const initial = ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0]
-    setPeriod(initial)
-    await reloadFinancials(initial, orgSettings ?? undefined)
-    setLoading(false)
+    setError(null)
+    try {
+      const { data: settingsRow } = await supabase.from('organization_settings').select('*').maybeSingle()
+      const orgSettings = settingsRow ?? null
+      setSettings(orgSettings)
+      const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
+      const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
+      const ranges = periodPresets(fyeMonth, fyeDay)
+      setPresets(ranges)
+      const initial = ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0]
+      setPeriod(initial)
+      await reloadFinancials(initial, orgSettings ?? undefined)
+    } catch (err) {
+      console.error('Financial reports load failed:', err)
+      setError(err instanceof Error ? err.message : 'Erreur lors du chargement des rapports.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function reloadFinancials(range: DateRange, orgSettings?: OrganizationSettings) {
@@ -71,7 +79,21 @@ export function FinancialReportsPage() {
     )
   }
 
-  if (loading || !fin || !period) return <div className="text-muted">Chargement…</div>
+  if (loading || !period) return <div className="text-muted">Chargement…</div>
+
+  if (error || !fin) {
+    return (
+      <PageShell>
+        <div className="max-w-xl ui-card p-6 space-y-3">
+          <h1 className="text-lg font-semibold">Rapports financiers</h1>
+          <p className="text-sm text-red-700">{error ?? 'Données financières indisponibles.'}</p>
+          <Button type="button" onClick={() => load()}>
+            Réessayer
+          </Button>
+        </div>
+      </PageShell>
+    )
+  }
 
   const periodLabel = period.label
 

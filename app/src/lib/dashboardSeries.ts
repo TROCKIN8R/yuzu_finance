@@ -283,6 +283,25 @@ export function buildMonthlySeries(
   })
 }
 
+/** Running totals within the period (for trend charts). */
+export function cumulativeMonthlySeries(points: MonthlySeriesPoint[]): MonthlySeriesPoint[] {
+  let runInvoiced = 0
+  let runWorked = 0
+  let runCashIn = 0
+  return points.map((p) => {
+    runInvoiced = round2(runInvoiced + p.invoicedRevenue)
+    runWorked = round2(runWorked + p.workedRevenue)
+    runCashIn = round2(runCashIn + p.cashIn)
+    return {
+      ...p,
+      revenue: runInvoiced,
+      invoicedRevenue: runInvoiced,
+      workedRevenue: runWorked,
+      cashIn: runCashIn,
+    }
+  })
+}
+
 export function hasChartData(points: MonthlySeriesPoint[]) {
   return points.some(
     (p) =>

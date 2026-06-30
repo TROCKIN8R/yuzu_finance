@@ -9,6 +9,7 @@ import {
   type CashFlowBreakdown,
 } from './ledgerBalances'
 import { inPeriod, type DateRange } from './fiscalPeriod'
+import { isRevenueInvoice } from './taxes'
 import type { AccountingAdjustment, OrganizationSettings } from './types'
 
 export type { CashFlowBreakdown } from './ledgerBalances'
@@ -25,6 +26,8 @@ export interface EquityDetail {
 export interface BalanceSheetDetail {
   cash: number
   bankStatementBalance: number | null
+  /** Bank import total minus GL cash (1010); should be near zero when fully reconciled. */
+  bankReconciliationVariance: number | null
   accountsReceivable: number
   gstReceivable: number
   qstReceivable: number
@@ -45,12 +48,22 @@ export interface BalanceSheetDetail {
 }
 
 export interface IncomeDetail {
+  /** GL account 4000 (+ WIP accrual) for the period */
   revenueSubtotal: number
+  /** Invoice subtotals (HT) by invoice date — operational billing */
+  invoicedSubtotal: number
   operatingExpenses: number
   payrollGross: number
   employerPayrollContributions: number
   operatingIncome: number
   dividendsDistributed: number
+}
+
+/** Lifetime billing vs collections through period end (subledger). */
+export interface BillingDetail {
+  invoicedTtcCumulative: number
+  collectedTtcCumulative: number
+  collectionRatePct: number | null
 }
 
 export interface FinancialSnapshot {
@@ -70,6 +83,7 @@ export interface FinancialSnapshot {
   cashFlow: CashFlowBreakdown
   balanceSheet: BalanceSheetDetail
   income: IncomeDetail
+  billing: BillingDetail
 }
 
 type PayrollRunRow = {
@@ -143,10 +157,41 @@ function buildLedgerEntries(data: GeneralLedgerBuildInput, period: DateRange): J
   })
 }
 
+function buildBillingCollection(
+  invoices: { id: string; invoice_date: string; status: string; total: number }[],
+  payments: { invoice_id: string; payment_date?: string | null; amount: number }[],
+  asOf: string
+): BillingDetail {
+  const revenueInvoices = invoices.filter(
+    (i) => isRevenueInvoice(i.status) && i.invoice_date <= asOf
+  )
+  const invoicedTtcCumulative = round2(revenueInvoices.reduce((s, i) => s + Number(i.total), 0))
+  const invoiceIds = new Set(revenueInvoices.map((i) => i.id))
+  const collectedTtcCumulative = round2(
+    payments
+      .filter(
+        (p) =>
+          invoiceIds.has(p.invoice_id) &&
+          p.payment_date &&
+          p.payment_date <= asOf
+      )
+      .reduce((s, p) => s + Number(p.amount), 0)
+  )
+  return {
+    invoicedTtcCumulative,
+    collectedTtcCumulative,
+    collectionRatePct:
+      invoicedTtcCumulative > 0
+        ? round2((collectedTtcCumulative / invoicedTtcCumulative) * 100)
+        : null,
+  }
+}
+
 export function buildFinancialSnapshot(
   data: GeneralLedgerBuildInput & {
     payrollRuns: PayrollRunRow[]
     bankTransactions?: { amount: number; transaction_date: string }[]
+    payments?: { id: string; invoice_id: string; payment_date?: string | null; amount: number }[]
     settings?: Pick<
       OrganizationSettings,
       | 'share_capital'
@@ -212,7 +257,17 @@ export function buildFinancialSnapshot(
       ? round2(data.bankTransactions.reduce((s, t) => s + Number(t.amount), 0))
       : null
 
+  const bankReconciliationVariance =
+    bankStatementBalance != null ? round2(bankStatementBalance - cash) : null
+
+  const invoicedSubtotal = round2(
+    data.invoices
+      .filter((i) => isRevenueInvoice(i.status) && inPeriod(i.invoice_date, period))
+      .reduce((s, i) => s + Number(i.subtotal), 0)
+  )
+
   const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
+  const billing = buildBillingCollection(data.invoices ?? [], data.payments ?? [], asOf)
 
   return {
     period,
@@ -236,6 +291,7 @@ export function buildFinancialSnapshot(
     balanceSheet: {
       cash,
       bankStatementBalance,
+      bankReconciliationVariance,
       accountsReceivable,
       gstReceivable,
       qstReceivable,
@@ -263,12 +319,14 @@ export function buildFinancialSnapshot(
     },
     income: {
       revenueSubtotal: income.revenueSubtotal,
+      invoicedSubtotal,
       operatingExpenses: income.operatingExpenses,
       payrollGross: income.payrollGross,
       employerPayrollContributions: income.employerPayrollContributions,
       operatingIncome: income.operatingIncome,
       dividendsDistributed: income.dividendsDeclared,
     },
+    billing,
   }
 }
 
