@@ -20,6 +20,7 @@ import {
   fetchExecutiveExtras,
 } from '../lib/dashboardData'
 import { useDashboardPeriod } from '../hooks/useDashboardPeriod'
+import { inPeriod } from '../lib/fiscalPeriod'
 import { RevenueTrendChart } from '../components/DashboardCharts'
 import { ExecutiveBreakdownPanel } from '../components/ExecutiveBreakdownPanel'
 import { KpiCard, MetricGrid, TrendBadge } from '../components/MetricCard'
@@ -29,6 +30,7 @@ export function ExecutiveDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [worked, setWorked] = useState({ total: 0, hourly: 0, fixed: 0, hours: 0, hourlyHours: 0, fixedHours: 0 })
   const [invoiced, setInvoiced] = useState(0)
+  const [recognized, setRecognized] = useState(0)
   const [collected, setCollected] = useState(0)
   const [unbilled, setUnbilled] = useState(0)
   const [monthlySeries, setMonthlySeries] = useState<ReturnType<typeof buildMonthlySeries>>([])
@@ -82,7 +84,12 @@ export function ExecutiveDashboardPage() {
       )
 
       setWorked(workedMetrics)
-      setInvoiced(fin.income.revenueSubtotal)
+      setInvoiced(
+        extras.invoices
+          .filter((i) => i.status !== 'void' && i.status !== 'draft' && inPeriod(i.invoice_date, range))
+          .reduce((s, i) => s + Number(i.subtotal), 0)
+      )
+      setRecognized(fin.income.revenueSubtotal)
       setCollected(fin.cashIn)
       setUnbilled(wip.amount)
       setMonthlySeries(series)
@@ -176,7 +183,7 @@ export function ExecutiveDashboardPage() {
         <KpiCard
           label="Revenus facturés"
           value={formatCad(invoiced)}
-          sub="Montants HT"
+          sub={`HT · GL comptabilisé ${formatCad(recognized)}`}
           trend={trends.invoicedRevenue}
           to="/billing/invoices"
         />

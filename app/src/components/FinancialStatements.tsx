@@ -78,7 +78,15 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtSection title="Actif" />
       <StmtRow label="Trésorerie comptable" value={formatCad(bs.cash)} />
       {bs.bankStatementBalance != null && (
-        <StmtRow label="Solde relevé bancaire" value={formatCad(bs.bankStatementBalance)} indent />
+        <StmtRow label="Solde relevé bancaire (import)" value={formatCad(bs.bankStatementBalance)} indent />
+      )}
+      {bs.bankReconciliationVariance != null && Math.abs(bs.bankReconciliationVariance) > 0.01 && (
+        <StmtRow
+          label="Écart banque vs GL (à réconcilier)"
+          value={formatCad(bs.bankReconciliationVariance)}
+          indent
+          negative={Math.abs(bs.bankReconciliationVariance) > 100}
+        />
       )}
       <StmtRow label="Comptes clients (CC)" value={formatCad(bs.accountsReceivable)} />
       <StmtRow label="TPS à recevoir (CTI)" value={formatCad(bs.gstReceivable)} indent />
@@ -129,7 +137,12 @@ export function IncomeStatement({ fin, periodLabel }: { fin: FinancialSnapshot; 
       <p className="text-xs text-muted mb-4">{periodLabel} — revenus HT, dépenses HT, paie employeur</p>
 
       <StmtSection title="Revenus" />
-      <StmtRow label="Revenus de services (HT)" value={formatCad(inc.revenueSubtotal)} />
+      <StmtRow label="Revenus facturés (sous-total HT, date facture)" value={formatCad(inc.invoicedSubtotal)} />
+      <StmtRow
+        label="Revenus comptabilisés (GL / WIP)"
+        value={formatCad(inc.revenueSubtotal)}
+        indent
+      />
 
       <StmtSection title="Charges d'exploitation" />
       <StmtRow label="Dépenses d'exploitation (HT)" value={formatCad(inc.operatingExpenses)} indent negative />

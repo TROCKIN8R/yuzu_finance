@@ -9,6 +9,7 @@ import {
   type CashFlowBreakdown,
 } from './ledgerBalances'
 import { inPeriod, type DateRange } from './fiscalPeriod'
+import { isRevenueInvoice } from './taxes'
 import type { AccountingAdjustment, OrganizationSettings } from './types'
 
 export type { CashFlowBreakdown } from './ledgerBalances'
@@ -25,6 +26,8 @@ export interface EquityDetail {
 export interface BalanceSheetDetail {
   cash: number
   bankStatementBalance: number | null
+  /** Bank import total minus GL cash (1010); should be near zero when fully reconciled. */
+  bankReconciliationVariance: number | null
   accountsReceivable: number
   gstReceivable: number
   qstReceivable: number
@@ -45,7 +48,10 @@ export interface BalanceSheetDetail {
 }
 
 export interface IncomeDetail {
+  /** GL account 4000 (+ WIP accrual) for the period */
   revenueSubtotal: number
+  /** Invoice subtotals (HT) by invoice date — operational billing */
+  invoicedSubtotal: number
   operatingExpenses: number
   payrollGross: number
   employerPayrollContributions: number
@@ -212,6 +218,15 @@ export function buildFinancialSnapshot(
       ? round2(data.bankTransactions.reduce((s, t) => s + Number(t.amount), 0))
       : null
 
+  const bankReconciliationVariance =
+    bankStatementBalance != null ? round2(bankStatementBalance - cash) : null
+
+  const invoicedSubtotal = round2(
+    data.invoices
+      .filter((i) => isRevenueInvoice(i.status) && inPeriod(i.invoice_date, period))
+      .reduce((s, i) => s + Number(i.subtotal), 0)
+  )
+
   const openingRE = Number(data.settings?.opening_retained_earnings ?? 0)
 
   return {
@@ -236,6 +251,7 @@ export function buildFinancialSnapshot(
     balanceSheet: {
       cash,
       bankStatementBalance,
+      bankReconciliationVariance,
       accountsReceivable,
       gstReceivable,
       qstReceivable,
@@ -263,6 +279,7 @@ export function buildFinancialSnapshot(
     },
     income: {
       revenueSubtotal: income.revenueSubtotal,
+      invoicedSubtotal,
       operatingExpenses: income.operatingExpenses,
       payrollGross: income.payrollGross,
       employerPayrollContributions: income.employerPayrollContributions,

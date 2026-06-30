@@ -77,7 +77,14 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Trésorerie comptable', value: cad(bs.cash), indent: true },
   ]
   if (bs.bankStatementBalance != null) {
-    lines.push({ label: 'Solde relevé bancaire', value: cad(bs.bankStatementBalance), indent: true })
+    lines.push({ label: 'Solde relevé bancaire (import)', value: cad(bs.bankStatementBalance), indent: true })
+  }
+  if (bs.bankReconciliationVariance != null && Math.abs(bs.bankReconciliationVariance) > 0.01) {
+    lines.push({
+      label: 'Écart banque vs GL',
+      value: cad(bs.bankReconciliationVariance),
+      indent: true,
+    })
   }
   lines.push(
     { label: 'Comptes clients (CC)', value: cad(bs.accountsReceivable), indent: true },
@@ -120,7 +127,8 @@ function incomeLines(fin: FinancialSnapshot): StmtLine[] {
   const inc = fin.income
   return [
     { label: 'REVENUS', value: '' },
-    { label: 'Revenus de services (HT)', value: cad(inc.revenueSubtotal), indent: true },
+    { label: 'Revenus facturés (HT, date facture)', value: cad(inc.invoicedSubtotal), indent: true },
+    { label: 'Revenus comptabilisés (GL / WIP)', value: cad(inc.revenueSubtotal), indent: true },
     { label: "CHARGES D'EXPLOITATION", value: '' },
     { label: "Dépenses d'exploitation (HT)", value: cad(-inc.operatingExpenses), indent: true },
     { label: 'Salaires bruts', value: cad(-inc.payrollGross), indent: true },

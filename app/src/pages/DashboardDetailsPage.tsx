@@ -102,9 +102,10 @@ export function DashboardDetailsPage() {
   if (!ready || !period || loading || !fin) return <div className="text-muted">Chargement…</div>
 
   const eq = fin.balanceSheet.equity
-  const invoicedRevenue = fin.income.revenueSubtotal
+  const invoicedRevenue = fin.income.invoicedSubtotal
+  const recognizedRevenue = fin.income.revenueSubtotal
   const billingGap = Math.round((worked.total - invoicedRevenue) * 100) / 100
-  const margin = operatingMarginPct(invoicedRevenue, fin.income.operatingIncome)
+  const margin = operatingMarginPct(recognizedRevenue, fin.income.operatingIncome)
   const periodNetCash = fin.cashIn - fin.cashOut
   const hourlyAvg = averageRate(worked.hourly, worked.hourlyHours)
   const fixedAvg = averageRate(worked.fixed, worked.fixedHours)

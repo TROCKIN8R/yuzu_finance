@@ -301,8 +301,13 @@ export function buildGeneralLedger(data: {
     if (levies > 0) payrollLines.push(jl('2215', 0, levies))
     if (benefits > 0) payrollLines.push(jl('2050', 0, benefits))
     if (nonTaxReimb > 0) payrollLines.push(jl('2060', nonTaxReimb, 0))
-    // Taxable reimbursements are in gross_pay but not paid as extra cash (net excludes them).
-    if (taxableReimb > 0) payrollLines.push(jl('5100', 0, taxableReimb))
+    // Taxable reimbursements are in gross_pay but not paid as extra cash — reclass to expense categories.
+    if (taxableReimb > 0) {
+      payrollLines.push(jl('5100', 0, taxableReimb))
+      for (const e of linkedExpenses.filter((x) => x.taxable)) {
+        payrollLines.push(jl(expenseCategoryAccount(e.category), Number(e.amount), 0))
+      }
+    }
 
     entries.push(
       entry(
@@ -440,6 +445,25 @@ export function buildGeneralLedger(data: {
           entry(
             `adj-${adj.id}`,
             adj.start_date,
+            'adjustment',
+            adj.id,
+            adj.adjustment_type,
+            adj.description,
+            [jl(adj.debit_account, amt, 0), jl(adj.credit_account, 0, amt)]
+          )
+        )
+      }
+      continue
+    }
+    if (adj.adjustment_type === 'accrual') {
+      const amt = round2(Number(adj.total_amount ?? adj.monthly_amount ?? 0))
+      const postDate = adj.end_date ?? adj.start_date
+      const periodStart = data.periodStart ?? '2000-01-01'
+      if (amt > 0 && postDate >= periodStart && postDate <= cap) {
+        entries.push(
+          entry(
+            `adj-${adj.id}`,
+            postDate,
             'adjustment',
             adj.id,
             adj.adjustment_type,
