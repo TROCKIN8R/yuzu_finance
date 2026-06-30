@@ -140,11 +140,26 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtRow label="BNR — solde GL (ouverture et dividendes)" value={formatCad(eq.retainedEarningsGl)} indent />
       <StmtRow label="Résultat cumulatif non clôturé" value={formatCad(eq.unclosedNetIncome)} indent />
       <StmtRow label="Total avoir" value={formatCad(eq.totalEquity)} bold />
-      {Math.abs(bs.equationGap) > 0.05 && (
+      <StmtRow
+        label="Passif + Avoir (contrôle)"
+        value={formatCad(bs.totalLiabilities + eq.totalEquity)}
+        bold
+        indent
+      />
+      {Math.abs(bs.equationGap) <= 0.05 ? (
+        <p className="text-xs text-emerald-700 mt-2">
+          Équilibre comptable — total actif = passif + avoir (écart {formatCad(bs.equationGap)}).
+        </p>
+      ) : (
         <p className="text-xs text-red-700 mt-2">
-          Écart bilan (actif − passif − avoir) : {formatCad(bs.equationGap)} — brouillon à réviser.
+          Écart bilan : actif {formatCad(bs.totalAssets)} − (passif + avoir){' '}
+          {formatCad(bs.totalLiabilities + eq.totalEquity)} = {formatCad(bs.equationGap)} — brouillon à réviser.
         </p>
       )}
+      <p className="text-xs text-muted mt-2">
+        L&apos;avoir inclut le résultat cumulatif non clôturé (comptes 4xxx/5xxx) tant que la clôture annuelle
+        n&apos;est pas passée au BNR (3100).
+      </p>
       <p className="text-xs text-muted mt-3">
         Résultat de la période (état des résultats) : {formatCad(eq.periodOperatingIncome)}
         {eq.periodDividendsDeclared > 0

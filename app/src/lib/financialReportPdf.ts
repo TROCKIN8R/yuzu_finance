@@ -141,7 +141,13 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Capital-actions', value: cad(eq.shareCapital), indent: true },
     { label: 'BNR — solde GL (ouverture et dividendes)', value: cad(eq.retainedEarningsGl), indent: true },
     { label: 'Résultat cumulatif non clôturé', value: cad(eq.unclosedNetIncome), indent: true },
-    { label: 'Total avoir', value: cad(eq.totalEquity), bold: true }
+    { label: 'Total avoir', value: cad(eq.totalEquity), bold: true },
+    {
+      label: 'Passif + Avoir (contrôle)',
+      value: cad(bs.totalLiabilities + eq.totalEquity),
+      bold: true,
+      indent: true,
+    }
   )
   return lines
 }
