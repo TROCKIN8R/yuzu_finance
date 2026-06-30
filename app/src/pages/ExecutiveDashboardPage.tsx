@@ -70,6 +70,7 @@ export function ExecutiveDashboardPage() {
           expenses: glData.expenses,
           payrollRuns: glData.payrollRuns,
           invoices: glData.invoices.map((inv) => ({
+            id: inv.id,
             subtotal: inv.subtotal,
             invoice_date: inv.invoice_date,
             status: inv.status,

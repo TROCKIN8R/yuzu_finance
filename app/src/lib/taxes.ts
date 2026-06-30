@@ -45,3 +45,8 @@ export function computePurchaseTaxesFromTotal(totalInclTax: number, settings: Ta
 export function isRevenueInvoice(status: string): boolean {
   return status !== 'void' && status !== 'draft'
 }
+
+/** Payment counts toward AR/cash only when linked invoice is collectible. */
+export function isCollectiblePayment(invoiceStatus: string | undefined): boolean {
+  return Boolean(invoiceStatus && invoiceStatus !== 'void' && invoiceStatus !== 'draft')
+}

@@ -1,6 +1,6 @@
 import { effectiveRate, lineAmount, relationOne } from './format'
 import { inPeriod, type DateRange } from './fiscalPeriod'
-import { isRevenueInvoice } from './taxes'
+import { isCollectiblePayment, isRevenueInvoice } from './taxes'
 import type { BillingType } from './types'
 
 export interface MetricsProject {
@@ -195,9 +195,12 @@ function invoicedByPartner(invoices: InvoiceRow[], period: DateRange): Map<strin
 
 function collectedByPartner(payments: PaymentRow[], invoices: InvoiceRow[], period: DateRange): Map<string, number> {
   const partnerByInvoice = new Map(invoices.map((inv) => [inv.id, inv.partner_id]))
+  const statusByInvoice = new Map(invoices.map((inv) => [inv.id, inv.status]))
   const map = new Map<string, number>()
   for (const payment of payments) {
     if (!payment.payment_date || !inPeriod(payment.payment_date, period)) continue
+    const status = statusByInvoice.get(payment.invoice_id)
+    if (!isCollectiblePayment(status)) continue
     const partnerId = partnerByInvoice.get(payment.invoice_id)
     if (!partnerId) continue
     map.set(partnerId, round2((map.get(partnerId) ?? 0) + Number(payment.amount)))
@@ -278,16 +281,19 @@ export function buildServiceTypeBreakdown(
   const worked = computeWorkedRevenueMetrics(entries, period)
   const invoiced = invoicedByBillingType(lines, invoices, period)
 
-  const invoiceIdsInPeriod = invoices
-    .filter((inv) => isRevenueInvoice(inv.status) && inPeriod(inv.invoice_date, period))
-    .map((inv) => inv.id)
-  const invoicedTotals = invoiceIdsInPeriod.reduce((sum, id) => {
-    const inv = invoices.find((i) => i.id === id)
-    return sum + Number(inv?.subtotal ?? 0)
-  }, 0)
+  const invoiceMeta = new Map(
+    invoices
+      .filter((inv) => isRevenueInvoice(inv.status) && inPeriod(inv.invoice_date, period))
+      .map((inv) => [inv.id, inv.subtotal] as const)
+  )
+  const invoicedTotals = [...invoiceMeta.values()].reduce((sum, sub) => sum + Number(sub), 0)
 
   const collectedTotal = payments
-    .filter((p) => p.payment_date && inPeriod(p.payment_date, period))
+    .filter((p) => {
+      if (!p.payment_date || !inPeriod(p.payment_date, period)) return false
+      const inv = invoices.find((i) => i.id === p.invoice_id)
+      return inv != null && isCollectiblePayment(inv.status)
+    })
     .reduce((sum, p) => sum + Number(p.amount), 0)
 
   const types: { id: BillingType; label: string; worked: number; invoiced: number; hours: number }[] = [

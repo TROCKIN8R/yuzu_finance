@@ -28,15 +28,18 @@ export async function fetchDashboardBillingData(): Promise<DashboardRawData> {
   }
 }
 
+import { isRevenueInvoice } from '../lib/taxes'
+
 export async function fetchExecutiveExtras() {
   const [invoices, payments, lines] = await Promise.all([
-    supabase.from('invoices').select('id, partner_id, subtotal, invoice_date, status').neq('status', 'void'),
+    supabase.from('invoices').select('id, partner_id, subtotal, invoice_date, status'),
     supabase.from('payments').select('amount, payment_date, invoice_id'),
     supabase.from('invoice_line_items').select('invoice_id, subtotal, unit_label'),
   ])
 
+  const allInvoices = invoices.data ?? []
   return {
-    invoices: invoices.data ?? [],
+    invoices: allInvoices.filter((i) => isRevenueInvoice(i.status)),
     payments: payments.data ?? [],
     lines: lines.data ?? [],
   }

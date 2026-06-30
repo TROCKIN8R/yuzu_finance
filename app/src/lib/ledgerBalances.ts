@@ -106,7 +106,82 @@ export interface PeriodIncomeDetail {
   payrollGross: number
   employerPayrollContributions: number
   operatingIncome: number
+  corpTaxExpense: number
+  netIncome: number
   dividendsDeclared: number
+}
+
+export interface SalesTaxPeriodDetail {
+  gstCollected: number
+  qstCollected: number
+  gstItc: number
+  qstItr: number
+  gstRemitted: number
+  qstRemitted: number
+}
+
+export interface CorpTaxPeriodDetail {
+  expense: number
+  paid: number
+  provision: number
+}
+
+export function salesTaxFromPeriodEntries(entries: JournalEntry[]): SalesTaxPeriodDetail {
+  let gstCollected = 0
+  let qstCollected = 0
+  let gstItc = 0
+  let qstItr = 0
+  let gstRemitted = 0
+  let qstRemitted = 0
+
+  for (const e of entries) {
+    for (const line of e.lines) {
+      const code = line.accountCode
+      if (e.sourceType === 'invoice') {
+        if (code === '2100') gstCollected += line.credit - line.debit
+        if (code === '2110') qstCollected += line.credit - line.debit
+      }
+      if (e.sourceType === 'expense' || e.sourceType === 'employee_expense' || e.sourceType === 'adjustment') {
+        if (code === '1200') gstItc += line.debit - line.credit
+        if (code === '1210') qstItr += line.debit - line.credit
+      }
+      if (e.sourceType === 'sales_tax') {
+        if (code === '2100') gstRemitted += line.debit - line.credit
+        if (code === '2110') qstRemitted += line.debit - line.credit
+      }
+    }
+  }
+
+  return {
+    gstCollected: round2(gstCollected),
+    qstCollected: round2(qstCollected),
+    gstItc: round2(gstItc),
+    qstItr: round2(qstItr),
+    gstRemitted: round2(gstRemitted),
+    qstRemitted: round2(qstRemitted),
+  }
+}
+
+export function corpTaxFromPeriodEntries(entries: JournalEntry[]): CorpTaxPeriodDetail {
+  let expense = 0
+  let paid = 0
+  let provision = 0
+
+  for (const e of entries) {
+    for (const line of e.lines) {
+      if (line.accountCode === '5900') expense += line.debit - line.credit
+      if (e.sourceType === 'corporate_tax' && line.accountCode === '1010') paid += line.credit - line.debit
+      if (e.sourceType === 'corporate_tax_provision' && line.accountCode === '2310') {
+        provision += line.credit - line.debit
+      }
+    }
+  }
+
+  return {
+    expense: round2(expense),
+    paid: round2(paid),
+    provision: round2(provision),
+  }
 }
 
 export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDetail {
@@ -114,6 +189,7 @@ export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDe
   let operatingExpenses = 0
   let payrollGross = 0
   let employerPayrollContributions = 0
+  let corpTaxExpense = 0
   let dividendsDeclared = 0
 
   for (const e of entries) {
@@ -123,6 +199,7 @@ export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDe
       if (OPERATING_EXPENSE_CODES.has(code)) operatingExpenses += line.debit - line.credit
       if (code === '5100') payrollGross += line.debit - line.credit
       if (code === '5110') employerPayrollContributions += line.debit - line.credit
+      if (code === '5900') corpTaxExpense += line.debit - line.credit
     }
     if (e.sourceType === 'dividend_declared') {
       dividendsDeclared += e.lines.find((l) => l.accountCode === '3100')?.debit ?? 0
@@ -130,12 +207,15 @@ export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDe
   }
 
   const operatingIncome = round2(revenueSubtotal - operatingExpenses - payrollGross - employerPayrollContributions)
+  const netIncome = round2(operatingIncome - corpTaxExpense)
   return {
     revenueSubtotal: round2(revenueSubtotal),
     operatingExpenses: round2(operatingExpenses),
     payrollGross: round2(payrollGross),
     employerPayrollContributions: round2(employerPayrollContributions),
     operatingIncome,
+    corpTaxExpense: round2(corpTaxExpense),
+    netIncome,
     dividendsDeclared: round2(dividendsDeclared),
   }
 }

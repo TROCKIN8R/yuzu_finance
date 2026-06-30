@@ -20,18 +20,26 @@ const types: { value: AdjustmentType; label: string }[] = [
 ]
 
 function emptyForm(type: AdjustmentType = 'prepaid') {
-  const isManual = type === 'manual'
-  return {
+  const base = {
     adjustment_type: type,
     description: '',
     start_date: todayIso(),
     end_date: '',
     total_amount: 0,
     monthly_amount: 0,
-    debit_account: isManual ? '1010' : '1400',
-    credit_account: isManual ? '3000' : '1010',
     active: true,
     notes: '',
+  }
+  switch (type) {
+    case 'manual':
+      return { ...base, debit_account: '1010', credit_account: '3000' }
+    case 'accrual':
+      return { ...base, debit_account: '5090', credit_account: '2000' }
+    case 'depreciation':
+      return { ...base, debit_account: '5200', credit_account: '1500' }
+    case 'prepaid':
+    default:
+      return { ...base, debit_account: '5090', credit_account: '1400' }
   }
 }
 

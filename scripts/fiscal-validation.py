@@ -165,6 +165,78 @@ def balance_sheet_totals(entries: list[dict]) -> dict[str, float]:
     }
 
 
+OPERATING_EXPENSE_CODES = frozenset({"5010", "5020", "5030", "5040", "5050", "5090", "5200"})
+
+
+def entries_in_period(entries: list[dict], start: str, end: str) -> list[dict]:
+    return [e for e in entries if start <= e["date"] <= end]
+
+
+def income_from_period(entries: list[dict]) -> dict[str, float]:
+    revenue = operating = payroll_gross = employer = corp_tax = dividends = 0.0
+    for e in entries:
+        for code, d, c in e["lines"]:
+            if code == "4000":
+                revenue += c - d
+            if code in OPERATING_EXPENSE_CODES:
+                operating += d - c
+            if code == "5100":
+                payroll_gross += d - c
+            if code == "5110":
+                employer += d - c
+            if code == "5900":
+                corp_tax += d - c
+        if e.get("sourceType") == "dividend_declared":
+            for code, d, _c in e["lines"]:
+                if code == "3100":
+                    dividends += d
+    operating_income = round2(revenue - operating - payroll_gross - employer)
+    net_income = round2(operating_income - corp_tax)
+    return {
+        "revenue": round2(revenue),
+        "operating_expenses": round2(operating),
+        "payroll_gross": round2(payroll_gross),
+        "employer_contrib": round2(employer),
+        "operating_income": operating_income,
+        "corp_tax_expense": round2(corp_tax),
+        "net_income": net_income,
+        "dividends_declared": round2(dividends),
+    }
+
+
+def cash_flow_from_period(entries: list[dict]) -> dict[str, float]:
+    client = expenses = payroll_net = remit = div = corp = stax = 0.0
+    for e in entries:
+        inflow = outflow = 0.0
+        for code, d, c in e["lines"]:
+            if code == "1010":
+                inflow += d
+                outflow += c
+        st = e.get("sourceType", "")
+        if st == "payment":
+            client += inflow
+        elif st == "expense":
+            expenses += outflow
+        elif st == "payroll":
+            payroll_net += outflow
+        elif st == "payroll_remittance":
+            remit += outflow
+        elif st == "dividend":
+            div += outflow
+        elif st == "corporate_tax":
+            corp += outflow
+        elif st == "sales_tax":
+            stax += outflow - inflow
+        elif st == "adjustment":
+            if outflow > inflow:
+                expenses += round2(outflow - inflow)
+            else:
+                client += round2(inflow - outflow)
+    cash_in = round2(client)
+    cash_out = round2(expenses + payroll_net + remit + div + corp + stax)
+    return {"cash_in": cash_in, "cash_out": cash_out, "period_net": round2(cash_in - cash_out)}
+
+
 def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[dict], dict[str, float]]:
     """Simplified GL mirror of app/src/lib/generalLedger.ts"""
     settings = data["settings"][0] if data["settings"] else {}
@@ -219,7 +291,7 @@ def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[d
 
     for pay in data["payments"]:
         inv = inv_by_id.get(pay["invoice_id"], {})
-        if inv.get("status") == "void":
+        if not is_revenue_invoice(inv.get("status", "")):
             continue
         post(
             f"pay-{pay['id'][:8]}",
@@ -249,23 +321,27 @@ def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[d
 
     ee_by_payroll: dict[str, list[dict]] = {}
     for ee in data["employee_expenses"]:
+        if ee.get("taxable"):
+            pid = ee.get("payroll_run_id")
+            if pid:
+                ee_by_payroll.setdefault(pid, []).append(ee)
+            continue
+        acct = EXPENSE_ACCT.get(ee["category"], "5090")
+        post(
+            f"ee-{ee['id'][:8]}",
+            ee["expense_date"],
+            "employee_expense",
+            [
+                (acct, float(ee["amount"]), 0),
+                ("1200", float(ee["gst"]), 0),
+                ("1210", float(ee["qst"]), 0),
+                ("2060", 0, float(ee["total"])),
+            ],
+            ee["vendor"],
+        )
         pid = ee.get("payroll_run_id")
         if pid:
             ee_by_payroll.setdefault(pid, []).append(ee)
-        elif not ee.get("taxable"):
-            acct = EXPENSE_ACCT.get(ee["category"], "5090")
-            post(
-                f"ee-{ee['id'][:8]}",
-                ee["expense_date"],
-                "employee_expense",
-                [
-                    (acct, float(ee["amount"]), 0),
-                    ("1200", float(ee["gst"]), 0),
-                    ("1210", float(ee["qst"]), 0),
-                    ("2060", 0, float(ee["total"])),
-                ],
-                ee["vendor"],
-            )
 
     for pr in data["payroll"]:
         linked = ee_by_payroll.get(pr["id"], [])
@@ -334,7 +410,7 @@ def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[d
             post(
                 f"corp-accrual-{ct['id'][:8]}",
                 accrual_date,
-                "corporate_tax_accrual",
+                "corporate_tax_provision",
                 [("5900", owed, 0), ("2310", 0, owed)],
                 ct["label"],
             )
@@ -355,7 +431,7 @@ def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[d
                     f"corp-pay-{ct['id'][:8]}",
                     ct["paid_date"],
                     "corporate_tax",
-                    [("2300", pa, 0), ("1010", 0, pa)],
+                    [("2310", pa, 0), ("1010", 0, pa)],
                     ct["label"],
                 )
 
@@ -511,10 +587,50 @@ def validate(data: dict) -> ValidationReport:
     r.metrics["revenue_gl"] = round2(bs["revenue"])
     r.metrics["gst_payable"] = round2(acct.get("2100", 0))
     r.metrics["qst_payable"] = round2(acct.get("2110", 0))
+    r.metrics["corp_tax_expense_gl"] = round2(acct.get("5900", 0))
+    r.metrics["corp_tax_provision_gl"] = round2(acct.get("2310", 0))
+    r.metrics["sales_tax_net_position"] = round2(
+        acct.get("2100", 0) + acct.get("2110", 0) - acct.get("1200", 0) - acct.get("1210", 0)
+    )
+
+    # --- P&L / reports (FY2026) ---
+    fy_start, fy_end = FY2026
+    fy_entries = entries_in_period(entries, fy_start, fy_end)
+    pl = income_from_period(fy_entries)
+    r.metrics["fy_operating_income"] = pl["operating_income"]
+    r.metrics["fy_net_income"] = pl["net_income"]
+    r.metrics["fy_corp_tax_expense"] = pl["corp_tax_expense"]
+    expected_net = round2(pl["operating_income"] - pl["corp_tax_expense"])
+    if abs(expected_net - pl["net_income"]) > 0.05:
+        r.add("error", "Income statement", f"net_income mismatch: {pl['net_income']:.2f} vs expected {expected_net:.2f}")
+    unclosed = round2(
+        sum(acct.get(c, 0.0) for c, t in ACCOUNT_TYPES.items() if t == "revenue")
+        - sum(acct.get(c, 0.0) for c, t in ACCOUNT_TYPES.items() if t == "expense")
+    )
+    r.metrics["unclosed_net_income_gl"] = unclosed
+    if abs(unclosed - pl["net_income"]) > 0.05 and fy_end == "2026-12-31":
+        # Cumulative unclosed should match full-year net when no prior-year P&L balances
+        r.add(
+            "warn", "Income statement",
+            f"Unclosed GL net income ({unclosed:.2f}) ≠ FY P&L net ({pl['net_income']:.2f}) — "
+            "may be normal if opening balances or partial period.",
+        )
+
+    cf = cash_flow_from_period(fy_entries)
+    r.metrics["fy_cash_in"] = cf["cash_in"]
+    r.metrics["fy_cash_out"] = cf["cash_out"]
+    r.metrics["fy_period_net_cash"] = cf["period_net"]
+    if abs(cf["cash_in"] - cf["cash_out"] - cf["period_net"]) > 0.05:
+        r.add("error", "Cash flow", "Period net cash does not equal cash_in − cash_out")
 
     # --- AR subledger ---
+    inv_by_id = {i["id"]: i for i in data["invoices"]}
     inv_total = sum(float(i["total"]) for i in data["invoices"] if is_revenue_invoice(i["status"]))
-    pay_total = sum(float(p["amount"]) for p in data["payments"])
+    pay_total = sum(
+        float(p["amount"])
+        for p in data["payments"]
+        if is_revenue_invoice(inv_by_id.get(p["invoice_id"], {}).get("status", ""))
+    )
     ar_expected = round2(inv_total - pay_total)
     if abs(ar_expected - bs["ar"]) > 0.05:
         r.add(

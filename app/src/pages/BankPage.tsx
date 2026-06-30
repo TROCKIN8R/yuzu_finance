@@ -13,7 +13,7 @@ import type {
   SalesTaxPeriod,
 } from '../lib/types'
 import { formatCad, formatDate, relationOne } from '../lib/format'
-import { buildFinancialSnapshot, payrollRemittancesTotal } from '../lib/financials'
+import { buildFinancialSnapshot, payrollAllRemittancesTotal } from '../lib/financials'
 import { fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
@@ -913,7 +913,7 @@ export function BankPage() {
                   {selectedPayroll && (
                     <p className="text-xs text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
                       Net attendu : {formatCad(selectedPayroll.net_pay)} · Remise attendue :{' '}
-                      {formatCad(payrollRemittancesTotal(selectedPayroll))}
+                      {formatCad(payrollAllRemittancesTotal(selectedPayroll))}
                     </p>
                   )}
                   {payrollForm.kind === 'remittance' && (

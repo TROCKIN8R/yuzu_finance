@@ -1,6 +1,7 @@
-import { isRevenueInvoice } from './taxes'
+import { isCollectiblePayment, isRevenueInvoice } from './taxes'
 import {
   CHART_OF_ACCOUNTS,
+  accountByCode,
   expenseCategoryAccount,
   EXPENSE_CATEGORY_LABELS,
   accountName,
@@ -61,6 +62,10 @@ function invoiceStatusFromPayment(p: {
 }): string | undefined {
   const inv = Array.isArray(p.invoices) ? p.invoices[0] : p.invoices
   return inv?.status
+}
+
+function knownAccount(code: string): string | null {
+  return accountByCode(code) ? code : null
 }
 
 function entry(
@@ -222,7 +227,7 @@ export function buildGeneralLedger(data: {
   }
 
   for (const p of data.payments) {
-    if (invoiceStatusFromPayment(p) === 'void') continue
+    if (!isCollectiblePayment(invoiceStatusFromPayment(p))) continue
     const invNum = Array.isArray(p.invoices)
       ? p.invoices[0]?.invoice_number
       : p.invoices?.invoice_number
@@ -257,7 +262,7 @@ export function buildGeneralLedger(data: {
   }
 
   for (const e of data.employeeExpenses ?? []) {
-    if (e.payroll_run_id || e.taxable) continue
+    if (e.taxable) continue
     const cat = EXPENSE_CATEGORY_LABELS[e.category as keyof typeof EXPENSE_CATEGORY_LABELS] ?? e.category
     const desc = e.description ? `${e.vendor} — ${e.description}` : e.vendor
     const expenseAccount = expenseCategoryAccount(e.category)
@@ -440,7 +445,9 @@ export function buildGeneralLedger(data: {
     const end = adj.end_date ?? adj.start_date
     if (adj.adjustment_type === 'manual') {
       const amt = round2(Number(adj.total_amount ?? adj.monthly_amount ?? 0))
-      if (amt > 0 && adj.start_date <= cap) {
+      const debitAcct = knownAccount(adj.debit_account)
+      const creditAcct = knownAccount(adj.credit_account)
+      if (amt > 0 && adj.start_date <= cap && debitAcct && creditAcct) {
         entries.push(
           entry(
             `adj-${adj.id}`,
@@ -449,7 +456,7 @@ export function buildGeneralLedger(data: {
             adj.id,
             adj.adjustment_type,
             adj.description,
-            [jl(adj.debit_account, amt, 0), jl(adj.credit_account, 0, amt)]
+            [jl(debitAcct, amt, 0), jl(creditAcct, 0, amt)]
           )
         )
       }
@@ -459,7 +466,9 @@ export function buildGeneralLedger(data: {
       const amt = round2(Number(adj.total_amount ?? adj.monthly_amount ?? 0))
       const postDate = adj.end_date ?? adj.start_date
       const periodStart = data.periodStart ?? '2000-01-01'
-      if (amt > 0 && postDate >= periodStart && postDate <= cap) {
+      const debitAcct = knownAccount(adj.debit_account)
+      const creditAcct = knownAccount(adj.credit_account)
+      if (amt > 0 && postDate >= periodStart && postDate <= cap && debitAcct && creditAcct) {
         entries.push(
           entry(
             `adj-${adj.id}`,
@@ -468,7 +477,7 @@ export function buildGeneralLedger(data: {
             adj.id,
             adj.adjustment_type,
             adj.description,
-            [jl(adj.debit_account, amt, 0), jl(adj.credit_account, 0, amt)]
+            [jl(debitAcct, amt, 0), jl(creditAcct, 0, amt)]
           )
         )
       }
@@ -476,6 +485,9 @@ export function buildGeneralLedger(data: {
     }
     const monthly = Number(adj.monthly_amount ?? 0)
     if (monthly <= 0) continue
+    const debitAcct = knownAccount(adj.debit_account)
+    const creditAcct = knownAccount(adj.credit_account)
+    if (!debitAcct || !creditAcct) continue
     const months = monthsInRange(adj.start_date, end, cap)
     for (const ym of months) {
       const postDate = lastDayOfMonth(ym)
@@ -487,7 +499,7 @@ export function buildGeneralLedger(data: {
           adj.id,
           ym,
           `${adj.description} (${ym})`,
-          [jl(adj.debit_account, monthly, 0), jl(adj.credit_account, 0, monthly)]
+          [jl(debitAcct, monthly, 0), jl(creditAcct, 0, monthly)]
         )
       )
     }

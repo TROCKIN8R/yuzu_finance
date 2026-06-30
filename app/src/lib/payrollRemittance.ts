@@ -51,7 +51,12 @@ export function employerPayrollExpenseContributions(p: PayrollRemittanceFields):
   return employerStatutoryContributions(p) + Number(p.employer_benefits) + payrollLeviesRemittance(p)
 }
 
-/** Total due to CRA / Revenu Québec for source deductions on a payroll run. */
+/** Income tax + RRQ/AE/RQAP remittance (excludes HSF/CNESST and employer benefits). */
 export function payrollRemittancesTotal(p: PayrollRemittanceFields): number {
   return payrollIncomeTaxWithheld(p) + payrollStatutoryRemittance(p)
+}
+
+/** Full remittance due on remittance date (CRA/TPZ + HSF/CNESST). */
+export function payrollAllRemittancesTotal(p: PayrollRemittanceFields): number {
+  return payrollRemittancesTotal(p) + payrollLeviesRemittance(p)
 }

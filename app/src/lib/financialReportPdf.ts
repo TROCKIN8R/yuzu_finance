@@ -60,12 +60,12 @@ function cashFlowLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Dépenses payées (TTC)', value: cad(-cf.expensesPaid), indent: true },
     { label: 'Salaire net versé aux employés', value: cad(-cf.payrollNetToEmployee), indent: true },
     { label: 'Remises paie (retenues + cotisations)', value: cad(-cf.payrollRemittancesPaid), indent: true },
-    { label: 'Cotisations employeur (cash)', value: cad(-cf.employerPayrollContributions), indent: true },
     { label: 'Remises TPS/TVQ', value: cad(-cf.salesTaxRemitted), indent: true },
     { label: 'Impôts société payés', value: cad(-cf.corporateTaxPaid), indent: true },
     { label: 'Dividendes payés', value: cad(-cf.dividendsPaid), indent: true },
     { label: 'Total décaissements', value: cad(-fin.cashOut), bold: true },
-    { label: 'Trésorerie nette estimée', value: cad(fin.netCash), bold: true },
+    { label: 'Flux net de la période', value: cad(fin.periodNetCashFlow), bold: true },
+    { label: `Solde GL au ${fin.period.end || '…'}`, value: cad(fin.netCash), indent: true },
   ]
 }
 
@@ -122,6 +122,7 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
   lines.push(
     { label: 'TPS à remettre', value: cad(bs.gstPayable), indent: true },
     { label: 'TVQ à remettre', value: cad(bs.qstPayable), indent: true },
+    { label: 'Position nette TPS/TVQ', value: cad(bs.salesTaxNetPosition), indent: true },
     { label: 'Remises paie en attente', value: cad(bs.payrollRemittancesPending), indent: true }
   )
   if (bs.chargesPayable > 0) {
@@ -133,9 +134,13 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
   if (bs.dividendsPayable > 0) {
     lines.push({ label: 'Dividendes à payer', value: cad(bs.dividendsPayable), indent: true })
   }
+  if (bs.corporateTaxDue > 0.01) {
+    lines.push({ label: 'Impôts société dus', value: cad(bs.corporateTaxDue), indent: true })
+  }
+  if (bs.corpTaxProvision > 0.01) {
+    lines.push({ label: 'Provision impôt société', value: cad(bs.corpTaxProvision), indent: true })
+  }
   lines.push(
-    { label: 'Impôts société dus', value: cad(bs.corporateTaxDue), indent: true },
-    { label: 'Provision impôt société', value: cad(bs.corpTaxProvision), indent: true },
     { label: 'Total passif', value: cad(bs.totalLiabilities), bold: true },
     { label: 'AVOIR', value: '' },
     { label: 'Capital-actions', value: cad(eq.shareCapital), indent: true },
@@ -154,7 +159,9 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
 
 function incomeLines(fin: FinancialSnapshot): StmtLine[] {
   const inc = fin.income
-  return [
+  const st = fin.salesTax
+  const ct = fin.corpTax
+  const lines: StmtLine[] = [
     { label: 'REVENUS', value: '' },
     { label: 'Revenus facturés (HT, date facture)', value: cad(inc.invoicedSubtotal), indent: true },
     { label: 'Revenus comptabilisés (GL / WIP)', value: cad(inc.revenueSubtotal), indent: true },
@@ -163,9 +170,30 @@ function incomeLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Salaires bruts', value: cad(-inc.payrollGross), indent: true },
     { label: 'Cotisations employeur', value: cad(-inc.employerPayrollContributions), indent: true },
     { label: "Résultat d'exploitation", value: cad(inc.operatingIncome), bold: true },
-    { label: 'DISTRIBUTIONS (AVOIR)', value: '' },
-    { label: 'Dividendes payés (hors P&L)', value: cad(inc.dividendsDistributed), indent: true },
+    { label: 'IMPÔT SUR LE REVENU DES SOCIÉTÉS', value: '' },
+    { label: "Charge d'impôt société (GL 5900)", value: cad(-inc.corpTaxExpense), indent: true },
   ]
+  if (ct.paid > 0) {
+    lines.push({ label: 'Impôt société payé (trésorerie)', value: cad(ct.paid), indent: true })
+  }
+  if (ct.provision > 0) {
+    lines.push({ label: 'Provision impôt constituée', value: cad(ct.provision), indent: true })
+  }
+  lines.push(
+    { label: 'Résultat net', value: cad(inc.netIncome), bold: true },
+    { label: 'TAXES DE VENTE (TPS/TVQ)', value: '' },
+    { label: 'TPS perçue sur ventes', value: cad(st.gstCollected), indent: true },
+    { label: 'TVQ perçue sur ventes', value: cad(st.qstCollected), indent: true },
+    { label: 'CTI — TPS sur achats', value: cad(-st.gstItc), indent: true },
+    { label: 'RTI — TVQ sur achats', value: cad(-st.qstItr), indent: true },
+    { label: 'TPS remise (trésorerie)', value: cad(-st.gstRemitted), indent: true },
+    { label: 'TVQ remise (trésorerie)', value: cad(-st.qstRemitted), indent: true },
+    { label: 'Net TPS période', value: cad(st.netGstOwed), indent: true },
+    { label: 'Net TVQ période', value: cad(st.netQstOwed), indent: true },
+    { label: 'DISTRIBUTIONS (AVOIR)', value: '' },
+    { label: 'Dividendes déclarés (hors P&L)', value: cad(inc.dividendsDeclared), indent: true },
+  )
+  return lines
 }
 
 const REPORT_META: Record<FinancialReportKind, { title: string; filename: string; lines: (fin: FinancialSnapshot) => StmtLine[] }> = {

@@ -8,8 +8,9 @@ import {
   type MetricsTimeEntry,
 } from './billingMetrics'
 import { payrollEmployerTotal } from './financials'
+import { payrollAllRemittancesTotal } from './payrollRemittance'
 import type { DateRange } from './fiscalPeriod'
-import { isRevenueInvoice } from './taxes'
+import { isCollectiblePayment, isRevenueInvoice } from './taxes'
 
 export interface MonthlySeriesPoint {
   month: string
@@ -35,12 +36,13 @@ export interface EquityBreakdown {
 }
 
 type InvoiceRow = {
+  id?: string
   subtotal: number
   invoice_date: string
   status: string
 }
 
-type PaymentRow = { amount: number; payment_date?: string }
+type PaymentRow = { amount: number; payment_date?: string; invoice_id?: string }
 type ExpenseRow = {
   total: number
   paid: boolean
@@ -58,6 +60,8 @@ type PayrollRow = {
   ei_employer: number
   qpip_employer: number
   employer_benefits: number
+  hsf_employer?: number
+  cnesst_employer?: number
   net_pay: number
   federal_tax: number
   provincial_tax: number
@@ -126,16 +130,7 @@ function isOperatingExpense(e: ExpenseRow) {
 }
 
 function payrollRemittanceAmount(p: PayrollRow) {
-  const withholdings =
-    Number(p.federal_tax) +
-    Number(p.provincial_tax) +
-    Number(p.cpp_employee) +
-    Number(p.ei_employee) +
-    Number(p.qpip_employee) +
-    Number(p.other_deductions)
-  const employer =
-    Number(p.cpp_employer) + Number(p.ei_employer) + Number(p.qpip_employer) + Number(p.employer_benefits)
-  return withholdings + employer - Number(p.employer_benefits)
+  return payrollAllRemittancesTotal(p)
 }
 
 export function buildMonthlySeries(
@@ -181,7 +176,9 @@ export function buildMonthlySeries(
   }
 
   for (const p of data.payments) {
-    if (!p.payment_date) continue
+    if (!p.payment_date || !p.invoice_id) continue
+    const inv = data.invoices.find((i) => i.id === p.invoice_id)
+    if (!inv || !isCollectiblePayment(inv.status)) continue
     const ym = monthKey(p.payment_date)
     if (!months.includes(ym)) continue
     add(cashInByMonth, ym, Number(p.amount))
