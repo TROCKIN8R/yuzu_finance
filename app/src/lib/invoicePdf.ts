@@ -77,11 +77,10 @@ function drawCompanyHeader(
 
   doc.setFontSize(9)
   doc.setTextColor(100)
-  const addr = [settings?.address_line1, `${settings?.city ?? ''}, ${settings?.province ?? ''} ${settings?.postal_code ?? ''}`]
-    .filter(Boolean)
-    .join(' · ')
-  if (addr) {
-    doc.text(addr, textX, textY)
+  const cityLine = [settings?.city, settings?.province, settings?.postal_code].filter(Boolean).join(', ')
+  const addrLines = [settings?.address_line1, cityLine, settings?.country].filter(Boolean)
+  for (const line of addrLines) {
+    doc.text(line, textX, textY)
     textY += 4
   }
   if (settings?.neq) {
@@ -139,6 +138,10 @@ export async function downloadInvoicePdf({ invoice, partner, settings, lines }: 
   const partnerCity = [partner.city, partner.province, partner.postal_code].filter(Boolean).join(' ')
   if (partnerCity) {
     doc.text(partnerCity, margin, y)
+    y += 4
+  }
+  if (partner.country) {
+    doc.text(partner.country, margin, y)
     y += 4
   }
   y += 6

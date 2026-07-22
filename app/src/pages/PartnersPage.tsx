@@ -255,7 +255,7 @@ export function PartnersPage() {
               onChange={(e) => setForm({ ...form, address_line1: e.target.value })}
             />
           </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Field label="Ville">
               <input className={inputClass} value={form.city ?? ''} onChange={(e) => setForm({ ...form, city: e.target.value })} />
             </Field>
@@ -271,6 +271,13 @@ export function PartnersPage() {
                 className={inputClass}
                 value={form.postal_code ?? ''}
                 onChange={(e) => setForm({ ...form, postal_code: e.target.value })}
+              />
+            </Field>
+            <Field label="Pays">
+              <input
+                className={inputClass}
+                value={form.country ?? ''}
+                onChange={(e) => setForm({ ...form, country: e.target.value })}
               />
             </Field>
           </div>

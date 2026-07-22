@@ -176,10 +176,11 @@ export function SettingsPage() {
             <Field label="Courriel"><input type="email" className={inputClass} value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
           </div>
           <Field label="Adresse"><input className={inputClass} value={form.address_line1 ?? ''} onChange={(e) => setForm({ ...form, address_line1: e.target.value })} /></Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Field label="Ville"><input className={inputClass} value={form.city ?? ''} onChange={(e) => setForm({ ...form, city: e.target.value })} /></Field>
             <Field label="Prov."><input className={inputClass} value={form.province ?? ''} onChange={(e) => setForm({ ...form, province: e.target.value })} /></Field>
             <Field label="Code postal"><input className={inputClass} value={form.postal_code ?? ''} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} /></Field>
+            <Field label="Pays"><input className={inputClass} value={form.country ?? ''} onChange={(e) => setForm({ ...form, country: e.target.value })} /></Field>
           </div>
         </section>
 
