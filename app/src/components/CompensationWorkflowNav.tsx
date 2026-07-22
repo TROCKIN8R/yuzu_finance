@@ -7,13 +7,18 @@ const steps: WorkflowStepDef[] = [
   { id: 'dividends', to: '/compensation/dividends', label: 'Dividendes', hint: 'Distributions' },
 ]
 
+const asideLinkByStep: Record<CompensationStep, { to: string; label: string }> = {
+  payroll: { to: '/compensation/employees', label: 'Employés' },
+  dividends: { to: '/compensation/shareholders', label: 'Actionnaires' },
+}
+
 export function CompensationWorkflowNav({ current }: { current?: CompensationStep }) {
   return (
     <WorkflowNav
       ariaLabel="Étapes rémunération"
       steps={steps}
       currentId={current}
-      asideLink={{ to: '/compensation/shareholders', label: 'Actionnaires' }}
+      asideLink={current ? asideLinkByStep[current] : undefined}
     />
   )
 }
