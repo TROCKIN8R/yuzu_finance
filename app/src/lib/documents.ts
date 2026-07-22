@@ -29,7 +29,7 @@ export function buildDocumentPath(
   return `${userId}/${entityType}/${entityId}/${sanitizeFilename(filename)}`
 }
 
-function validateUpload(file: File | Blob, mimeType: string, sizeBytes: number) {
+function validateUpload(mimeType: string, sizeBytes: number) {
   if (sizeBytes <= 0) throw new Error('Fichier vide.')
   if (sizeBytes > MAX_DOCUMENT_BYTES) throw new Error('Fichier trop volumineux (max 10 Mo).')
   if (!ALLOWED_DOCUMENT_TYPES.includes(mimeType as (typeof ALLOWED_DOCUMENT_TYPES)[number])) {
@@ -64,8 +64,8 @@ export async function uploadDocument(
   } = await supabase.auth.getUser()
   if (!user) throw new Error('Non connecté.')
 
-  const sizeBytes = file instanceof File ? file.size : file.size
-  validateUpload(file, mimeType, sizeBytes)
+  const sizeBytes = file.size
+  validateUpload(mimeType, sizeBytes)
 
   const path = buildDocumentPath(user.id, entityType, entityId, filename)
 
