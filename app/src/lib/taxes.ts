@@ -14,6 +14,15 @@ export function effectiveTaxSettings(settings: TaxSettings, includeSalesTax: boo
   return settings
 }
 
+/** Purchase receipts: split using statutory rates for ITC/RTI — not sales charge flags. */
+function purchaseReceiptTaxSettings(settings: TaxSettings): TaxSettings {
+  return {
+    ...settings,
+    charge_gst: settings.gst_rate > 0,
+    charge_qst: settings.qst_rate > 0,
+  }
+}
+
 /** Québec: TPS on taxable amount; TVQ on taxable amount + TPS. */
 export function computeSalesTaxes(subtotal: number, settings: TaxSettings) {
   const base = round2(subtotal)
@@ -25,20 +34,21 @@ export function computeSalesTaxes(subtotal: number, settings: TaxSettings) {
 
 /** ITC / RTI on purchases — same Québec compound rule. */
 export function computePurchaseTaxes(amount: number, settings: TaxSettings) {
-  return computeSalesTaxes(amount, settings)
+  return computeSalesTaxes(amount, purchaseReceiptTaxSettings(settings))
 }
 
 /** Back-calculate HT + TPS/TVQ from a TTC purchase total (Québec compound). */
 export function computePurchaseTaxesFromTotal(totalInclTax: number, settings: TaxSettings) {
   const total = round2(Math.abs(totalInclTax))
-  if (!settings.charge_gst && !settings.charge_qst) {
+  const receiptSettings = purchaseReceiptTaxSettings(settings)
+  if (!receiptSettings.charge_gst && !receiptSettings.charge_qst) {
     return { subtotal: total, gst: 0, qst: 0, total }
   }
-  const gstRate = settings.charge_gst ? settings.gst_rate : 0
-  const qstRate = settings.charge_qst ? settings.qst_rate : 0
+  const gstRate = receiptSettings.charge_gst ? receiptSettings.gst_rate : 0
+  const qstRate = receiptSettings.charge_qst ? receiptSettings.qst_rate : 0
   const divisor = (1 + gstRate) * (1 + qstRate)
   const subtotal = round2(total / divisor)
-  const taxes = computeSalesTaxes(subtotal, settings)
+  const taxes = computeSalesTaxes(subtotal, receiptSettings)
   return { ...taxes, total: round2(taxes.subtotal + taxes.gst + taxes.qst) }
 }
 

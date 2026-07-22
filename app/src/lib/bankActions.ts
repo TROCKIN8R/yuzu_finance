@@ -148,6 +148,34 @@ export async function importBankRows(rows: ParsedBankRow[]) {
   return { inserted: toInsert.length, duplicates: rows.length - toInsert.length }
 }
 
+export async function createManualBankTransaction(payload: {
+  transaction_date: string
+  description: string
+  amount: number
+  source_format: 'chequing' | 'credit_card' | 'manual'
+  transaction_code?: string | null
+  notes?: string | null
+}) {
+  const description = payload.description.trim()
+  if (!description) throw new Error('Description requise.')
+  if (payload.amount === 0) throw new Error('Montant invalide.')
+
+  const { error } = await supabase.from('bank_transactions').insert({
+    transaction_date: payload.transaction_date,
+    description,
+    amount: payload.amount,
+    source_format: payload.source_format,
+    transaction_code: payload.transaction_code?.trim() || null,
+    notes: payload.notes?.trim() || null,
+    import_key: null,
+    reconciled: false,
+    match_source: null,
+    match_id: null,
+  })
+
+  if (error) throw new Error(error.message)
+}
+
 export async function assignBankPayment(
   bankId: string,
   invoiceId: string,

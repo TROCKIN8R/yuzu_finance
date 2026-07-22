@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type {
+  BankSourceFormat,
   BankTransaction,
   CorporateTaxRecord,
   Dividend,
@@ -12,7 +13,7 @@ import type {
   Payment,
   SalesTaxPeriod,
 } from '../lib/types'
-import { formatCad, formatDate, relationOne } from '../lib/format'
+import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
 import { buildFinancialSnapshot, payrollAllRemittancesTotal } from '../lib/financials'
 import { fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { allTimeRange } from '../lib/fiscalPeriod'
@@ -28,6 +29,7 @@ import {
   assignBankPayment,
   assignBankPayroll,
   assignBankSalesTax,
+  createManualBankTransaction,
   deleteBankTransaction,
   ignoreBankTransaction,
   importBankRows,
@@ -146,6 +148,17 @@ export function BankPage() {
   const [assignKind, setAssignKind] = useState<AssignKind>('expense')
   const [expenseReceiptFile, setExpenseReceiptFile] = useState<File | null>(null)
   const [expenseDocId, setExpenseDocId] = useState<string | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualForm, setManualForm] = useState({
+    transaction_date: todayIso(),
+    description: '',
+    direction: 'outflow' as 'inflow' | 'outflow',
+    amount: 0,
+    source_format: 'manual' as BankSourceFormat,
+    transaction_code: '',
+    notes: '',
+  })
+  const [manualError, setManualError] = useState<string | null>(null)
 
   const [payForm, setPayForm] = useState({
     invoice_id: '',
@@ -267,6 +280,47 @@ export function BankPage() {
       load()
     } catch (e) {
       setImportMsg(bankImportSetupHint(errorMessage(e, 'Erreur import')))
+    }
+  }
+
+  function openManual() {
+    setManualError(null)
+    setManualForm({
+      transaction_date: todayIso(),
+      description: '',
+      direction: 'outflow',
+      amount: 0,
+      source_format: 'manual',
+      transaction_code: '',
+      notes: '',
+    })
+    setManualOpen(true)
+  }
+
+  async function saveManualTransaction(e: React.FormEvent) {
+    e.preventDefault()
+    setManualError(null)
+    if (blockIfClosed(manualForm.transaction_date)) return
+    const absAmount = round2(Math.abs(manualForm.amount))
+    if (absAmount <= 0) {
+      setManualError('Indiquez un montant supérieur à 0.')
+      return
+    }
+    const signedAmount = manualForm.direction === 'inflow' ? absAmount : -absAmount
+    try {
+      await createManualBankTransaction({
+        transaction_date: manualForm.transaction_date,
+        description: manualForm.description,
+        amount: signedAmount,
+        source_format: manualForm.source_format,
+        transaction_code: manualForm.transaction_code || null,
+        notes: manualForm.notes || null,
+      })
+      setManualOpen(false)
+      setImportMsg('Transaction manuelle ajoutée.')
+      load()
+    } catch (err) {
+      setManualError(errorMessage(err, 'Erreur'))
     }
   }
 
@@ -568,9 +622,12 @@ export function BankPage() {
     <PageShell>
       <PageHeader
         title="Banque"
-        subtitle="Importez vos relevés Wealthsimple, puis affectez chaque ligne (facture, dépense, paie, dividende, taxes)."
+        subtitle="Importez un relevé CSV Wealthsimple ou saisissez une transaction manuellement, puis affectez chaque ligne."
         actions={
           <>
+            <Button type="button" variant="secondary" onClick={openManual}>
+              Ajouter manuellement
+            </Button>
             <input
               ref={fileRef}
               type="file"
@@ -603,7 +660,7 @@ export function BankPage() {
       </MetricGrid>
 
       {rows.length === 0 ? (
-        <EmptyState message="Importez un CSV Wealthsimple (compte chèques ou carte de crédit) pour commencer." />
+        <EmptyState message="Importez un CSV Wealthsimple ou ajoutez une transaction manuellement pour commencer." />
       ) : (
         <>
           <ListToolbar
@@ -1157,6 +1214,94 @@ export function BankPage() {
             hint="PDF ou photo de la facture reçue."
           />
         )}
+      </Modal>
+
+      <Modal title="Transaction manuelle" open={manualOpen} onClose={() => setManualOpen(false)} wide>
+        <form onSubmit={saveManualTransaction} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Date *">
+              <input
+                type="date"
+                className={inputClass}
+                required
+                value={manualForm.transaction_date}
+                onChange={(e) => setManualForm({ ...manualForm, transaction_date: e.target.value })}
+              />
+            </Field>
+            <Field label="Compte">
+              <select
+                className={inputClass}
+                value={manualForm.source_format}
+                onChange={(e) =>
+                  setManualForm({ ...manualForm, source_format: e.target.value as BankSourceFormat })
+                }
+              >
+                <option value="manual">Manuel</option>
+                <option value="chequing">Chèques</option>
+                <option value="credit_card">Carte de crédit</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Description *">
+            <input
+              className={inputClass}
+              required
+              value={manualForm.description}
+              onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+              placeholder="Ex. Virement client, achat bureau…"
+            />
+          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Field label="Sens *">
+              <select
+                className={inputClass}
+                value={manualForm.direction}
+                onChange={(e) =>
+                  setManualForm({ ...manualForm, direction: e.target.value as 'inflow' | 'outflow' })
+                }
+              >
+                <option value="inflow">Entrée (+)</option>
+                <option value="outflow">Sortie (−)</option>
+              </select>
+            </Field>
+            <Field label="Montant *">
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                className={inputClass}
+                required
+                value={manualForm.amount || ''}
+                onChange={(e) => setManualForm({ ...manualForm, amount: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="Code (optionnel)">
+              <input
+                className={inputClass}
+                value={manualForm.transaction_code}
+                onChange={(e) => setManualForm({ ...manualForm, transaction_code: e.target.value })}
+                placeholder="Réf. chèque, code…"
+              />
+            </Field>
+          </div>
+          <Field label="Notes">
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={manualForm.notes}
+              onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })}
+            />
+          </Field>
+          {manualError && (
+            <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{manualError}</p>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="secondary" onClick={() => setManualOpen(false)}>
+              Annuler
+            </Button>
+            <Button type="submit">Enregistrer</Button>
+          </div>
+        </form>
       </Modal>
     </PageShell>
   )
