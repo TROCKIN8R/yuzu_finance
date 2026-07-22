@@ -4,14 +4,20 @@ import { supabase } from '../lib/supabase'
 import type { Partner, Invoice, InvoiceLineItem, InvoiceStatus, OrganizationSettings, Project, TimeEntry } from '../lib/types'
 import { customerPartners, INVOICE_LANGUAGE_LABELS, resolvePartnerPaymentTerms } from '../lib/partners'
 import { partnerInvoiceLanguage } from '../lib/invoiceI18n'
-import { addDays, effectiveRate, formatCad, formatDate, lineAmount, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
+import {
+  buildGroupedLinesFromTimeSheets,
+  sheetBillableAmount,
+  sheetSummary,
+  totalLineHours,
+  type TimeEntryWithLines,
+} from '../lib/timeEntries'
 import {
   buildLegacyLinesFromTimeEntries,
   buildLineFromFixedProject,
-  buildLineFromTimeEntry,
   sumInvoiceLines,
 } from '../lib/invoice'
+import { addDays, formatCad, formatDate, todayIso } from '../lib/format'
+import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { effectiveTaxSettings } from '../lib/taxes'
 import { deleteInvoice } from '../lib/invoiceActions'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
@@ -31,7 +37,7 @@ import { PageShell } from '../components/PageShell'
 
 type BillingOutletContext = { refreshMetrics?: () => void }
 
-function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | ReturnType<typeof buildLineFromTimeEntry>)[]; showTaxes: boolean }) {
+function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | InvoiceLineDraft)[]; showTaxes: boolean }) {
   return (
     <div className="overflow-x-auto -mx-1">
       <table className="w-full min-w-[640px] text-sm">
@@ -93,7 +99,7 @@ export function InvoicesPage() {
   const [selected, setSelected] = useState<Invoice | null>(null)
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([])
   const [createPartnerId, setCreatePartnerId] = useState('')
-  const [unbilled, setUnbilled] = useState<TimeEntry[]>([])
+  const [unbilled, setUnbilled] = useState<TimeEntryWithLines[]>([])
   const [unbilledFixed, setUnbilledFixed] = useState<Project[]>([])
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set())
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set())
@@ -158,13 +164,16 @@ export function InvoicesPage() {
     }
     const { data } = await supabase
       .from('time_entries')
-      .select('*, projects(name, default_hourly_rate, billing_type)')
+      .select('*, time_entry_lines(item_name, hours, billable, notes), projects(name, default_hourly_rate, billing_type)')
       .in('project_id', hourlyIds)
       .is('invoice_id', null)
       .eq('billable', true)
       .order('entry_date')
-    setUnbilled((data as TimeEntry[]) ?? [])
-    setSelectedEntryIds(new Set((data ?? []).map((e) => e.id)))
+    const sheets = ((data as TimeEntryWithLines[]) ?? []).filter(
+      (e) => (e.time_entry_lines ?? []).some((l) => l.billable && Number(l.hours) > 0) || Number(e.hours) > 0
+    )
+    setUnbilled(sheets)
+    setSelectedEntryIds(new Set(sheets.map((e) => e.id)))
   }
 
   async function openCreate() {
@@ -185,15 +194,17 @@ export function InvoicesPage() {
     } else {
       const { data: entries } = await supabase
         .from('time_entries')
-        .select('*, projects(name, default_hourly_rate, billing_type)')
+        .select('*, time_entry_lines(item_name, hours, billable), projects(name, default_hourly_rate, billing_type)')
         .eq('invoice_id', inv.id)
         .order('entry_date')
-      const legacy = settings
-        ? buildLegacyLinesFromTimeEntries(
-            (entries as TimeEntry[]) ?? [],
-            effectiveTaxSettings(settings, inv.include_sales_tax ?? false)
-          )
-        : []
+      const tax = effectiveTaxSettings(settings, inv.include_sales_tax ?? false)
+      const withLines = (entries as TimeEntryWithLines[]) ?? []
+      const legacy =
+        settings && withLines.some((e) => (e.time_entry_lines ?? []).length > 0)
+          ? buildGroupedLinesFromTimeSheets(withLines, tax)
+          : settings
+            ? buildLegacyLinesFromTimeEntries(withLines as TimeEntry[], tax)
+            : []
       setLineItems(legacy as InvoiceLineItem[])
     }
     setDetailOpen(true)
@@ -207,15 +218,12 @@ export function InvoicesPage() {
   function previewLines() {
     const taxSettings = taxSettingsForCreate()
     if (!taxSettings) return []
-    let order = 0
-    const lines = []
-    for (const e of unbilled.filter((x) => selectedEntryIds.has(x.id))) {
-      lines.push(buildLineFromTimeEntry(e, taxSettings, order++))
-    }
-    for (const p of unbilledFixed.filter((x) => selectedProjectIds.has(x.id))) {
-      lines.push(buildLineFromFixedProject(p, taxSettings, order++))
-    }
-    return lines
+    const selectedSheets = unbilled.filter((x) => selectedEntryIds.has(x.id))
+    const hourlyLines = buildGroupedLinesFromTimeSheets(selectedSheets, taxSettings)
+    const fixedLines = unbilledFixed
+      .filter((x) => selectedProjectIds.has(x.id))
+      .map((p, i) => buildLineFromFixedProject(p, taxSettings, hourlyLines.length + i))
+    return [...hourlyLines, ...fixedLines]
   }
 
   function previewTotals() {
@@ -533,11 +541,15 @@ export function InvoicesPage() {
 
               {unbilled.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">Temps (horaire)</p>
+                  <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">Feuilles de temps (horaire)</p>
                   <div className="border border-border rounded-lg divide-y divide-border max-h-48 overflow-y-auto">
                     {unbilled.map((e) => {
                       const p = e.projects!
-                      const amt = lineAmount(Number(e.hours), effectiveRate(e, p))
+                      const hours =
+                        (e.time_entry_lines ?? []).length > 0
+                          ? totalLineHours(e.time_entry_lines ?? [])
+                          : Number(e.hours)
+                      const amt = sheetBillableAmount(e, p)
                       return (
                         <label key={e.id} className="flex items-start gap-3 px-3 py-2 hover:bg-stone-50 cursor-pointer">
                           <input
@@ -552,9 +564,9 @@ export function InvoicesPage() {
                             className="mt-1"
                           />
                           <div className="flex-1 text-sm">
-                            <div className="font-medium">{e.description}</div>
+                            <div className="font-medium">{p.name}</div>
                             <div className="text-muted text-xs">
-                              {formatDate(e.entry_date)} · {p.name} · {Number(e.hours).toFixed(2)} h
+                              {formatDate(e.entry_date)} · {hours.toFixed(2)} h · {sheetSummary(e.time_entry_lines ?? [])}
                             </div>
                           </div>
                           <div className="text-sm font-medium">{formatCad(amt)}</div>

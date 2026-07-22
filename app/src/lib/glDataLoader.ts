@@ -1,6 +1,8 @@
 import { supabase } from './supabase'
 import type { GeneralLedgerBuildInput } from './financials'
-import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
+import type { MetricsProject } from './billingMetrics'
+import { TIME_ENTRY_SELECT } from './dashboardData'
+import { entriesToMetrics, type TimeEntryWithLines } from './timeEntries'
 
 export async function fetchGeneralLedgerData(): Promise<{
   data: GeneralLedgerBuildInput
@@ -41,7 +43,7 @@ export async function fetchGeneralLedgerData(): Promise<{
         'share_capital, opening_retained_earnings, opening_cash_balance, opening_balance_date, estimated_corp_tax_rate, wip_accrual_enabled, hsf_rate, cnesst_rate'
       )
       .maybeSingle(),
-    supabase.from('time_entries').select('entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate)'),
+    supabase.from('time_entries').select(TIME_ENTRY_SELECT),
     supabase
       .from('projects')
       .select('id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate')
@@ -75,7 +77,7 @@ export async function fetchGeneralLedgerData(): Promise<{
       salesTaxRemittances: salesTax.data ?? [],
       adjustments: adjustments.data ?? [],
       settings: settingsRow.data,
-      timeEntries: (timeEntries.data ?? []) as MetricsTimeEntry[],
+      timeEntries: entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
       fixedProjects: (fixedProjects.data ?? []) as MetricsProject[],
     },
     warnings,

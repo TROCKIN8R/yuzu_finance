@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabase'
 import { monthEndForDate, formatPeriodLabel, dateOnly } from '../lib/fiscalPeriodClose'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { computeUnbilledWipAsOf } from '../lib/wipAccrual'
-import type { MetricsProject, MetricsTimeEntry } from '../lib/billingMetrics'
+import { TIME_ENTRY_SELECT } from '../lib/dashboardData'
+import { entriesToMetrics, type TimeEntryWithLines } from '../lib/timeEntries'
+import type { MetricsProject } from '../lib/billingMetrics'
 import { formatCad } from '../lib/format'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
@@ -37,11 +39,7 @@ export function PeriodClosePage() {
     const [settingsRow, invoices, timeEntries, fixedProjects] = await Promise.all([
       supabase.from('organization_settings').select('wip_accrual_enabled').maybeSingle(),
       supabase.from('invoices').select('id, invoice_date'),
-      supabase
-        .from('time_entries')
-        .select(
-          'entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate)'
-        ),
+      supabase.from('time_entries').select(TIME_ENTRY_SELECT),
       supabase
         .from('projects')
         .select('id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate')
@@ -59,7 +57,7 @@ export function PeriodClosePage() {
 
     const invoiceDates = new Map((invoices.data ?? []).map((inv) => [inv.id, inv.invoice_date]))
     const wip = computeUnbilledWipAsOf(
-      (timeEntries.data ?? []) as MetricsTimeEntry[],
+      entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
       (fixedProjects.data ?? []) as MetricsProject[],
       periodEnd,
       invoiceDates

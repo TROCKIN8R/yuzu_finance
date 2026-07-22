@@ -1,10 +1,11 @@
 import { supabase } from './supabase'
 import type { OrganizationSettings } from './types'
 import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
+import { entriesToMetrics, type TimeEntryWithLines } from './timeEntries'
 import { isRevenueInvoice } from './taxes'
 
 export const TIME_ENTRY_SELECT =
-  'entry_date, hours, rate_override, billable, invoice_id, project_id, projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate, name, partners(legal_name))'
+  'entry_date, hours, rate_override, billable, invoice_id, project_id, description, time_entry_lines(hours, billable, item_name), projects(id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate, name, partners(legal_name))'
 
 export const FIXED_PROJECT_SELECT =
   'id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate, name, partners(legal_name)'
@@ -23,7 +24,7 @@ export async function fetchDashboardBillingData(): Promise<DashboardRawData> {
   ])
 
   return {
-    timeEntries: (timeEntries.data ?? []) as MetricsTimeEntry[],
+    timeEntries: entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
     fixedProjects: (fixedProjects.data ?? []) as MetricsProject[],
     partners: partners.data ?? [],
   }

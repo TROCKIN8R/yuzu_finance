@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
-import { computeUnbilledWip, type MetricsProject, type MetricsTimeEntry } from '../lib/billingMetrics'
+import { computeUnbilledWip, type MetricsProject } from '../lib/billingMetrics'
 import { FIXED_PROJECT_SELECT, TIME_ENTRY_SELECT } from '../lib/dashboardData'
+import { entriesToMetrics, type TimeEntryWithLines } from '../lib/timeEntries'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { MetricCard, MetricGrid } from '../components/MetricCard'
@@ -32,7 +33,7 @@ export function BillingPage() {
       supabase.from('invoices').select('id').eq('status', 'draft'),
     ])
 
-    const wip = computeUnbilledWip((entries ?? []) as MetricsTimeEntry[], (fixedProjects ?? []) as MetricsProject[])
+    const wip = computeUnbilledWip(entriesToMetrics((entries ?? []) as TimeEntryWithLines[]), (fixedProjects ?? []) as MetricsProject[])
 
     setMetrics({
       unbilledHours: wip.hours,

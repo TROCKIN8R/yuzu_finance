@@ -296,6 +296,19 @@ export interface InvoiceLineItem {
   updated_at: string
 }
 
+export interface TimeEntryLine {
+  id: string
+  user_id: string
+  time_entry_id: string
+  item_name: string
+  hours: number
+  notes: string | null
+  billable: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface TimeEntry {
   id: string
   user_id: string
@@ -303,17 +316,19 @@ export interface TimeEntry {
   employee_id: string | null
   entry_date: string
   hours: number
-  description: string
+  description: string | null
+  notes: string | null
   billable: boolean
   rate_override: number | null
   invoice_id: string | null
   created_at: string
   updated_at: string
-  projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'partner_id'> & {
+  projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'billing_type' | 'fixed_price' | 'partner_id'> & {
     partners?: Pick<Partner, 'legal_name'>
   }
   employees?: Pick<Employee, 'first_name' | 'last_name'>
   invoices?: Pick<Invoice, 'invoice_number'>
+  time_entry_lines?: TimeEntryLine[]
 }
 
 export interface Invoice {
@@ -411,6 +426,12 @@ export interface Database {
         Row: TimeEntry
         Insert: OmitSystemFields<TimeEntry> & { id?: string; user_id?: string; invoice_id?: string | null }
         Update: Partial<OmitSystemFields<TimeEntry>>
+        Relationships: []
+      }
+      time_entry_lines: {
+        Row: TimeEntryLine
+        Insert: OmitSystemFields<TimeEntryLine> & { id?: string; user_id?: string }
+        Update: Partial<OmitSystemFields<TimeEntryLine>>
         Relationships: []
       }
       invoices: {
