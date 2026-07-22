@@ -14,7 +14,8 @@ This is normal for client-side apps. The anon key is **not** a secret in the tra
 | Clients, projects, time, invoices, payments | Supabase Postgres (your project) |
 | Login session | Browser + Supabase Auth |
 | Service role key | Supabase dashboard only / local `.env` (gitignored) |
-| Bank details, payroll slips, receipts | Local machine only — **not** in this repo |
+| Bank details, payroll slips | Local machine only — **not** in this repo |
+| Invoice PDFs, supplier bills, employee receipts | Supabase Storage (`documents` bucket) — private, RLS by user |
 
 ## How access is blocked
 

@@ -20,6 +20,7 @@ import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { computePurchaseTaxesFromTotal } from '../lib/taxes'
+import { documentAcceptAttribute, uploadDocument } from '../lib/documents'
 import {
   assignBankCorporateTax,
   assignBankDividend,
@@ -40,6 +41,7 @@ import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
+import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { FilterSelect, ListToolbar } from '../components/ListToolbar'
@@ -121,6 +123,7 @@ function sourceLabel(tx: BankTransaction) {
 
 export function BankPage() {
   const fileRef = useRef<HTMLInputElement>(null)
+  const expenseReceiptRef = useRef<HTMLInputElement>(null)
   const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<BankTransaction[]>([])
   const [invoices, setInvoices] = useState<InvoiceWithPaid[]>([])
@@ -141,6 +144,8 @@ export function BankPage() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignTx, setAssignTx] = useState<BankTransaction | null>(null)
   const [assignKind, setAssignKind] = useState<AssignKind>('expense')
+  const [expenseReceiptFile, setExpenseReceiptFile] = useState<File | null>(null)
+  const [expenseDocId, setExpenseDocId] = useState<string | null>(null)
 
   const [payForm, setPayForm] = useState({
     invoice_id: '',
@@ -275,6 +280,7 @@ export function BankPage() {
 
   function openAssign(tx: BankTransaction) {
     setAssignTx(tx)
+    setExpenseReceiptFile(null)
     const outflow = Number(tx.amount) < 0
     const kind: AssignKind = outflow ? 'expense' : 'payment'
     setAssignKind(kind)
@@ -371,7 +377,7 @@ export function BankPage() {
           return
         }
         if (blockIfClosed(expForm.expense_date)) return
-        await assignBankExpense(assignTx.id, {
+        const expenseId = await assignBankExpense(assignTx.id, {
           expense_date: expForm.expense_date,
           vendor,
           category: expForm.category,
@@ -381,6 +387,15 @@ export function BankPage() {
           qst: expForm.qst,
           total: expForm.total,
         })
+        if (expenseReceiptFile) {
+          await uploadDocument(
+            expenseReceiptFile,
+            expenseReceiptFile.name,
+            expenseReceiptFile.type,
+            'expense',
+            expenseId
+          )
+        }
       } else if (assignKind === 'payroll') {
         if (!payrollForm.payroll_run_id) {
           alert('Sélectionnez une paie.')
@@ -432,6 +447,7 @@ export function BankPage() {
       }
       setAssignOpen(false)
       setAssignTx(null)
+      setExpenseReceiptFile(null)
       load()
     } catch (err) {
       alert(errorMessage(err, 'Erreur'))
@@ -672,6 +688,11 @@ export function BankPage() {
                             Retirer
                           </Button>
                         )}
+                        {r.match_source === 'expense' && r.match_id && (
+                          <Button variant="ghost" className={tableActionClass} onClick={() => setExpenseDocId(r.match_id)}>
+                            Facture
+                          </Button>
+                        )}
                         <Button variant="danger" className={tableActionClass} onClick={() => handleDelete(r)}>
                           Suppr.
                         </Button>
@@ -875,6 +896,33 @@ export function BankPage() {
                   TPS {Math.round(settings.gst_rate * 10000) / 100}% · TVQ {Math.round(settings.qst_rate * 10000) / 100}% sur HT+TPS
                 </p>
               )}
+              <Field label="Facture fournisseur (optionnel)">
+                <input
+                  ref={expenseReceiptRef}
+                  type="file"
+                  accept={documentAcceptAttribute}
+                  className="hidden"
+                  onChange={(e) => {
+                    setExpenseReceiptFile(e.target.files?.[0] ?? null)
+                    e.target.value = ''
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="secondary" className="!text-xs" onClick={() => expenseReceiptRef.current?.click()}>
+                    Choisir un fichier
+                  </Button>
+                  {expenseReceiptFile ? (
+                    <span className="text-xs truncate max-w-[240px]">{expenseReceiptFile.name}</span>
+                  ) : (
+                    <span className="text-xs text-muted">PDF ou image (max 10 Mo)</span>
+                  )}
+                  {expenseReceiptFile && (
+                    <Button type="button" variant="ghost" className="!text-xs" onClick={() => setExpenseReceiptFile(null)}>
+                      Retirer
+                    </Button>
+                  )}
+                </div>
+              </Field>
             </>
           ) : assignKind === 'payroll' ? (
             <>
@@ -1089,6 +1137,26 @@ export function BankPage() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        title={
+          expenseDocId && expenseMap[expenseDocId]
+            ? `Facture · ${expenseMap[expenseDocId].vendor}`
+            : 'Facture fournisseur'
+        }
+        open={!!expenseDocId}
+        onClose={() => setExpenseDocId(null)}
+        wide
+      >
+        {expenseDocId && (
+          <DocumentAttachments
+            entityType="expense"
+            entityId={expenseDocId}
+            label="Facture reçue du fournisseur"
+            hint="PDF ou photo de la facture reçue."
+          />
+        )}
       </Modal>
     </PageShell>
   )

@@ -15,10 +15,11 @@ import {
 import { effectiveTaxSettings } from '../lib/taxes'
 import { deleteInvoice } from '../lib/invoiceActions'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
-import { downloadInvoicePdf } from '../lib/invoicePdf'
+import { downloadInvoicePdf, saveInvoicePdfToStorage } from '../lib/invoicePdf'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
+import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -87,6 +88,8 @@ export function InvoicesPage() {
   const [settings, setSettings] = useState<OrganizationSettings | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [savingPdf, setSavingPdf] = useState(false)
+  const [docVersion, setDocVersion] = useState(0)
   const [selected, setSelected] = useState<Invoice | null>(null)
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([])
   const [createPartnerId, setCreatePartnerId] = useState('')
@@ -326,6 +329,22 @@ export function InvoicesPage() {
       await downloadInvoicePdf({ invoice: selected, partner, settings, lines: lineItems })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur lors de la génération du PDF')
+    }
+  }
+
+  async function handleSavePdf() {
+    if (!selected || !settings) return
+    const partner = partners.find((p) => p.id === selected.partner_id)
+    if (!partner) return
+    setSavingPdf(true)
+    try {
+      await saveInvoicePdfToStorage({ invoice: selected, partner, settings, lines: lineItems })
+      setDocVersion((v) => v + 1)
+      alert('PDF enregistré dans Supabase.')
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement du PDF')
+    } finally {
+      setSavingPdf(false)
     }
   }
 
@@ -648,10 +667,22 @@ export function InvoicesPage() {
               )}
               <div className="font-semibold text-lg">Total : {formatCad(selected.total)}</div>
             </div>
+
+            <DocumentAttachments
+              key={`${selected.id}-${docVersion}`}
+              entityType="invoice"
+              entityId={selected.id}
+              label="Facture PDF / pièces jointes"
+              hint="Enregistrez le PDF généré ou joignez une copie signée."
+            />
+
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-between pt-2">
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={handlePdf}>
                   Télécharger PDF
+                </Button>
+                <Button variant="secondary" onClick={() => void handleSavePdf()} disabled={savingPdf}>
+                  {savingPdf ? 'Enregistrement…' : 'Enregistrer PDF'}
                 </Button>
                 <Button variant="danger" onClick={() => handleDelete(selected)}>
                   Supprimer

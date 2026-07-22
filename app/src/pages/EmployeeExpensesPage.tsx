@@ -7,9 +7,11 @@ import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { computePurchaseTaxes } from '../lib/taxes'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
+import { deleteEntityDocuments } from '../lib/documents'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
+import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -154,9 +156,17 @@ export function EmployeeExpensesPage() {
       taxable: form.taxable,
       notes: form.notes || null,
     }
-    if (editingId) await supabase.from('employee_expenses').update(payload).eq('id', editingId)
-    else await supabase.from('employee_expenses').insert(payload)
-    setOpen(false)
+    if (editingId) {
+      await supabase.from('employee_expenses').update(payload).eq('id', editingId)
+      setOpen(false)
+    } else {
+      const { data, error } = await supabase.from('employee_expenses').insert(payload).select('id').single()
+      if (error) {
+        alert(error.message)
+        return
+      }
+      setEditingId(data.id)
+    }
     load()
   }
 
@@ -167,6 +177,7 @@ export function EmployeeExpensesPage() {
     }
     if (!confirm('Supprimer ce frais ?')) return
     if (blockIfClosed(e.expense_date)) return
+    await deleteEntityDocuments('employee_expense', e.id)
     await supabase.from('employee_expenses').delete().eq('id', e.id)
     load()
   }
@@ -428,6 +439,13 @@ export function EmployeeExpensesPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </Field>
+          <DocumentAttachments
+            entityType="employee_expense"
+            entityId={editingId}
+            disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
+            label="Reçu / facture employé"
+            hint="Photo ou PDF du reçu soumis par l'employé."
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Annuler

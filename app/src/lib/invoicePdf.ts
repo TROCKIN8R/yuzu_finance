@@ -6,6 +6,7 @@ import type { InvoiceLineDraft } from './invoice'
 import { invoiceCopy, partnerInvoiceLanguage } from './invoiceI18n'
 import { formatPartnerPaymentTerms } from './partners'
 import { resolvePaymentInstructions } from './paymentInstructions'
+import { uploadDocument } from './documents'
 
 interface PdfInput {
   invoice: Invoice
@@ -78,7 +79,9 @@ function drawCompanyHeader(
   doc.setFontSize(9)
   doc.setTextColor(100)
   const cityLine = [settings?.city, settings?.province, settings?.postal_code].filter(Boolean).join(', ')
-  const addrLines = [settings?.address_line1, cityLine, settings?.country].filter(Boolean)
+  const addrLines = [settings?.address_line1, cityLine, settings?.country].filter(
+    (line): line is string => !!line
+  )
   for (const line of addrLines) {
     doc.text(line, textX, textY)
     textY += 4
@@ -101,7 +104,7 @@ function drawCompanyHeader(
   return headerBottom + 8
 }
 
-export async function downloadInvoicePdf({ invoice, partner, settings, lines }: PdfInput) {
+export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }: PdfInput): Promise<Blob> {
   const lang = partnerInvoiceLanguage(partner.language)
   const t = invoiceCopy(lang)
   const doc = new jsPDF()
@@ -221,5 +224,20 @@ export async function downloadInvoicePdf({ invoice, partner, settings, lines }: 
     doc.text(instructionLines, margin, finalY + (showTaxes ? 28 : 12))
   }
 
-  doc.save(`${invoice.invoice_number}.pdf`)
+  return doc.output('blob')
+}
+
+export async function downloadInvoicePdf(input: PdfInput) {
+  const blob = await buildInvoicePdfBlob(input)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${input.invoice.invoice_number}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function saveInvoicePdfToStorage(input: PdfInput): Promise<void> {
+  const blob = await buildInvoicePdfBlob(input)
+  await uploadDocument(blob, `${input.invoice.invoice_number}.pdf`, 'application/pdf', 'invoice', input.invoice.id)
 }

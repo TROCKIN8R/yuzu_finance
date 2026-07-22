@@ -45,6 +45,21 @@ export interface AccountingAdjustment {
   updated_at: string
 }
 export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
+export type DocumentEntityType = 'invoice' | 'expense' | 'employee_expense'
+
+export interface DocumentAttachment {
+  id: string
+  user_id: string
+  entity_type: DocumentEntityType
+  entity_id: string
+  storage_path: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  created_at: string
+  updated_at: string
+}
+
 export type TaxPeriodStatus = 'open' | 'filed' | 'paid'
 export type CorpTaxStatus = 'estimated' | 'due' | 'paid'
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'

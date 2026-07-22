@@ -1,3 +1,4 @@
+import { deleteEntityDocuments } from './documents'
 import { supabase } from './supabase'
 import { deletePayment, recalculateInvoiceStatus } from './invoiceActions'
 import type { CorpTaxStatus, DividendStatus, ExpenseCategory, TaxPeriodStatus } from './types'
@@ -48,6 +49,7 @@ async function revertLinkedRecord(bankId: string, matchSource: string | null, ma
   }
 
   if (matchSource === 'expense') {
+    await deleteEntityDocuments('expense', matchId)
     await supabase.from('expenses').delete().eq('id', matchId)
     return
   }
@@ -196,7 +198,7 @@ export async function assignBankExpense(
     qst: number
     total: number
   }
-) {
+): Promise<string> {
   const { data: expense, error: expErr } = await supabase
     .from('expenses')
     .insert({
@@ -220,6 +222,7 @@ export async function assignBankExpense(
     .eq('id', bankId)
 
   if (bankErr) throw new Error(bankErr.message)
+  return expense.id
 }
 
 export type PayrollBankMatchKind = 'net_pay' | 'remittance'

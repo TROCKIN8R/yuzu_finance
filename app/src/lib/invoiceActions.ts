@@ -1,3 +1,4 @@
+import { deleteEntityDocuments } from './documents'
 import { supabase } from './supabase'
 import { assertPeriodOpenForDate } from './fiscalPeriodClose'
 import { deriveInvoiceStatus } from './invoice'
@@ -8,6 +9,7 @@ export async function deleteInvoice(invoiceId: string, invoiceDate: string) {
   await supabase.from('time_entries').update({ invoice_id: null }).eq('invoice_id', invoiceId)
   await supabase.from('projects').update({ invoice_id: null }).eq('invoice_id', invoiceId)
   await supabase.from('payments').delete().eq('invoice_id', invoiceId)
+  await deleteEntityDocuments('invoice', invoiceId)
   const { error } = await supabase.from('invoices').delete().eq('id', invoiceId)
   if (error) throw error
 }
