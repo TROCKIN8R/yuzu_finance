@@ -52,7 +52,7 @@ export function buildLineFromTimeEntry(
     project_id: entry.project_id,
     time_entry_id: entry.id,
     line_date: entry.entry_date,
-    description: entry.description,
+    description: entry.description?.trim() || 'Travail',
     quantity: Number(entry.hours),
     unit_label: 'h',
     unit_price: rate,

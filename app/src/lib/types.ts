@@ -323,7 +323,10 @@ export interface TimeEntry {
   invoice_id: string | null
   created_at: string
   updated_at: string
-  projects?: Pick<Project, 'name' | 'default_hourly_rate' | 'billing_type' | 'fixed_price' | 'partner_id'> & {
+  projects?: Pick<
+    Project,
+    'id' | 'name' | 'default_hourly_rate' | 'billing_type' | 'fixed_price' | 'partner_id' | 'invoice_id' | 'status'
+  > & {
     partners?: Pick<Partner, 'legal_name'>
   }
   employees?: Pick<Employee, 'first_name' | 'last_name'>

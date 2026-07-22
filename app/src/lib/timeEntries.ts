@@ -11,6 +11,20 @@ function round2(n: number) {
 
 export type TimeEntryWithLines = TimeEntry & { time_entry_lines?: TimeEntryLine[] | null }
 
+/** Partial rows from TIME_ENTRY_SELECT — enough for metrics and invoice grouping. */
+export type TimeEntrySheetSource = {
+  id?: string
+  entry_date: string
+  hours: number
+  rate_override: number | null
+  billable: boolean
+  invoice_id: string | null
+  project_id: string
+  description?: string | null
+  time_entry_lines?: Array<Pick<TimeEntryLine, 'hours' | 'billable' | 'item_name'>> | null
+  projects?: MetricsTimeEntry['projects']
+}
+
 export type TimeEntryLineDraft = {
   id?: string
   item_name: string
@@ -45,8 +59,9 @@ export function sheetSummary(lines: Pick<TimeEntryLine, 'item_name' | 'hours'>[]
 
 export type FlatTimeLine = MetricsTimeEntry & { item_name: string; time_entry_id: string }
 
-export function flattenEntryLines(entry: TimeEntryWithLines): FlatTimeLine[] {
+export function flattenEntryLines(entry: TimeEntrySheetSource): FlatTimeLine[] {
   const lines = entry.time_entry_lines ?? []
+  const projects = entry.projects
   if (lines.length === 0 && Number(entry.hours) > 0) {
     return [
       {
@@ -57,8 +72,8 @@ export function flattenEntryLines(entry: TimeEntryWithLines): FlatTimeLine[] {
         invoice_id: entry.invoice_id,
         project_id: entry.project_id,
         item_name: entry.description?.trim() || 'Travail',
-        time_entry_id: entry.id,
-        projects: entry.projects,
+        time_entry_id: entry.id ?? entry.project_id,
+        projects,
       },
     ]
   }
@@ -70,17 +85,17 @@ export function flattenEntryLines(entry: TimeEntryWithLines): FlatTimeLine[] {
     invoice_id: entry.invoice_id,
     project_id: entry.project_id,
     item_name: line.item_name,
-    time_entry_id: entry.id,
-    projects: entry.projects,
+    time_entry_id: entry.id ?? entry.project_id,
+    projects,
   }))
 }
 
-export function flattenAllEntryLines(entries: TimeEntryWithLines[]): FlatTimeLine[] {
+export function flattenAllEntryLines(entries: TimeEntrySheetSource[]): FlatTimeLine[] {
   return entries.flatMap(flattenEntryLines)
 }
 
-export function entriesToMetrics(entries: TimeEntryWithLines[]): MetricsTimeEntry[] {
-  return flattenAllEntryLines(entries)
+export function entriesToMetrics(entries: TimeEntrySheetSource[]): MetricsTimeEntry[] {
+  return flattenAllEntryLines(entries).map(({ item_name: _item, time_entry_id: _id, ...metric }) => metric)
 }
 
 export function sheetBillableAmount(
@@ -97,7 +112,7 @@ export function sheetBillableAmount(
 }
 
 export function buildGroupedLinesFromTimeSheets(
-  entries: TimeEntryWithLines[],
+  entries: TimeEntrySheetSource[],
   settings: TaxSettings
 ): InvoiceLineDraft[] {
   const flat = flattenAllEntryLines(entries).filter((l) => l.billable)

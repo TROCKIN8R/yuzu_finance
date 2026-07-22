@@ -5,7 +5,7 @@ import { monthEndForDate, formatPeriodLabel, dateOnly } from '../lib/fiscalPerio
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { computeUnbilledWipAsOf } from '../lib/wipAccrual'
 import { TIME_ENTRY_SELECT } from '../lib/dashboardData'
-import { entriesToMetrics, type TimeEntryWithLines } from '../lib/timeEntries'
+import { entriesToMetrics } from '../lib/timeEntries'
 import type { MetricsProject } from '../lib/billingMetrics'
 import { formatCad } from '../lib/format'
 import { Button } from '../components/Button'
@@ -57,7 +57,7 @@ export function PeriodClosePage() {
 
     const invoiceDates = new Map((invoices.data ?? []).map((inv) => [inv.id, inv.invoice_date]))
     const wip = computeUnbilledWipAsOf(
-      entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
+      entriesToMetrics(timeEntries.data ?? []),
       (fixedProjects.data ?? []) as MetricsProject[],
       periodEnd,
       invoiceDates

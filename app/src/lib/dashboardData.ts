@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import type { OrganizationSettings } from './types'
 import type { MetricsProject, MetricsTimeEntry } from './billingMetrics'
-import { entriesToMetrics, type TimeEntryWithLines } from './timeEntries'
+import { entriesToMetrics } from './timeEntries'
 import { isRevenueInvoice } from './taxes'
 
 export const TIME_ENTRY_SELECT =
@@ -24,7 +24,7 @@ export async function fetchDashboardBillingData(): Promise<DashboardRawData> {
   ])
 
   return {
-    timeEntries: entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
+    timeEntries: entriesToMetrics(timeEntries.data ?? []),
     fixedProjects: (fixedProjects.data ?? []) as MetricsProject[],
     partners: partners.data ?? [],
   }

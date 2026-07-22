@@ -15,6 +15,7 @@ import {
   buildLegacyLinesFromTimeEntries,
   buildLineFromFixedProject,
   sumInvoiceLines,
+  type InvoiceLineDraft,
 } from '../lib/invoice'
 import { addDays, formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
@@ -191,6 +192,8 @@ export function InvoicesPage() {
       .order('sort_order')
     if (lines && lines.length > 0) {
       setLineItems(lines as InvoiceLineItem[])
+    } else if (!settings) {
+      setLineItems([])
     } else {
       const { data: entries } = await supabase
         .from('time_entries')
@@ -198,13 +201,11 @@ export function InvoicesPage() {
         .eq('invoice_id', inv.id)
         .order('entry_date')
       const tax = effectiveTaxSettings(settings, inv.include_sales_tax ?? false)
-      const withLines = (entries as TimeEntryWithLines[]) ?? []
+      const withLines = entries ?? []
       const legacy =
-        settings && withLines.some((e) => (e.time_entry_lines ?? []).length > 0)
+        withLines.some((e) => (e.time_entry_lines ?? []).length > 0)
           ? buildGroupedLinesFromTimeSheets(withLines, tax)
-          : settings
-            ? buildLegacyLinesFromTimeEntries(withLines as TimeEntry[], tax)
-            : []
+          : buildLegacyLinesFromTimeEntries(withLines as TimeEntry[], tax)
       setLineItems(legacy as InvoiceLineItem[])
     }
     setDetailOpen(true)

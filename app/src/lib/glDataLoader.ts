@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import type { GeneralLedgerBuildInput } from './financials'
 import type { MetricsProject } from './billingMetrics'
 import { TIME_ENTRY_SELECT } from './dashboardData'
-import { entriesToMetrics, type TimeEntryWithLines } from './timeEntries'
+import { entriesToMetrics } from './timeEntries'
 
 export async function fetchGeneralLedgerData(): Promise<{
   data: GeneralLedgerBuildInput
@@ -77,7 +77,7 @@ export async function fetchGeneralLedgerData(): Promise<{
       salesTaxRemittances: salesTax.data ?? [],
       adjustments: adjustments.data ?? [],
       settings: settingsRow.data,
-      timeEntries: entriesToMetrics((timeEntries.data ?? []) as TimeEntryWithLines[]),
+      timeEntries: entriesToMetrics(timeEntries.data ?? []),
       fixedProjects: (fixedProjects.data ?? []) as MetricsProject[],
     },
     warnings,
