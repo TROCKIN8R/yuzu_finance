@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, ExpenseCategory, OrganizationSettings } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
-import { computePurchaseTaxes } from '../lib/taxes'
+import { computePurchaseTaxesFromTotal } from '../lib/taxes'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { deleteEntityDocuments } from '../lib/documents'
@@ -22,6 +22,10 @@ import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'other']
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100
+}
+
 type Filter = 'all' | 'unreimbursed' | 'reimbursed'
 
 const empty = {
@@ -30,9 +34,11 @@ const empty = {
   vendor: '',
   category: 'other' as ExpenseCategory,
   description: '',
+  total: 0,
   amount: 0,
   gst: 0,
   qst: 0,
+  applyTax: true,
   taxable: false,
   notes: '',
 }
@@ -96,15 +102,22 @@ export function EmployeeExpensesPage() {
     setSettings(set.data)
   }
 
-  function recalcTaxes(amount: number) {
-    if (!settings) return { gst: 0, qst: 0 }
-    const t = computePurchaseTaxes(amount, settings)
-    return { gst: t.gst, qst: t.qst }
+  function recalcExpenseTaxes(total: number, applyTax: boolean) {
+    if (!settings || !applyTax) {
+      return { amount: round2(total), gst: 0, qst: 0, total: round2(total) }
+    }
+    const t = computePurchaseTaxesFromTotal(total, settings)
+    return { amount: t.subtotal, gst: t.gst, qst: t.qst, total: t.total }
   }
 
-  function onAmountChange(amount: number) {
-    const taxes = recalcTaxes(amount)
-    setForm({ ...form, amount, ...taxes })
+  function onTotalChange(total: number) {
+    const taxes = recalcExpenseTaxes(total, form.applyTax)
+    setForm({ ...form, ...taxes })
+  }
+
+  function onTaxToggle(applyTax: boolean) {
+    const taxes = recalcExpenseTaxes(form.total, applyTax)
+    setForm({ ...form, applyTax, ...taxes })
   }
 
   function openNew() {
@@ -124,9 +137,11 @@ export function EmployeeExpensesPage() {
       vendor: e.vendor,
       category: e.category,
       description: e.description ?? '',
+      total: Number(e.total),
       amount: Number(e.amount),
       gst: Number(e.gst),
       qst: Number(e.qst),
+      applyTax: Number(e.gst) > 0 || Number(e.qst) > 0,
       taxable: e.taxable,
       notes: e.notes ?? '',
     })
@@ -142,16 +157,19 @@ export function EmployeeExpensesPage() {
     }
     const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
     if (blockIfClosed(prior?.expense_date, form.expense_date)) return
-    const total = form.amount + form.gst + form.qst
+    const amount = form.applyTax ? form.amount : round2(form.total)
+    const gst = form.applyTax ? form.gst : 0
+    const qst = form.applyTax ? form.qst : 0
+    const total = form.applyTax ? form.total : amount
     const payload = {
       employee_id: form.employee_id,
       expense_date: form.expense_date,
       vendor: form.vendor,
       category: form.category,
       description: form.description || null,
-      amount: form.amount,
-      gst: form.gst,
-      qst: form.qst,
+      amount,
+      gst,
+      qst,
       total,
       taxable: form.taxable,
       notes: form.notes || null,
@@ -380,16 +398,30 @@ export function EmployeeExpensesPage() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </Field>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Montant HT *">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.applyTax} onChange={(e) => onTaxToggle(e.target.checked)} />
+            Calculer TPS/TVQ (Québec) à partir du total TTC
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Field label="Total TTC *">
               <input
                 type="number"
                 step="0.01"
                 min="0"
                 className={inputClass}
                 required
+                value={form.total}
+                onChange={(e) => onTotalChange(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Montant HT">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className={inputClass}
                 value={form.amount}
-                onChange={(e) => onAmountChange(Number(e.target.value))}
+                onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
               />
             </Field>
             <Field label="TPS (CTI)">
@@ -413,9 +445,9 @@ export function EmployeeExpensesPage() {
               />
             </Field>
           </div>
-          {settings && (
+          {settings && form.applyTax && (
             <p className="text-xs text-muted">
-              Total TTC : <strong>{formatCad(form.amount + form.gst + form.qst)}</strong>
+              TPS {Math.round(settings.gst_rate * 10000) / 100}% · TVQ {Math.round(settings.qst_rate * 10000) / 100}% sur HT+TPS
             </p>
           )}
           <label className="flex items-center gap-2 text-sm">
