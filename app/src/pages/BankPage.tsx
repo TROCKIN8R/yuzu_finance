@@ -20,7 +20,7 @@ import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
 import { employeeDisplayName } from '../lib/payrollCalc'
-import { computePurchaseTaxesFromTotal } from '../lib/taxes'
+import { splitPurchaseTotal } from '../lib/taxes'
 import { documentAcceptAttribute, uploadDocument } from '../lib/documents'
 import {
   assignBankCorporateTax,
@@ -45,6 +45,7 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Field, inputClass } from '../components/Field'
+import { NumberInput } from '../components/NumberInput'
 import { EmptyState } from '../components/EmptyState'
 import { FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
@@ -325,11 +326,7 @@ export function BankPage() {
   }
 
   function recalcExpenseTaxes(total: number, applyTax: boolean) {
-    if (!settings || !applyTax) {
-      return { amount: round2(total), gst: 0, qst: 0, total: round2(total) }
-    }
-    const t = computePurchaseTaxesFromTotal(total, settings)
-    return { amount: t.subtotal, gst: t.gst, qst: t.qst, total: t.total }
+    return splitPurchaseTotal(total, applyTax, settings)
   }
 
   function openAssign(tx: BankTransaction) {
@@ -391,13 +388,17 @@ export function BankPage() {
   }
 
   function onExpenseTotalChange(total: number) {
-    const taxes = recalcExpenseTaxes(total, expForm.applyTax)
-    setExpForm({ ...expForm, ...taxes })
+    setExpForm((prev) => {
+      const taxes = recalcExpenseTaxes(total, prev.applyTax)
+      return { ...prev, ...taxes }
+    })
   }
 
   function onExpenseTaxToggle(applyTax: boolean) {
-    const taxes = recalcExpenseTaxes(expForm.total, applyTax)
-    setExpForm({ ...expForm, applyTax, ...taxes })
+    setExpForm((prev) => {
+      const taxes = recalcExpenseTaxes(prev.total, applyTax)
+      return { ...prev, applyTax, ...taxes }
+    })
   }
 
   function onPartnerSelect(partnerId: string) {
@@ -827,14 +828,12 @@ export function BankPage() {
                       />
                     </Field>
                     <Field label="Montant *">
-                      <input
-                        type="number"
+                      <NumberInput
                         step="0.01"
                         min="0.01"
-                        className={inputClass}
                         required
                         value={payForm.amount}
-                        onChange={(e) => setPayForm({ ...payForm, amount: Number(e.target.value) })}
+                        onChange={(amount) => setPayForm((prev) => ({ ...prev, amount }))}
                       />
                     </Field>
                   </div>
@@ -907,44 +906,36 @@ export function BankPage() {
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <Field label="Total TTC *">
-                  <input
-                    type="number"
+                  <NumberInput
                     step="0.01"
                     min="0"
-                    className={inputClass}
                     required
                     value={expForm.total}
-                    onChange={(e) => onExpenseTotalChange(Number(e.target.value))}
+                    onChange={onExpenseTotalChange}
                   />
                 </Field>
                 <Field label="Montant HT">
-                  <input
-                    type="number"
+                  <NumberInput
                     step="0.01"
                     min="0"
-                    className={inputClass}
                     value={expForm.amount}
-                    onChange={(e) => setExpForm({ ...expForm, amount: Number(e.target.value) })}
+                    onChange={(amount) => setExpForm((prev) => ({ ...prev, amount }))}
                   />
                 </Field>
                 <Field label="TPS (CTI)">
-                  <input
-                    type="number"
+                  <NumberInput
                     step="0.01"
                     min="0"
-                    className={inputClass}
                     value={expForm.gst}
-                    onChange={(e) => setExpForm({ ...expForm, gst: Number(e.target.value) })}
+                    onChange={(gst) => setExpForm((prev) => ({ ...prev, gst }))}
                   />
                 </Field>
                 <Field label="TVQ (RTI)">
-                  <input
-                    type="number"
+                  <NumberInput
                     step="0.01"
                     min="0"
-                    className={inputClass}
                     value={expForm.qst}
-                    onChange={(e) => setExpForm({ ...expForm, qst: Number(e.target.value) })}
+                    onChange={(qst) => setExpForm((prev) => ({ ...prev, qst }))}
                   />
                 </Field>
               </div>
@@ -1265,14 +1256,12 @@ export function BankPage() {
               </select>
             </Field>
             <Field label="Montant *">
-              <input
-                type="number"
+              <NumberInput
                 step="0.01"
                 min="0.01"
-                className={inputClass}
                 required
-                value={manualForm.amount || ''}
-                onChange={(e) => setManualForm({ ...manualForm, amount: Number(e.target.value) })}
+                value={manualForm.amount}
+                onChange={(amount) => setManualForm((prev) => ({ ...prev, amount }))}
               />
             </Field>
             <Field label="Code (optionnel)">

@@ -28,6 +28,19 @@ export function lineAmount(hours: number, rate: number): number {
   return Math.round(hours * rate * 100) / 100
 }
 
+/** Controlled number inputs: blank instead of 0 to avoid leading-zero typing (0500). */
+export function numberFieldValue(n: number): string {
+  if (n === 0) return ''
+  return String(n)
+}
+
+export function parseNumberField(raw: string): number {
+  const trimmed = raw.trim()
+  if (trimmed === '') return 0
+  const n = Number(trimmed)
+  return Number.isFinite(n) ? n : 0
+}
+
 /** Supabase nested selects may type as T or T[] depending on inference. */
 export function relationOne<T>(value: T | T[] | null | undefined): T | null {
   if (value == null) return null
