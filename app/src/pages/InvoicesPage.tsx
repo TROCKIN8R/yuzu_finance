@@ -14,6 +14,7 @@ import {
 import {
   buildLegacyLinesFromTimeEntries,
   buildLineFromFixedProject,
+  distinctPoNumbers,
   sumInvoiceLines,
   type InvoiceLineDraft,
 } from '../lib/invoice'
@@ -106,6 +107,7 @@ export function InvoicesPage() {
   const [docVersion, setDocVersion] = useState(0)
   const [selected, setSelected] = useState<Invoice | null>(null)
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([])
+  const [invoicePoNumbers, setInvoicePoNumbers] = useState<string[]>([])
   const [createPartnerId, setCreatePartnerId] = useState('')
   const [unbilled, setUnbilled] = useState<TimeEntryWithLines[]>([])
   const [unbilledFixed, setUnbilledFixed] = useState<Project[]>([])
@@ -190,8 +192,19 @@ export function InvoicesPage() {
     if (createPartnerId) await loadUnbilled(createPartnerId)
   }
 
+  async function loadPoNumbersForLines(lines: { project_id?: string | null }[]) {
+    const projectIds = [...new Set(lines.map((l) => l.project_id).filter((id): id is string => !!id))]
+    if (projectIds.length === 0) {
+      setInvoicePoNumbers([])
+      return
+    }
+    const { data } = await supabase.from('projects').select('po_number').in('id', projectIds)
+    setInvoicePoNumbers(distinctPoNumbers((data as Pick<Project, 'po_number'>[]) ?? []))
+  }
+
   async function viewDetail(inv: Invoice) {
     setSelected(inv)
+    setInvoicePoNumbers([])
     const { data: lines } = await supabase
       .from('invoice_line_items')
       .select('*')
@@ -199,6 +212,7 @@ export function InvoicesPage() {
       .order('sort_order')
     if (lines && lines.length > 0) {
       setLineItems(lines as InvoiceLineItem[])
+      await loadPoNumbersForLines(lines)
     } else if (!settings) {
       setLineItems([])
     } else {
@@ -214,6 +228,7 @@ export function InvoicesPage() {
           ? buildGroupedLinesFromTimeSheets(withLines, tax)
           : buildLegacyLinesFromTimeEntries(withLines as TimeEntry[], tax)
       setLineItems(legacy as InvoiceLineItem[])
+      await loadPoNumbersForLines(legacy)
     }
     setDetailOpen(true)
   }
@@ -343,7 +358,13 @@ export function InvoicesPage() {
     const partner = partners.find((p) => p.id === selected.partner_id)
     if (!partner) return
     try {
-      await downloadInvoicePdf({ invoice: selected, partner, settings, lines: lineItems })
+      await downloadInvoicePdf({
+        invoice: selected,
+        partner,
+        settings,
+        lines: lineItems,
+        poNumbers: invoicePoNumbers,
+      })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur lors de la génération du PDF')
     }
@@ -355,7 +376,13 @@ export function InvoicesPage() {
     if (!partner) return
     setSavingPdf(true)
     try {
-      await saveInvoicePdfToStorage({ invoice: selected, partner, settings, lines: lineItems })
+      await saveInvoicePdfToStorage({
+        invoice: selected,
+        partner,
+        settings,
+        lines: lineItems,
+        poNumbers: invoicePoNumbers,
+      })
       setDocVersion((v) => v + 1)
       alert('PDF enregistré dans Supabase.')
     } catch (e) {
@@ -680,6 +707,12 @@ export function InvoicesPage() {
                   {INVOICE_LANGUAGE_LABELS[partnerInvoiceLanguage(partners.find((p) => p.id === selected.partner_id)?.language)]}
                 </div>
               </div>
+              {invoicePoNumbers.length > 0 && (
+                <div>
+                  <div className="text-muted text-xs">N° bon de commande (PO)</div>
+                  <div className="font-medium">{invoicePoNumbers.join(', ')}</div>
+                </div>
+              )}
             </div>
 
             <LineItemsTable

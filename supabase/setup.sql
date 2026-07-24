@@ -151,6 +151,7 @@ create table public.projects (
   currency text not null default 'CAD',
   billing_type text not null default 'hourly' check (billing_type in ('hourly', 'fixed')),
   fixed_price numeric(10, 2) check (fixed_price is null or fixed_price >= 0),
+  po_number text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

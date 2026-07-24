@@ -297,6 +297,7 @@ export interface Project {
   billing_type: BillingType
   fixed_price: number | null
   invoice_id: string | null
+  po_number: string | null
   notes: string | null
   created_at: string
   updated_at: string

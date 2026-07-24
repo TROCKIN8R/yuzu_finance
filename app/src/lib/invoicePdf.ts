@@ -13,6 +13,8 @@ interface PdfInput {
   partner: Partner
   settings: OrganizationSettings | null
   lines: (InvoiceLineItem | InvoiceLineDraft)[]
+  /** Purchase order / bon de commande numbers from related projects (when set). */
+  poNumbers?: string[]
 }
 
 const LOGO_URL = `${import.meta.env.BASE_URL}yuzu-logo.png`
@@ -104,7 +106,13 @@ function drawCompanyHeader(
   return headerBottom + 8
 }
 
-export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }: PdfInput): Promise<Blob> {
+export async function buildInvoicePdfBlob({
+  invoice,
+  partner,
+  settings,
+  lines,
+  poNumbers = [],
+}: PdfInput): Promise<Blob> {
   const lang = partnerInvoiceLanguage(partner.language)
   const t = invoiceCopy(lang)
   const doc = new jsPDF()
@@ -128,7 +136,12 @@ export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }:
   doc.text(`${t.currency} : ${currency}`, 120, y)
   y += 6
   doc.text(`${t.paymentTerms} : ${formatPartnerPaymentTerms(partner, lang, settings)}`, margin, y)
-  y += 10
+  y += 6
+  if (poNumbers.length > 0) {
+    doc.text(`${t.poNumber} : ${poNumbers.join(', ')}`, margin, y)
+    y += 6
+  }
+  y += 4
 
   doc.setFontSize(10)
   doc.text(t.billTo, margin, y)

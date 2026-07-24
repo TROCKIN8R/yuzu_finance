@@ -24,6 +24,7 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 | `20260630150100_accounting_adjustments.sql` | **`accounting_adjustments` table** (manual journal entries) |
 | `20260722180000_document_attachments.sql` | **`document_attachments` table** + private Storage bucket `documents` |
 | `20260628140000_shareholders.sql` | **`shareholders` table** + dividend allocations by shareholder |
+| `20260724220000_project_po_number.sql` | Optional `projects.po_number` (PO / BC) for invoices |
 
 If Banque import fails with `relation "bank_transactions" does not exist`, run **`20260629100000_bank_import.sql`** — it now creates the table, RLS, and import columns in one step.
 

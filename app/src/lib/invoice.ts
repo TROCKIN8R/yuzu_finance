@@ -113,3 +113,16 @@ export function projectAmountLabel(project: Pick<Project, 'billing_type' | 'defa
   }
   return `${formatCad(project.default_hourly_rate)}/h`
 }
+
+/** Distinct non-empty PO / BC numbers from projects linked to an invoice. */
+export function distinctPoNumbers(projects: Pick<Project, 'po_number'>[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const project of projects) {
+    const po = project.po_number?.trim()
+    if (!po || seen.has(po)) continue
+    seen.add(po)
+    out.push(po)
+  }
+  return out
+}

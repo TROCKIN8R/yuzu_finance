@@ -35,6 +35,7 @@ export function ProjectsPage() {
     billing_type: 'hourly' as BillingType,
     default_hourly_rate: 150,
     fixed_price: 3500,
+    po_number: '',
     notes: '',
   })
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -52,6 +53,7 @@ export function ProjectsPage() {
         search,
         p.name,
         p.partners?.legal_name,
+        p.po_number,
         p.notes,
         p.default_hourly_rate,
         p.fixed_price,
@@ -84,6 +86,7 @@ export function ProjectsPage() {
       billing_type: 'hourly',
       default_hourly_rate: 150,
       fixed_price: 3500,
+      po_number: '',
       notes: '',
     })
     setEditingId(null)
@@ -98,6 +101,7 @@ export function ProjectsPage() {
       billing_type: p.billing_type === 'fixed' ? 'fixed' : 'hourly',
       default_hourly_rate: p.default_hourly_rate,
       fixed_price: p.fixed_price != null ? Number(p.fixed_price) : 3500,
+      po_number: p.po_number ?? '',
       notes: p.notes ?? '',
     })
     setEditingId(p.id)
@@ -114,6 +118,7 @@ export function ProjectsPage() {
       default_hourly_rate: form.billing_type === 'hourly' ? form.default_hourly_rate : 0,
       fixed_price: form.billing_type === 'fixed' ? form.fixed_price : null,
       currency: 'CAD' as const,
+      po_number: form.po_number.trim() || null,
       notes: form.notes || null,
     }
     if (editingId) {
@@ -228,7 +233,12 @@ export function ProjectsPage() {
               ) : (
                 filtered.map((p) => (
                   <tr key={p.id} className="hover:bg-stone-50/50">
-                    <td className="px-3 py-3 font-medium">{p.name}</td>
+                    <td className="px-3 py-3 font-medium">
+                      {p.name}
+                      {p.po_number?.trim() && (
+                        <div className="text-xs font-normal text-muted mt-0.5">BC {p.po_number.trim()}</div>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-muted">{p.partners?.legal_name ?? '—'}</td>
                     <td className="px-3 py-3">
                       <Badge label={billingTypeLabel(p.billing_type)} tone={p.billing_type === 'fixed' ? 'sent' : 'active'} />
@@ -333,6 +343,14 @@ export function ProjectsPage() {
               Les projets forfaitaires se facturent à l&apos;étape Factures. Le temps peut y être enregistré pour le suivi interne (non visible client).
             </p>
           )}
+          <Field label="N° bon de commande (PO)">
+            <input
+              className={inputClass}
+              value={form.po_number}
+              onChange={(e) => setForm({ ...form, po_number: e.target.value })}
+              placeholder="Optionnel — apparaîtra sur les factures"
+            />
+          </Field>
           <Field label="Notes">
             <textarea
               className={inputClass}
