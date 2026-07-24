@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import { formatCad } from '../lib/format'
+import { areAmountsHidden, MASKED_CAD } from '../lib/amountPrivacy'
 import type { EquityBreakdown, MonthlySeriesPoint } from '../lib/dashboardSeries'
 
 const PAD = { top: 16, right: 12, bottom: 36, left: 48 }
 const CHART_H = 200
 
 function compactCad(n: number) {
+  if (areAmountsHidden()) return MASKED_CAD
   const abs = Math.abs(n)
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M $`
   if (abs >= 10_000) return `${(n / 1_000).toFixed(0)}k $`

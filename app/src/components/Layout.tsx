@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { AmountPrivacyProvider, useAmountPrivacy } from '../contexts/AmountPrivacyContext'
 import { PeriodCloseProvider } from '../contexts/PeriodCloseContext'
 import { supabase } from '../lib/supabase'
 import { Button } from './Button'
-import { AppIcon, ICON_SIZE, ICON_STROKE, LogOut, Menu, Settings, X, navIcons, type NavIconKey } from './icons'
+import { AppIcon, Eye, EyeOff, ICON_SIZE, ICON_STROKE, LogOut, Menu, Settings, X, navIcons, type NavIconKey } from './icons'
 
 type NavItem = {
   to: string
@@ -89,6 +90,23 @@ function settingsLinkClass(isActive: boolean) {
   }`
 }
 
+function PrivacyToggleButton() {
+  const { amountsHidden, toggleAmountsHidden } = useAmountPrivacy()
+  const Icon = amountsHidden ? EyeOff : Eye
+  return (
+    <button
+      type="button"
+      onClick={toggleAmountsHidden}
+      className={settingsLinkClass(amountsHidden)}
+      aria-label={amountsHidden ? 'Afficher les montants' : 'Masquer les montants'}
+      aria-pressed={amountsHidden}
+      title={amountsHidden ? 'Afficher les montants' : 'Masquer les montants'}
+    >
+      <Icon size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
+    </button>
+  )
+}
+
 function isNavItemActive(to: string, pathname: string) {
   if (to === '/') return pathname === '/'
   if (to === '/billing/projects') return pathname.startsWith('/billing')
@@ -122,20 +140,31 @@ function ProfileHeader({
         <div className={`font-semibold truncate ${compact ? 'text-sm' : 'text-sm leading-tight'}`}>{profileName}</div>
         {!compact && <div className="text-xs text-muted truncate">Yuzu Finance</div>}
       </div>
-      <NavLink
-        to="/settings"
-        onClick={onNavigate}
-        className={settingsLinkClass(settingsActive)}
-        aria-label="Paramètres"
-        title="Paramètres"
-      >
-        <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
-      </NavLink>
+      <div className="flex items-center gap-0.5 shrink-0">
+        <PrivacyToggleButton />
+        <NavLink
+          to="/settings"
+          onClick={onNavigate}
+          className={settingsLinkClass(settingsActive)}
+          aria-label="Paramètres"
+          title="Paramètres"
+        >
+          <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
+        </NavLink>
+      </div>
     </div>
   )
 }
 
 export function Layout() {
+  return (
+    <AmountPrivacyProvider>
+      <LayoutShell />
+    </AmountPrivacyProvider>
+  )
+}
+
+function LayoutShell() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -198,14 +227,17 @@ export function Layout() {
         <div className="flex flex-col items-center min-w-0 flex-1 px-1">
           <span className="font-semibold text-sm truncate w-full text-center">{pageTitle}</span>
         </div>
-        <NavLink
-          to="/settings"
-          className={settingsLinkClass(settingsActive)}
-          aria-label="Paramètres"
-          title="Paramètres"
-        >
-          <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
-        </NavLink>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <PrivacyToggleButton />
+          <NavLink
+            to="/settings"
+            className={settingsLinkClass(settingsActive)}
+            aria-label="Paramètres"
+            title="Paramètres"
+          >
+            <Settings size={ICON_SIZE.control} strokeWidth={ICON_STROKE.control} className="shrink-0" aria-hidden />
+          </NavLink>
+        </div>
       </header>
 
       {menuOpen && (
