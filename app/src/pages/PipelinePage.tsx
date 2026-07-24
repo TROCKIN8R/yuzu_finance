@@ -5,7 +5,6 @@ import type { Project, ProjectWeekPlan } from '../lib/types'
 import { formatCad, numberFieldValue, parseNumberField, relationOne, todayIso } from '../lib/format'
 import { projectAmountLabel } from '../lib/invoice'
 import {
-  addWeeks,
   cellRevenue,
   formatWeekLabel,
   hoursKey,
@@ -14,30 +13,29 @@ import {
   startOfWeekMonday,
   totalHoursByProject,
   weekColumnTotals,
-  weekStarts,
+  weeksForNextMonths,
   type PipelineProject,
 } from '../lib/pipeline'
 import { Badge } from '../components/Badge'
-import { Button } from '../components/Button'
 import { EmptyState } from '../components/EmptyState'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 
 type BillingOutletContext = { refreshMetrics?: () => void }
 
-const WEEK_COUNT = 8
+const HORIZON_MONTHS = 6
 const PIPELINE_STATUSES = new Set(['active', 'on_hold'])
 
 export function PipelinePage() {
   const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [projects, setProjects] = useState<PipelineProject[]>([])
   const [plans, setPlans] = useState<ProjectWeekPlan[]>([])
-  const [anchorWeek, setAnchorWeek] = useState(() => startOfWeekMonday(todayIso()))
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const draftRef = useRef<Map<string, string>>(new Map())
   const [, bump] = useState(0)
 
-  const weeks = useMemo(() => weekStarts(anchorWeek, WEEK_COUNT), [anchorWeek])
+  const thisWeek = startOfWeekMonday(todayIso())
+  const weeks = useMemo(() => weeksForNextMonths(todayIso(), HORIZON_MONTHS), [])
 
   const visibleProjects = useMemo(
     () => projects.filter((p) => PIPELINE_STATUSES.has(p.status)).sort((a, b) => a.name.localeCompare(b.name, 'fr')),
@@ -186,28 +184,14 @@ export function PipelinePage() {
     }
   }
 
-  const thisWeek = startOfWeekMonday(todayIso())
-
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-ink">Pipeline</h2>
-          <p className="text-sm text-muted mt-0.5">
-            Heures prévues par semaine · revenus estimés (horaire × taux, forfait réparti au prorata des heures)
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="secondary" onClick={() => setAnchorWeek(addWeeks(anchorWeek, -WEEK_COUNT))}>
-            ← {WEEK_COUNT} sem.
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setAnchorWeek(thisWeek)}>
-            Aujourd’hui
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => setAnchorWeek(addWeeks(anchorWeek, WEEK_COUNT))}>
-            {WEEK_COUNT} sem. →
-          </Button>
-        </div>
+      <div>
+        <h2 className="text-base font-semibold text-ink">Pipeline</h2>
+        <p className="text-sm text-muted mt-0.5">
+          Prochains {HORIZON_MONTHS} mois · heures prévues par semaine · revenus estimés (horaire × taux, forfait au
+          prorata)
+        </p>
       </div>
 
       {error && (
@@ -217,7 +201,7 @@ export function PipelinePage() {
       {visibleProjects.length === 0 ? (
         <EmptyState message="Aucun projet actif ou en pause — créez-en un pour planifier la charge et les revenus." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-white">
+        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-white">
           <table className="min-w-max w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-stone-50/80">
@@ -311,7 +295,7 @@ export function PipelinePage() {
             <tfoot>
               <tr className="bg-stone-50/90 border-t border-border font-medium">
                 <td className="sticky left-0 z-10 bg-stone-50 px-3 py-2.5 border-r border-border">
-                  Totaux ({WEEK_COUNT} sem.)
+                  Totaux ({weeks.length} sem.)
                 </td>
                 {weeks.map((week) => {
                   const col = weekColumnTotals(visibleProjects, week, hoursMap, totalsByProject)
@@ -333,8 +317,8 @@ export function PipelinePage() {
       )}
 
       <p className="text-xs text-muted">
-        Forfaits : le montant du projet est réparti au prorata de toutes les heures planifiées (toutes semaines), pas
-        seulement la fenêtre affichée.
+        Faites défiler horizontalement pour voir toutes les semaines. Forfaits : montant réparti au prorata de toutes
+        les heures planifiées du projet.
       </p>
 
       <WorkflowFooter to="/billing/time" label="Enregistrer du temps">
