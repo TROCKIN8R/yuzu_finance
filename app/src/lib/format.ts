@@ -1,7 +1,18 @@
+export const DEFAULT_CURRENCY = 'CAD' as const
+
 export function formatCad(amount: number): string {
   return new Intl.NumberFormat('fr-CA', {
     style: 'currency',
-    currency: 'CAD',
+    currency: DEFAULT_CURRENCY,
+  }).format(amount)
+}
+
+/** Invoice / external docs — show the CAD code explicitly (not just $). */
+export function formatCadCode(amount: number, language: 'fr' | 'en' = 'fr'): string {
+  return new Intl.NumberFormat(language === 'en' ? 'en-CA' : 'fr-CA', {
+    style: 'currency',
+    currency: DEFAULT_CURRENCY,
+    currencyDisplay: 'code',
   }).format(amount)
 }
 

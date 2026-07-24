@@ -341,6 +341,7 @@ export interface Invoice {
   invoice_number: string
   invoice_date: string
   due_date: string
+  currency: string
   subtotal: number
   gst: number
   qst: number
@@ -442,6 +443,7 @@ export interface Database {
         Insert: OmitSystemFields<Invoice> & {
           id?: string
           user_id?: string
+          currency?: string
           subtotal?: number
           gst?: number
           qst?: number

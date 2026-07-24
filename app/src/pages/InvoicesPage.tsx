@@ -17,7 +17,7 @@ import {
   sumInvoiceLines,
   type InvoiceLineDraft,
 } from '../lib/invoice'
-import { addDays, formatCad, formatDate, todayIso } from '../lib/format'
+import { DEFAULT_CURRENCY, addDays, formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { effectiveTaxSettings } from '../lib/taxes'
 import { deleteInvoice } from '../lib/invoiceActions'
@@ -258,6 +258,7 @@ export function InvoicesPage() {
         invoice_number: num,
         invoice_date: invoiceDate,
         due_date: dueDate,
+        currency: DEFAULT_CURRENCY,
         subtotal: totals.subtotal,
         gst: totals.gst,
         qst: totals.qst,
@@ -652,6 +653,10 @@ export function InvoicesPage() {
               <div>
                 <div className="text-muted text-xs">Échéance</div>
                 <div>{formatDate(selected.due_date)}</div>
+              </div>
+              <div>
+                <div className="text-muted text-xs">Devise</div>
+                <div>{selected.currency || DEFAULT_CURRENCY}</div>
               </div>
               <div>
                 <div className="text-muted text-xs">Langue PDF</div>

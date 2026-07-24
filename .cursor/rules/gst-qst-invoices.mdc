@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## Issued invoices (Supabase `invoices`)
 
-Required fields: invoice #, date, client legal name, description, **subtotal, GST, QST, total**, payment terms, company GST/QST numbers from `organization_settings`.
+Required fields: invoice #, date, client legal name, description, **currency (CAD)**, **subtotal, GST, QST, total**, payment terms, company GST/QST numbers from `organization_settings`. All invoice amounts are CAD only.
 
 Numbering: sequential, no gaps without documented reason in `company/decision-log.md`.
 

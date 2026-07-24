@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Partner, Invoice, InvoiceLineItem, OrganizationSettings } from './types'
-import { formatDate } from './format'
+import { DEFAULT_CURRENCY, formatCadCode, formatDate } from './format'
 import type { InvoiceLineDraft } from './invoice'
 import { invoiceCopy, partnerInvoiceLanguage } from './invoiceI18n'
 import { formatPartnerPaymentTerms } from './partners'
@@ -120,10 +120,12 @@ export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }:
   doc.text(t.invoiceTitle, margin, y)
   y += 8
   doc.setFontSize(10)
+  const currency = invoice.currency || DEFAULT_CURRENCY
   doc.text(`${t.number} ${invoice.invoice_number}`, margin, y)
   doc.text(`${t.date} : ${formatDate(invoice.invoice_date, lang)}`, 120, y)
   y += 6
   doc.text(`${t.dueDate} : ${formatDate(invoice.due_date, lang)}`, margin, y)
+  doc.text(`${t.currency} : ${currency}`, 120, y)
   y += 6
   doc.text(`${t.paymentTerms} : ${formatPartnerPaymentTerms(partner, lang, settings)}`, margin, y)
   y += 10
@@ -158,8 +160,8 @@ export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }:
       line.unit_label === 'h' ? `${Number(line.quantity).toFixed(2)} h` : `${Number(line.quantity).toFixed(0)}`
     const unitPrice =
       line.unit_label === 'h'
-        ? `${Number(line.unit_price).toFixed(2)} $/h`
-        : `${Number(line.unit_price).toFixed(2)} $`
+        ? `${formatCadCode(Number(line.unit_price), lang)}/h`
+        : formatCadCode(Number(line.unit_price), lang)
     const base = [
       line.line_date ? formatDate(line.line_date, lang) : '—',
       line.description,
@@ -169,13 +171,13 @@ export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }:
     if (showTaxes) {
       return [
         ...base,
-        `${Number(line.subtotal).toFixed(2)} $`,
-        `${Number(line.gst).toFixed(2)} $`,
-        `${Number(line.qst).toFixed(2)} $`,
-        `${Number(line.total).toFixed(2)} $`,
+        formatCadCode(Number(line.subtotal), lang),
+        formatCadCode(Number(line.gst), lang),
+        formatCadCode(Number(line.qst), lang),
+        formatCadCode(Number(line.total), lang),
       ]
     }
-    return [...base, `${Number(line.total).toFixed(2)} $`]
+    return [...base, formatCadCode(Number(line.total), lang)]
   })
 
   autoTable(doc, {
@@ -206,14 +208,14 @@ export async function buildInvoicePdfBlob({ invoice, partner, settings, lines }:
   const rightX = 195
   doc.setFontSize(10)
   if (showTaxes) {
-    doc.text(`${t.subtotal} : ${Number(invoice.subtotal).toFixed(2)} $`, rightX, finalY, { align: 'right' })
-    doc.text(`${t.gst} : ${Number(invoice.gst).toFixed(2)} $`, rightX, finalY + 6, { align: 'right' })
-    doc.text(`${t.qst} : ${Number(invoice.qst).toFixed(2)} $`, rightX, finalY + 12, { align: 'right' })
+    doc.text(`${t.subtotal} : ${formatCadCode(Number(invoice.subtotal), lang)}`, rightX, finalY, { align: 'right' })
+    doc.text(`${t.gst} : ${formatCadCode(Number(invoice.gst), lang)}`, rightX, finalY + 6, { align: 'right' })
+    doc.text(`${t.qst} : ${formatCadCode(Number(invoice.qst), lang)}`, rightX, finalY + 12, { align: 'right' })
     doc.setFontSize(12)
-    doc.text(`${t.total} : ${Number(invoice.total).toFixed(2)} $`, rightX, finalY + 20, { align: 'right' })
+    doc.text(`${t.total} : ${formatCadCode(Number(invoice.total), lang)}`, rightX, finalY + 20, { align: 'right' })
   } else {
     doc.setFontSize(12)
-    doc.text(`${t.total} : ${Number(invoice.total).toFixed(2)} $`, rightX, finalY, { align: 'right' })
+    doc.text(`${t.total} : ${formatCadCode(Number(invoice.total), lang)}`, rightX, finalY, { align: 'right' })
   }
 
   const paymentInstructions = resolvePaymentInstructions(settings, lang)

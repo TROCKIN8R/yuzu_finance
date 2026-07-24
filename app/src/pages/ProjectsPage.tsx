@@ -111,6 +111,7 @@ export function ProjectsPage() {
       billing_type: form.billing_type,
       default_hourly_rate: form.billing_type === 'hourly' ? form.default_hourly_rate : 0,
       fixed_price: form.billing_type === 'fixed' ? form.fixed_price : null,
+      currency: 'CAD' as const,
       notes: form.notes || null,
     }
     if (editingId) {

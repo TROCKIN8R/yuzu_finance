@@ -274,6 +274,7 @@ create table public.invoices (
   invoice_number text not null,
   invoice_date date not null default current_date,
   due_date date not null,
+  currency text not null default 'CAD' check (currency = 'CAD'),
   subtotal numeric(12, 2) not null default 0,
   gst numeric(12, 2) not null default 0,
   qst numeric(12, 2) not null default 0,
