@@ -19,6 +19,7 @@ export function CompensationWorkflowNav({ current }: { current?: CompensationSte
       steps={steps}
       currentId={current}
       asideLink={current ? asideLinkByStep[current] : undefined}
+      variant="tabs"
     />
   )
 }

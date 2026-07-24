@@ -3,7 +3,7 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, PayrollRun, RemittanceStatus } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
 import {
   calculatePayrollDeductions,
@@ -31,9 +31,16 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import {
+  FilterSummary,
+  FilterTh,
+  HeaderDateRange,
+  HeaderSearch,
+  HeaderSelect,
+  PlainTh,
+} from '../components/ColumnFilters'
 import { PageHeader } from '../components/PageHeader'
-import { StepPanelHeader } from '../components/WorkflowNav'
+import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 import { AlertBanner } from '../components/AlertBanner'
@@ -400,139 +407,147 @@ export function PayrollPage() {
     </div>
   )
 
-  return (
-    <PageShell className={embedded ? undefined : 'space-y-10'}>
-      <section>
-        {embedded ? (
-          <StepPanelHeader
-            step={1}
-            totalSteps={2}
-            title="Salaire"
-            hint="Paies, retenues et remises source."
-            actions={payrollActions}
+  const clearFilters = () => {
+    setSearch('')
+    setEmployeeFilter('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const content = (
+    <>
+      {embedded ? (
+        rows.length === 0 && <StepActionBar actions={payrollActions} />
+      ) : (
+        <PageHeader
+          title="Paie"
+          subtitle={
+            <>
+              Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
+              {' · '}
+              Retenues employé : {formatCad(ytdEmployeeDeductions)}
+              {' · '}
+              Charges employeur : {formatCad(ytdEmployerContributions)}
+              {' · '}
+              Coût total : {formatCad(ytdCost)}
+            </>
+          }
+          actions={payrollActions}
+        />
+      )}
+      {activeEmployees.length === 0 && (
+        <AlertBanner>
+          Aucun employé actif —{' '}
+          <Link to="/compensation/employees" className="font-medium underline">
+            ajoutez un employé
+          </Link>{' '}
+          avant de créer une paie.
+        </AlertBanner>
+      )}
+      {embedded && (
+        <p className="text-sm text-muted">
+          Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)} · Coût total : {formatCad(ytdCost)}
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <EmptyState message="Aucune paie enregistrée." />
+      ) : (
+        <>
+          <FilterSummary
+            resultCount={filtered.length}
+            totalCount={rows.length}
+            hasFilters={hasFilters}
+            onClear={clearFilters}
+            actions={embedded ? payrollActions : undefined}
           />
-        ) : (
-          <PageHeader
-            title="Paie"
-            subtitle={
-              <>
-                Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)}
-                {' · '}
-                Retenues employé : {formatCad(ytdEmployeeDeductions)}
-                {' · '}
-                Charges employeur : {formatCad(ytdEmployerContributions)}
-                {' · '}
-                Coût total : {formatCad(ytdCost)}
-              </>
-            }
-            actions={payrollActions}
-          />
-        )}
-        {activeEmployees.length === 0 && (
-          <AlertBanner>
-            Aucun employé actif —{' '}
-            <Link to="/compensation/employees" className="font-medium underline">
-              ajoutez un employé
-            </Link>{' '}
-            avant de créer une paie.
-          </AlertBanner>
-        )}
-        {embedded && (
-          <p className="text-sm text-muted mb-4">
-            Brut{hasFilters ? ' (filtré)' : ''} : {formatCad(ytdGross)} · Coût total : {formatCad(ytdCost)}
-          </p>
-        )}
-        {rows.length === 0 ? (
-          <EmptyState message="Aucune paie enregistrée." />
-        ) : (
-          <>
-            <ListToolbar
-              search={search}
-              onSearchChange={setSearch}
-              searchPlaceholder="Employé, période, montants…"
-              resultCount={filtered.length}
-              totalCount={rows.length}
-              activeFilterCount={countActiveFilters(!!search, !!employeeFilter, !!dateFrom, !!dateTo)}
-              clearVisible={hasFilters}
-              onClearFilters={() => {
-                setSearch('')
-                setEmployeeFilter('')
-                setDateFrom('')
-                setDateTo('')
-              }}
-            >
-              <FilterSelect
-                label="Employé"
-                value={employeeFilter}
-                onChange={setEmployeeFilter}
-                options={[
-                  { value: '', label: 'Tous' },
-                  ...employees.map((e) => ({ value: e.id, label: employeeDisplayName(e) })),
-                ]}
-              />
-              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-            </ListToolbar>
-            {filtered.length === 0 ? (
-              <EmptyState message="Aucune paie ne correspond aux filtres." />
-            ) : (
-              <DataTable minWidth={1100}>
-      
-                  <thead className="bg-stone-50 text-muted text-left">
-                    <tr>
-                      <th className="px-4 py-3">Employé</th>
-                      <th className="px-4 py-3">Période</th>
-                      <th className="px-4 py-3">Brut</th>
-                      <th className="px-4 py-3">Retenues employé</th>
-                      <th className="px-4 py-3">Net</th>
-                      <th className="px-4 py-3">Charges employeur</th>
-                      <th className="px-4 py-3">Coût total</th>
-                      <th className="px-4 py-3">Payé le</th>
-                      <th className="px-4 py-3">Remise</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filtered.map((p) => (
-                      <tr key={p.id}>
-                        <td className="px-4 py-3 font-medium">
-                          {p.employees ? employeeDisplayName(p.employees) : '—'}
-                        </td>
-                        <td className="px-4 py-3">
-                          {formatDate(p.pay_period_start)} – {formatDate(p.pay_period_end)}
-                        </td>
-                        <td className="px-4 py-3">{formatCad(p.gross_pay)}</td>
-                        <td className="px-4 py-3 text-muted">{formatCad(employeeDeductionsTotal(p))}</td>
-                        <td className="px-4 py-3">
-                          {formatCad(p.net_pay)}
-                          {Number(p.reimbursement_total) > 0 && (
-                            <span className="block text-xs text-muted">+ {formatCad(p.reimbursement_total)} remb.</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
-                        <td className="px-4 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
-                        <td className="px-4 py-3 text-muted">{formatDate(p.payment_date)}</td>
-                        <td className="px-4 py-3">
-                          <Badge
-                            label={p.remittance_status === 'remitted' ? 'remise' : 'en attente'}
-                            tone={p.remittance_status === 'remitted' ? 'active' : 'draft'}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-right space-x-1">
-                          <Button variant="ghost" className={tableActionClass} onClick={() => openEditPayroll(p)}>
-                            Mod.
-                          </Button>
-                          <Button variant="danger" className={tableActionClass} onClick={() => removePayroll(p.id)}>
-                            Suppr.
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-              </DataTable>
-            )}
-          </>
-        )}
-      </section>
+          <DataTable minWidth={1100}>
+            <thead className="bg-stone-50 text-left">
+              <tr>
+                <FilterTh label="Employé">
+                  <div className="flex flex-col gap-1 min-w-[8rem]">
+                    <HeaderSelect
+                      value={employeeFilter}
+                      onChange={setEmployeeFilter}
+                      aria-label="Filtrer par employé"
+                      options={[
+                        { value: '', label: 'Tous' },
+                        ...employees.map((e) => ({ value: e.id, label: employeeDisplayName(e) })),
+                      ]}
+                    />
+                    <HeaderSearch
+                      value={search}
+                      onChange={setSearch}
+                      placeholder="Recherche…"
+                      aria-label="Rechercher une paie"
+                    />
+                  </div>
+                </FilterTh>
+                <PlainTh>Période</PlainTh>
+                <PlainTh>Brut</PlainTh>
+                <PlainTh>Retenues employé</PlainTh>
+                <PlainTh>Net</PlainTh>
+                <PlainTh>Charges employeur</PlainTh>
+                <PlainTh>Coût total</PlainTh>
+                <FilterTh label="Payé le">
+                  <HeaderDateRange
+                    from={dateFrom}
+                    to={dateTo}
+                    onFromChange={setDateFrom}
+                    onToChange={setDateTo}
+                  />
+                </FilterTh>
+                <PlainTh>Remise</PlainTh>
+                <PlainTh className="w-px" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-10 text-center text-sm text-muted">
+                    Aucune paie ne correspond aux filtres.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((p) => (
+                  <tr key={p.id} className="hover:bg-stone-50/50">
+                    <td className="px-3 py-3 font-medium">
+                      {p.employees ? employeeDisplayName(p.employees) : '—'}
+                    </td>
+                    <td className="px-3 py-3">
+                      {formatDate(p.pay_period_start)} – {formatDate(p.pay_period_end)}
+                    </td>
+                    <td className="px-3 py-3">{formatCad(p.gross_pay)}</td>
+                    <td className="px-3 py-3 text-muted">{formatCad(employeeDeductionsTotal(p))}</td>
+                    <td className="px-3 py-3">
+                      {formatCad(p.net_pay)}
+                      {Number(p.reimbursement_total) > 0 && (
+                        <span className="block text-xs text-muted">+ {formatCad(p.reimbursement_total)} remb.</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
+                    <td className="px-3 py-3 font-medium">{formatCad(payrollEmployerTotal(p))}</td>
+                    <td className="px-3 py-3 text-muted">{formatDate(p.payment_date)}</td>
+                    <td className="px-3 py-3">
+                      <Badge
+                        label={p.remittance_status === 'remitted' ? 'remise' : 'en attente'}
+                        tone={p.remittance_status === 'remitted' ? 'active' : 'draft'}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-right space-x-1">
+                      <Button variant="ghost" className={tableActionClass} onClick={() => openEditPayroll(p)}>
+                        Mod.
+                      </Button>
+                      <Button variant="danger" className={tableActionClass} onClick={() => removePayroll(p.id)}>
+                        Suppr.
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </DataTable>
+        </>
+      )}
 
       {embedded && rows.length > 0 && (
         <WorkflowFooter to="/compensation/dividends" label="Enregistrer un dividende">
@@ -731,6 +746,12 @@ export function PayrollPage() {
           </form>
         )}
       </Modal>
-    </PageShell>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-3">{content}</div>
+  }
+
+  return <PageShell className="space-y-10">{content}</PageShell>
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Partner, PartnerKind, InvoiceLanguage } from '../lib/types'
-import { matchesSearch, countActiveFilters } from '../lib/filters'
+import { matchesSearch } from '../lib/filters'
 import { INVOICE_LANGUAGE_LABELS, PARTNER_KIND_LABELS, formatInvoicePenaltyPercent } from '../lib/partners'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
@@ -9,7 +9,7 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSummary, FilterTh, HeaderSearch, HeaderSelect, PlainTh } from '../components/ColumnFilters'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 
@@ -122,8 +122,13 @@ export function PartnersPage() {
     load()
   }
 
+  const clearFilters = () => {
+    setSearch('')
+    setKindFilter('')
+  }
+
   return (
-    <PageShell>
+    <PageShell className="space-y-4">
       <PageHeader
         title="Partenaires"
         subtitle="Clients, fournisseurs, ou les deux — une fiche par organisation."
@@ -133,63 +138,67 @@ export function PartnersPage() {
         <EmptyState message="Aucun partenaire — ajoutez votre premier contact commercial." />
       ) : (
         <>
-          <ListToolbar
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Nom, contact, courriel, ville…"
+          <FilterSummary
             resultCount={filtered.length}
             totalCount={rows.length}
-            activeFilterCount={countActiveFilters(!!search, !!kindFilter)}
-            clearVisible={hasFilters}
-            onClearFilters={() => {
-              setSearch('')
-              setKindFilter('')
-            }}
-          >
-            <FilterSelect
-              label="Rôle"
-              value={kindFilter}
-              onChange={(v) => setKindFilter(v as PartnerKind | '')}
-              options={KIND_OPTIONS}
-            />
-          </ListToolbar>
-          {filtered.length === 0 ? (
-            <EmptyState message="Aucun partenaire ne correspond à votre recherche." />
-          ) : (
-            <DataTable>
-              <thead className="bg-stone-50 text-muted text-left">
+            hasFilters={hasFilters}
+            onClear={clearFilters}
+          />
+          <DataTable minWidth={960}>
+            <thead className="bg-stone-50 text-left">
+              <tr>
+                <FilterTh label="Nom">
+                  <HeaderSearch
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Nom, contact…"
+                    aria-label="Filtrer par nom"
+                  />
+                </FilterTh>
+                <FilterTh label="Rôle">
+                  <HeaderSelect
+                    value={kindFilter}
+                    onChange={(v) => setKindFilter(v as PartnerKind | '')}
+                    aria-label="Filtrer par rôle"
+                    options={KIND_OPTIONS}
+                  />
+                </FilterTh>
+                <PlainTh>Contact</PlainTh>
+                <PlainTh>Courriel</PlainTh>
+                <PlainTh>Langue facture</PlainTh>
+                <PlainTh>Délai net</PlainTh>
+                <PlainTh>Pénalité facture</PlainTh>
+                <PlainTh>Ville</PlainTh>
+                <PlainTh className="w-px" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 font-medium">Nom</th>
-                  <th className="px-4 py-3 font-medium">Rôle</th>
-                  <th className="px-4 py-3 font-medium">Contact</th>
-                  <th className="px-4 py-3 font-medium">Courriel</th>
-                  <th className="px-4 py-3 font-medium">Langue facture</th>
-                  <th className="px-4 py-3 font-medium">Délai net</th>
-                  <th className="px-4 py-3 font-medium">Pénalité facture</th>
-                  <th className="px-4 py-3 font-medium">Ville</th>
-                  <th className="px-4 py-3" />
+                  <td colSpan={9} className="px-3 py-10 text-center text-sm text-muted">
+                    Aucun partenaire ne correspond à votre recherche.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((p) => (
+              ) : (
+                filtered.map((p) => (
                   <tr key={p.id} className="hover:bg-stone-50/50">
-                    <td className="px-4 py-3 font-medium">{p.legal_name}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 font-medium">{p.legal_name}</td>
+                    <td className="px-3 py-3">
                       <Badge label={PARTNER_KIND_LABELS[p.kind]} tone={kindBadgeTone(p.kind)} />
                     </td>
-                    <td className="px-4 py-3 text-muted">{p.contact_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted">{p.email ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted">
+                    <td className="px-3 py-3 text-muted">{p.contact_name ?? '—'}</td>
+                    <td className="px-3 py-3 text-muted">{p.email ?? '—'}</td>
+                    <td className="px-3 py-3 text-muted">
                       {p.kind === 'provider' ? '—' : INVOICE_LANGUAGE_LABELS[p.language === 'en' ? 'en' : 'fr']}
                     </td>
-                    <td className="px-4 py-3 text-muted">
+                    <td className="px-3 py-3 text-muted">
                       {p.kind === 'provider' ? '—' : `Net ${p.payment_terms_days ?? 30}`}
                     </td>
-                    <td className="px-4 py-3 text-muted">
+                    <td className="px-3 py-3 text-muted">
                       {p.kind === 'provider' ? '—' : formatInvoicePenaltyPercent(p)}
                     </td>
-                    <td className="px-4 py-3 text-muted">{p.city ?? '—'}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-3 text-muted">{p.city ?? '—'}</td>
+                    <td className="px-3 py-3 text-right">
                       <div className="flex flex-wrap gap-1 justify-end">
                         <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(p)}>
                           Modifier
@@ -200,10 +209,10 @@ export function PartnersPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </DataTable>
-          )}
+                ))
+              )}
+            </tbody>
+          </DataTable>
         </>
       )}
       <Modal title={editingId ? 'Modifier le partenaire' : 'Nouveau partenaire'} open={open} onClose={() => setOpen(false)} wide>

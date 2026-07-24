@@ -3,7 +3,7 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Dividend, Shareholder } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { splitDividendByShares } from '../lib/payrollCalc'
 import { Button, tableActionClass } from '../components/Button'
 import { Badge } from '../components/Badge'
@@ -11,9 +11,15 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { DateRangeFilter, ListToolbar } from '../components/ListToolbar'
+import {
+  FilterSummary,
+  FilterTh,
+  HeaderDateRange,
+  HeaderSearch,
+  PlainTh,
+} from '../components/ColumnFilters'
 import { PageHeader } from '../components/PageHeader'
-import { StepPanelHeader } from '../components/WorkflowNav'
+import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 import { AlertBanner } from '../components/AlertBanner'
@@ -157,39 +163,40 @@ export function DividendsPage() {
   }
 
   const totalDistributed = filtered.reduce((s, d) => s + Number(d.total_amount), 0)
+  const declareBtn = (
+    <Button onClick={openNew} disabled={activeCount === 0}>
+      Déclarer un dividende
+    </Button>
+  )
 
-  return (
-    <PageShell>
+  const clearFilters = () => {
+    setSearch('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const content = (
+    <>
       {embedded ? (
-        <StepPanelHeader
-          step={2}
-          totalSteps={2}
-          title="Dividendes"
-          hint="Déclaration puis paiement via la banque."
-          actions={
-            <Button onClick={openNew} disabled={activeCount === 0}>
-              Déclarer un dividende
-            </Button>
-          }
-        />
+        rows.length === 0 && <StepActionBar actions={declareBtn} />
       ) : (
         <PageHeader
           title="Dividendes"
           subtitle={
             <>
               Répartis entre {activeCount} actionnaire{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
-              {hasFilters ? ` · Total filtré : ${formatCad(totalDistributed)}` : rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
+              {hasFilters
+                ? ` · Total filtré : ${formatCad(totalDistributed)}`
+                : rows.length > 0
+                  ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}`
+                  : ''}
             </>
           }
-          actions={
-            <Button onClick={openNew} disabled={activeCount === 0}>
-              Déclarer un dividende
-            </Button>
-          }
+          actions={declareBtn}
         />
       )}
       {embedded && (
-        <p className="text-sm text-muted mb-4">
+        <p className="text-sm text-muted">
           Répartis entre {activeCount} actionnaire{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
           {rows.length > 0 ? ` · Total : ${formatCad(rows.reduce((s, d) => s + Number(d.total_amount), 0))}` : ''}
         </p>
@@ -209,78 +216,82 @@ export function DividendsPage() {
         <EmptyState message="Aucune distribution de dividendes." />
       ) : (
         <>
-          <ListToolbar
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Description, montant…"
+          <FilterSummary
             resultCount={filtered.length}
             totalCount={rows.length}
-            activeFilterCount={countActiveFilters(!!search, !!dateFrom, !!dateTo)}
-            clearVisible={hasFilters}
-            onClearFilters={() => {
-              setSearch('')
-              setDateFrom('')
-              setDateTo('')
-            }}
-          >
-            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-          </ListToolbar>
-          {filtered.length === 0 ? (
-            <EmptyState message="Aucune distribution ne correspond aux filtres." />
-          ) : (
-            <DataTable>
-    
-                <thead className="bg-stone-50 text-muted text-left">
-                  <tr>
-                    <th className="px-4 py-3">Déclaré le</th>
-                    <th className="px-4 py-3">Statut</th>
-                    <th className="px-4 py-3">Payé le</th>
-                    <th className="px-4 py-3">Montant total</th>
-                    <th className="px-4 py-3">Actionnaires</th>
-                    <th className="px-4 py-3">Par action</th>
-                    <th className="px-4 py-3">Description</th>
-                    <th className="px-4 py-3" />
+            hasFilters={hasFilters}
+            onClear={clearFilters}
+            actions={embedded ? declareBtn : undefined}
+          />
+          <DataTable minWidth={900}>
+            <thead className="bg-stone-50 text-left">
+              <tr>
+                <FilterTh label="Déclaré le">
+                  <HeaderDateRange
+                    from={dateFrom}
+                    to={dateTo}
+                    onFromChange={setDateFrom}
+                    onToChange={setDateTo}
+                  />
+                </FilterTh>
+                <PlainTh>Statut</PlainTh>
+                <PlainTh>Payé le</PlainTh>
+                <PlainTh>Montant total</PlainTh>
+                <PlainTh>Actionnaires</PlainTh>
+                <PlainTh>Par action</PlainTh>
+                <FilterTh label="Description">
+                  <HeaderSearch
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Description…"
+                    aria-label="Filtrer par description"
+                  />
+                </FilterTh>
+                <PlainTh className="w-px" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-10 text-center text-sm text-muted">
+                    Aucune distribution ne correspond aux filtres.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((d) => (
+                  <tr key={d.id} className="hover:bg-stone-50/50">
+                    <td className="px-3 py-3">{formatDate(d.declared_date)}</td>
+                    <td className="px-3 py-3">
+                      <Badge
+                        label={
+                          d.status === 'paid' ? 'Payé' : Number(d.paid_amount) > 0 ? 'Partiel' : 'Déclaré'
+                        }
+                        tone={d.status === 'paid' ? 'paid' : 'declared'}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-muted">{d.payment_date ? formatDate(d.payment_date) : '—'}</td>
+                    <td className="px-3 py-3 font-medium">
+                      {formatCad(d.total_amount)}
+                      {Number(d.paid_amount) > 0 && d.status !== 'paid' && (
+                        <span className="text-muted text-xs block">payé {formatCad(d.paid_amount)}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-muted">{d.employee_count}</td>
+                    <td className="px-3 py-3">{formatCad(d.amount_per_employee)}</td>
+                    <td className="px-3 py-3 text-muted">{d.description ?? '—'}</td>
+                    <td className="px-3 py-3 text-right space-x-1">
+                      <Button variant="ghost" className={tableActionClass} onClick={() => viewDetail(d)}>
+                        Détail
+                      </Button>
+                      <Button variant="danger" className={tableActionClass} onClick={() => remove(d.id)}>
+                        Suppr.
+                      </Button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filtered.map((d) => (
-                    <tr key={d.id}>
-                      <td className="px-4 py-3">{formatDate(d.declared_date)}</td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          label={
-                            d.status === 'paid'
-                              ? 'Payé'
-                              : Number(d.paid_amount) > 0
-                                ? 'Partiel'
-                                : 'Déclaré'
-                          }
-                          tone={d.status === 'paid' ? 'paid' : 'declared'}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-muted">{d.payment_date ? formatDate(d.payment_date) : '—'}</td>
-                      <td className="px-4 py-3 font-medium">
-                        {formatCad(d.total_amount)}
-                        {Number(d.paid_amount) > 0 && d.status !== 'paid' && (
-                          <span className="text-muted text-xs block">payé {formatCad(d.paid_amount)}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-muted">{d.employee_count}</td>
-                      <td className="px-4 py-3">{formatCad(d.amount_per_employee)}</td>
-                      <td className="px-4 py-3 text-muted">{d.description ?? '—'}</td>
-                      <td className="px-4 py-3 text-right space-x-1">
-                        <Button variant="ghost" className={tableActionClass} onClick={() => viewDetail(d)}>
-                          Détail
-                        </Button>
-                        <Button variant="danger" className={tableActionClass} onClick={() => remove(d.id)}>
-                          Suppr.
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-            </DataTable>
-          )}
+                ))
+              )}
+            </tbody>
+          </DataTable>
         </>
       )}
 
@@ -370,6 +381,12 @@ export function DividendsPage() {
           Dividende déclaré ?
         </WorkflowFooter>
       )}
-    </PageShell>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-3">{content}</div>
+  }
+
+  return <PageShell>{content}</PageShell>
 }
