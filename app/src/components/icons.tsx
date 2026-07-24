@@ -1,6 +1,8 @@
 import type { LucideIcon, LucideProps } from 'lucide-react'
 import {
   Briefcase,
+  Eye,
+  EyeOff,
   Landmark,
   LayoutDashboard,
   LayoutGrid,
@@ -79,4 +81,4 @@ export const navIcons = {
 
 export type NavIconKey = keyof typeof navIcons
 
-export { Menu, X, Settings, LogOut }
+export { Menu, X, Settings, LogOut, Eye, EyeOff }
