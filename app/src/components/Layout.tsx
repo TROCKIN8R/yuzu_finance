@@ -91,12 +91,15 @@ function settingsLinkClass(isActive: boolean) {
 }
 
 function PrivacyToggleButton() {
-  const { amountsHidden, toggleAmountsHidden } = useAmountPrivacy()
+  const { amountsHidden, setAmountsHidden } = useAmountPrivacy()
   const Icon = amountsHidden ? EyeOff : Eye
   return (
     <button
       type="button"
-      onClick={toggleAmountsHidden}
+      onClick={() => {
+        setAmountsHidden(!amountsHidden)
+        window.location.reload()
+      }}
       className={settingsLinkClass(amountsHidden)}
       aria-label={amountsHidden ? 'Afficher les montants' : 'Masquer les montants'}
       aria-pressed={amountsHidden}
