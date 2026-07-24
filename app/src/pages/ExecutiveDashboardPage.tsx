@@ -27,6 +27,24 @@ import { KpiCard, MetricGrid, TrendBadge } from '../components/MetricCard'
 import { UpcomingDeadlinesCard } from '../components/UpcomingDeadlinesCard'
 import type { ComplianceDeadline } from '../lib/types'
 
+function RateChip({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail: string
+}) {
+  return (
+    <div className="flex-1 min-w-[10rem] rounded-lg border border-border bg-white px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-sm font-semibold tabular-nums mt-0.5">{value}</div>
+      <div className="text-[11px] text-muted mt-0.5 truncate">{detail}</div>
+    </div>
+  )
+}
+
 export function ExecutiveDashboardPage() {
   const { period, setPeriod, presets, ready } = useDashboardPeriod()
   const [loading, setLoading] = useState(true)
@@ -56,7 +74,7 @@ export function ExecutiveDashboardPage() {
         fetchGeneralLedgerData(),
         fetchFinancialReportExtras(),
         supabase.from('organization_settings').select('*').maybeSingle(),
-        fetchUpcomingDeadlines({ withinDays: 90, limit: 6 }),
+        fetchUpcomingDeadlines({ withinDays: 90, limit: 5 }),
       ])
 
       const fin = buildFinancialSnapshot(
@@ -150,17 +168,18 @@ export function ExecutiveDashboardPage() {
   }
 
   return (
-    <div className="max-w-[1440px] mx-auto space-y-4 lg:space-y-5 pb-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-xl lg:text-2xl font-semibold">Vue exécutive</h1>
-          <p className="text-sm text-muted mt-0.5">Prestations · Facturation · Encaissements — {period.label}</p>
+    <div className="max-w-[1440px] mx-auto space-y-3 pb-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold leading-tight">Vue exécutive</h1>
+          <p className="text-xs text-muted mt-0.5">Prestations · Facturation · Encaissements</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
+            className="border border-border rounded-lg px-2.5 py-1.5 text-sm bg-white min-h-[36px]"
             value={presets.findIndex((p) => p.label === period.label && p.start === period.start && p.end === period.end)}
             onChange={(e) => setPeriod(presets[Number(e.target.value)])}
+            aria-label="Période"
           >
             {presets.map((p, i) => (
               <option key={p.label} value={i}>
@@ -170,15 +189,16 @@ export function ExecutiveDashboardPage() {
           </select>
           <Link
             to="/dashboard/details"
-            className="text-sm font-medium px-3 py-2 rounded-lg border border-border bg-white hover:border-yuzu/50"
+            className="text-sm font-medium px-2.5 py-1.5 rounded-lg border border-border bg-white hover:border-yuzu/50 min-h-[36px] inline-flex items-center"
           >
-            Vue détaillée →
+            Détails →
           </Link>
         </div>
       </div>
 
-      <MetricGrid cols={4}>
+      <MetricGrid cols={4} dense>
         <KpiCard
+          dense
           label="Prestations réalisées"
           value={formatCad(worked.total)}
           sub={`${worked.hours} h · dont ${formatCad(worked.fixed)} forfait`}
@@ -186,78 +206,90 @@ export function ExecutiveDashboardPage() {
           to="/billing/time"
         />
         <KpiCard
+          dense
           label="Revenus facturés"
           value={formatCad(invoiced)}
-          sub={`HT · GL comptabilisé ${formatCad(recognized)}`}
+          sub={`HT · GL ${formatCad(recognized)}`}
           trend={trends.invoicedRevenue}
           to="/billing/invoices"
         />
         <KpiCard
+          dense
           label="Encaissements"
           value={formatCad(collected)}
           sub={
             collectionRate != null
-              ? `Période · ${collectionRate.toFixed(1)} % encaissé (TTC cumul.)`
-              : 'Paiements clients (période)'
+              ? `${collectionRate.toFixed(1)} % encaissé (TTC cumul.)`
+              : 'Paiements clients'
           }
           trend={trends.cashCollected}
           to="/billing/invoices"
         />
-        <KpiCard label="À facturer (WIP)" value={formatCad(unbilled)} sub="Temps horaire + forfaits non facturés" to="/billing/invoices" />
+        <KpiCard
+          dense
+          label="À facturer (WIP)"
+          value={formatCad(unbilled)}
+          sub="Horaire + forfaits non facturés"
+          to="/billing/invoices"
+        />
       </MetricGrid>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="ui-card px-4 py-3">
-            <div className="ui-metric-label">$/h moyen — Horaire</div>
-            <div className="text-xl font-semibold mt-0.5">{hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}</div>
-            <div className="text-xs text-muted mt-1">{worked.hourlyHours} h · {formatCad(worked.hourly)} prestations</div>
-          </div>
-          <div className="ui-card px-4 py-3">
-            <div className="ui-metric-label">$/h moyen — Forfait</div>
-            <div className="text-xl font-semibold mt-0.5">{fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}</div>
-            <div className="text-xs text-muted mt-1">{worked.fixedHours} h internes · {formatCad(worked.fixed)} prorata</div>
+      <div className="flex flex-wrap gap-2">
+        <RateChip
+          label="$/h moyen — Horaire"
+          value={hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}
+          detail={`${worked.hourlyHours} h · ${formatCad(worked.hourly)}`}
+        />
+        <RateChip
+          label="$/h moyen — Forfait"
+          value={fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}
+          detail={`${worked.fixedHours} h int. · ${formatCad(worked.fixed)}`}
+        />
+        <div className="flex-1 min-w-[12rem] rounded-lg border border-border bg-white px-3 py-2 flex flex-col justify-center gap-1">
+          <div className="text-[11px] uppercase tracking-wide text-muted">Variation M/M</div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-muted">Prest.</span>
+              <TrendBadge change={trends.workedRevenue} label="" />
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-muted">Fact.</span>
+              <TrendBadge change={trends.invoicedRevenue} label="" />
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-muted">Enc.</span>
+              <TrendBadge change={trends.cashCollected} label="" />
+            </span>
           </div>
         </div>
-        <UpcomingDeadlinesCard rows={deadlines} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[240px]">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
         <div className="xl:col-span-2">
           {hasChartData(monthlySeries) ? (
-            <RevenueTrendChart points={cumulativeSeries} cumulative />
+            <RevenueTrendChart points={cumulativeSeries} cumulative compact />
           ) : (
-            <div className="ui-card p-8 text-center text-sm text-muted h-full flex items-center justify-center">
+            <div className="ui-card px-4 py-8 text-center text-sm text-muted">
               Les tendances apparaîtront lorsque vous aurez des prestations, factures ou encaissements.
             </div>
           )}
         </div>
-        <div className="ui-card p-4 flex flex-col justify-center gap-3">
-          <div className="text-sm font-semibold">Variation M/M (dernier mois)</div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted">Prestations</span>
-              <TrendBadge change={trends.workedRevenue} label="" />
-            </div>
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted">Facturé</span>
-              <TrendBadge change={trends.invoicedRevenue} label="" />
-            </div>
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted">Encaissé</span>
-              <TrendBadge change={trends.cashCollected} label="" />
-            </div>
-          </div>
-          <p className="text-xs text-muted pt-2 border-t border-border">
-            Brouillon pour révision — les forfaits sont proratisés selon les heures internes saisies.
-          </p>
-        </div>
+        <UpcomingDeadlinesCard rows={deadlines} compact />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[280px]">
-        <ExecutiveBreakdownPanel title="Par client" rows={partnerRows} emptyMessage="Aucune activité client sur la période." />
-        <ExecutiveBreakdownPanel title="Par type de service" rows={serviceRows} emptyMessage="Aucune prestation horaire ou forfaitaire sur la période." />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <ExecutiveBreakdownPanel title="Par client" rows={partnerRows} emptyMessage="Aucune activité client sur la période." dense />
+        <ExecutiveBreakdownPanel
+          title="Par type de service"
+          rows={serviceRows}
+          emptyMessage="Aucune prestation horaire ou forfaitaire sur la période."
+          dense
+        />
       </div>
+
+      <p className="text-[11px] text-muted">
+        Brouillon pour révision — forfaits proratisés selon les heures internes saisies.
+      </p>
     </div>
   )
 }

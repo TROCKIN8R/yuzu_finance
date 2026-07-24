@@ -134,15 +134,15 @@ export function DashboardDetailsPage() {
   const fixedAvg = averageRate(worked.fixed, worked.fixedHours)
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4 max-w-[1440px] mx-auto pb-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold">Tableau de bord — détails</h1>
-          <p className="text-sm text-muted mt-0.5">Indicateurs complets — {period.label}</p>
+          <h1 className="text-xl font-semibold leading-tight">Tableau de bord — détails</h1>
+          <p className="text-xs text-muted mt-0.5">Indicateurs complets — {period.label}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            className="border border-border rounded-lg px-3 py-2 text-sm bg-white min-h-[44px]"
+            className="border border-border rounded-lg px-2.5 py-1.5 text-sm bg-white min-h-[36px]"
             value={presets.findIndex((p) => p.label === period.label && p.start === period.start && p.end === period.end)}
             onChange={(e) => setPeriod(presets[Number(e.target.value)])}
           >
@@ -152,18 +152,22 @@ export function DashboardDetailsPage() {
               </option>
             ))}
           </select>
-          <Link to="/" className="text-sm font-medium px-3 py-2 rounded-lg border border-border bg-white hover:border-yuzu/50">
-            ← Vue exécutive
+          <Link
+            to="/"
+            className="text-sm font-medium px-2.5 py-1.5 rounded-lg border border-border bg-white hover:border-yuzu/50 min-h-[36px] inline-flex items-center"
+          >
+            ← Exécutive
           </Link>
           <Link to="/financial-reports" className="text-sm text-yuzu-dark hover:underline font-medium">
-            Rapports financiers →
+            Rapports →
           </Link>
         </div>
       </div>
 
       <DashboardSection title="Revenus et prestations">
-        <MetricGrid cols={4}>
+        <MetricGrid cols={4} dense>
           <KpiCard
+            dense
             label="Prestations réalisées"
             value={formatCad(worked.total)}
             sub={`${worked.hours} h · horaire ${formatCad(worked.hourly)} · forfait ${formatCad(worked.fixed)}`}
@@ -171,6 +175,7 @@ export function DashboardDetailsPage() {
             to="/billing/time"
           />
           <KpiCard
+            dense
             label="Revenus facturés"
             value={formatCad(invoicedRevenue)}
             sub={
@@ -182,46 +187,60 @@ export function DashboardDetailsPage() {
             to="/billing/invoices"
           />
           <KpiCard
+            dense
             label="Encaissements"
             value={formatCad(fin.cashIn)}
             sub={
               fin.billing.collectionRatePct != null
-                ? `Période · ${fin.billing.collectionRatePct.toFixed(1)} % encaissé (TTC cumul.)`
-                : 'Paiements clients reçus (période)'
+                ? `${fin.billing.collectionRatePct.toFixed(1)} % encaissé (TTC cumul.)`
+                : 'Paiements clients (période)'
             }
             trend={trends.cashCollected}
             to="/billing/invoices"
           />
           <KpiCard
+            dense
             label="Écart prestations / facturation"
             value={formatCad(billingGap)}
-            sub={billingGap > 0 ? 'Travail non encore facturé (période)' : billingGap < 0 ? 'Facturé au-delà du temps saisi' : 'Aligné'}
+            sub={billingGap > 0 ? 'Travail non encore facturé' : billingGap < 0 ? 'Facturé au-delà du temps saisi' : 'Aligné'}
             to="/billing/invoices"
           />
         </MetricGrid>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-          <KpiCard label="$/h moyen — Horaire" value={hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'} sub={`${worked.hourlyHours} h sur la période`} />
-          <KpiCard label="$/h moyen — Forfait (interne)" value={fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'} sub={`${worked.fixedHours} h internes · prorata forfait`} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+          <KpiCard
+            dense
+            label="$/h moyen — Horaire"
+            value={hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}
+            sub={`${worked.hourlyHours} h sur la période`}
+          />
+          <KpiCard
+            dense
+            label="$/h moyen — Forfait (interne)"
+            value={fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}
+            sub={`${worked.fixedHours} h internes · prorata forfait`}
+          />
         </div>
       </DashboardSection>
 
       <DashboardSection title="Rentabilité">
-        <MetricGrid cols={4}>
+        <MetricGrid cols={4} dense>
           <KpiCard
+            dense
             label="Résultat d'exploitation"
             value={formatCad(fin.income.operatingIncome)}
             sub="Revenus − dépenses − paie (charges incl.)"
             trend={trends.operatingIncome}
             to="/financial-reports"
           />
-          <KpiCard label="Marge d'exploitation" value={margin != null ? `${margin.toFixed(1)} %` : '—'} sub="Résultat / revenus comptabilisés (GL)" />
-          <KpiCard label="Dépenses d'exploitation" value={formatCad(fin.income.operatingExpenses)} sub="Hors paie" to="/expenses" />
+          <KpiCard dense label="Marge d'exploitation" value={margin != null ? `${margin.toFixed(1)} %` : '—'} sub="Résultat / revenus comptabilisés (GL)" />
+          <KpiCard dense label="Dépenses d'exploitation" value={formatCad(fin.income.operatingExpenses)} sub="Hors paie" to="/expenses" />
           <KpiCard
+            dense
             label="Comptes à recevoir"
             value={formatCad(fin.accountsReceivable)}
             sub={
               fin.billing.collectionRatePct != null
-                ? `Solde GL cumulatif · ${fin.billing.collectionRatePct.toFixed(1)} % encaissé (TTC)`
+                ? `Solde GL · ${fin.billing.collectionRatePct.toFixed(1)} % encaissé`
                 : 'Solde GL cumulatif'
             }
             to="/billing/invoices"
@@ -230,17 +249,18 @@ export function DashboardDetailsPage() {
       </DashboardSection>
 
       <DashboardSection title="Paie et charges">
-        <MetricGrid cols={4}>
-          <KpiCard label="Salaire brut" value={formatCad(fin.income.payrollGross)} sub="Rémunération sur la période" to="/payroll" />
-          <KpiCard label="Charges patronales" value={formatCad(fin.income.employerPayrollContributions)} sub="RRQ, AE, RQAP, avantages" to="/payroll" />
-          <KpiCard label="Coût total de la paie" value={formatCad(fin.payrollYtd)} sub="Brut + charges patronales" trend={trends.payrollTotal} to="/payroll" />
-          <KpiCard label="Remises en attente" value={formatCad(fin.balanceSheet.payrollRemittancesPending)} sub="Retenues et cotisations à remettre" to="/payroll" />
+        <MetricGrid cols={4} dense>
+          <KpiCard dense label="Salaire brut" value={formatCad(fin.income.payrollGross)} sub="Rémunération sur la période" to="/payroll" />
+          <KpiCard dense label="Charges patronales" value={formatCad(fin.income.employerPayrollContributions)} sub="RRQ, AE, RQAP, avantages" to="/payroll" />
+          <KpiCard dense label="Coût total de la paie" value={formatCad(fin.payrollYtd)} sub="Brut + charges patronales" trend={trends.payrollTotal} to="/payroll" />
+          <KpiCard dense label="Remises en attente" value={formatCad(fin.balanceSheet.payrollRemittancesPending)} sub="Retenues et cotisations à remettre" to="/payroll" />
         </MetricGrid>
       </DashboardSection>
 
       <DashboardSection title="Trésorerie">
-        <MetricGrid cols={4}>
+        <MetricGrid cols={4} dense>
           <KpiCard
+            dense
             label="Trésorerie (livre)"
             value={formatCad(fin.balanceSheet.cash)}
             sub={
@@ -250,25 +270,25 @@ export function DashboardDetailsPage() {
             }
             to="/bank"
           />
-          <KpiCard label="Flux net (période)" value={formatCad(periodNetCash)} sub={`Entrées ${formatCad(fin.cashIn)} · Sorties ${formatCad(fin.cashOut)}`} />
-          <KpiCard label="Avoir total" value={formatCad(fin.equity)} sub="Capital-actions + BNR estimés" to="/financial-reports" />
-          <KpiCard label="Taxes de vente à payer" value={formatCad(fin.salesTaxPayable)} sub="TPS + TVQ nettes" to="/sales-tax" />
+          <KpiCard dense label="Flux net (période)" value={formatCad(periodNetCash)} sub={`Entrées ${formatCad(fin.cashIn)} · Sorties ${formatCad(fin.cashOut)}`} />
+          <KpiCard dense label="Avoir total" value={formatCad(fin.equity)} sub="Capital-actions + BNR estimés" to="/financial-reports" />
+          <KpiCard dense label="Taxes de vente à payer" value={formatCad(fin.salesTaxPayable)} sub="TPS + TVQ nettes" to="/sales-tax" />
         </MetricGrid>
       </DashboardSection>
 
       <DashboardSection title="Pipeline de facturation">
-        <MetricGrid cols={4}>
-          <KpiCard label="Partenaires actifs" value={String(ops.partners)} to="/partners" />
-          <KpiCard label="Heures non facturées" value={`${ops.unbilledHours} h`} sub="Temps horaire pas encore sur facture" to="/billing/time" />
-          <KpiCard label="WIP à facturer" value={formatCad(ops.unbilledAmount)} sub="Horaire + forfaits non facturés" to="/billing/invoices" />
-          <KpiCard label="Remboursements en attente" value={formatCad(ops.pendingReimbursement)} to="/employee-expenses" />
+        <MetricGrid cols={4} dense>
+          <KpiCard dense label="Partenaires actifs" value={String(ops.partners)} to="/partners" />
+          <KpiCard dense label="Heures non facturées" value={`${ops.unbilledHours} h`} sub="Temps horaire pas encore sur facture" to="/billing/time" />
+          <KpiCard dense label="WIP à facturer" value={formatCad(ops.unbilledAmount)} sub="Horaire + forfaits non facturés" to="/billing/invoices" />
+          <KpiCard dense label="Remboursements en attente" value={formatCad(ops.pendingReimbursement)} to="/employee-expenses" />
         </MetricGrid>
       </DashboardSection>
 
       <DashboardSection title={`Tendances — ${period.label}`}>
         {hasChartData(monthlySeries) ? (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <RevenueTrendChart points={cumulativeSeries} cumulative />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <RevenueTrendChart points={cumulativeSeries} cumulative compact />
             <ProfitabilityChart points={monthlySeries} />
             <CashFlowChart points={monthlySeries} />
             <PayrollTrendChart points={monthlySeries} />
@@ -277,13 +297,13 @@ export function DashboardDetailsPage() {
             </div>
           </div>
         ) : (
-          <div className="bg-white border border-border rounded-xl p-8 text-center text-sm text-muted">
+          <div className="bg-white border border-border rounded-xl p-6 text-center text-sm text-muted">
             Les graphiques apparaîtront lorsque vous aurez des prestations, factures, paie ou mouvements sur la période sélectionnée.
           </div>
         )}
       </DashboardSection>
 
-      <p className="text-xs text-muted pb-2">
+      <p className="text-[11px] text-muted pb-1">
         Brouillon pour révision — les forfaits non facturés sont inclus au WIP; le temps forfaitaire est interne et proratisé aux prestations.
       </p>
     </div>

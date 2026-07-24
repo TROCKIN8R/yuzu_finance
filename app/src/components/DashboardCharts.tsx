@@ -18,20 +18,22 @@ function ChartShell({
   subtitle,
   children,
   legend,
+  compact = false,
 }: {
   title: string
   subtitle?: string
   children: ReactNode
   legend?: ReactNode
+  compact?: boolean
 }) {
   return (
-    <div className="bg-white border border-border rounded-xl p-4 sm:p-5 h-full flex flex-col">
-      <div className="mb-3">
+    <div className={`bg-white border border-border rounded-xl h-full flex flex-col ${compact ? 'p-3' : 'p-4 sm:p-5'}`}>
+      <div className={compact ? 'mb-2' : 'mb-3'}>
         <h3 className="font-semibold text-sm">{title}</h3>
         {subtitle && <p className="text-xs text-muted mt-0.5">{subtitle}</p>}
       </div>
-      <div className="flex-1 min-h-[200px]">{children}</div>
-      {legend && <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted">{legend}</div>}
+      <div className={`flex-1 ${compact ? 'min-h-[160px]' : 'min-h-[200px]'}`}>{children}</div>
+      {legend && <div className={`flex flex-wrap gap-3 text-xs text-muted ${compact ? 'mt-1.5' : 'mt-2'}`}>{legend}</div>}
     </div>
   )
 }
@@ -82,9 +84,11 @@ function gridLines(min: number, max: number, height: number, width: number) {
 export function RevenueTrendChart({
   points,
   cumulative = false,
+  compact = false,
 }: {
   points: MonthlySeriesPoint[]
   cumulative?: boolean
+  compact?: boolean
 }) {
   if (points.length === 0) return <EmptyChart message="Pas assez de données" />
   const invoiced = points.map((p) => p.invoicedRevenue)
@@ -96,15 +100,17 @@ export function RevenueTrendChart({
 
   const values = [...invoiced, ...worked, ...collected]
   const width = 560
-  const innerW = width - PAD.left - PAD.right
-  const innerH = CHART_H - PAD.top - PAD.bottom
+  const chartH = compact ? 168 : CHART_H
+  const pad = compact ? { top: 12, right: 10, bottom: 28, left: 44 } : PAD
+  const innerW = width - pad.left - pad.right
+  const innerH = chartH - pad.top - pad.bottom
   const { min, max, span } = scaleLinear(values)
 
   const linePath = (data: number[]) =>
     data
       .map((v, i) => {
-        const x = PAD.left + xPos(i, points.length, innerW)
-        const y = PAD.top + yPos(v, min, span, innerH)
+        const x = pad.left + xPos(i, points.length, innerW)
+        const y = pad.top + yPos(v, min, span, innerH)
         return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
       })
       .join(' ')
@@ -115,30 +121,31 @@ export function RevenueTrendChart({
 
   return (
     <ChartShell
+      compact={compact}
       title="Prestations vs facturation"
       subtitle={
         cumulative
-          ? 'Cumul sur la période — réalisé, facturé (HT) et encaissé'
+          ? 'Cumul — réalisé, facturé (HT) et encaissé'
           : 'Réalisé, facturé (HT) et encaissé par mois'
       }
       legend={
         <>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-0.5 bg-sky-600" /> Prestations réalisées
+            <span className="w-2.5 h-0.5 bg-sky-600" /> Prestations
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-0.5 bg-yuzu" /> Revenus facturés
+            <span className="w-2.5 h-0.5 bg-yuzu" /> Facturé
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-0.5 bg-emerald-600" /> Encaissements
+            <span className="w-2.5 h-0.5 bg-emerald-600" /> Encaissé
           </span>
         </>
       }
     >
-      <svg viewBox={`0 0 ${width} ${CHART_H}`} className="w-full h-auto" role="img" aria-label="Prestations vs facturation">
-        <g transform={`translate(0, ${PAD.top})`}>
+      <svg viewBox={`0 0 ${width} ${chartH}`} className="w-full h-auto" role="img" aria-label="Prestations vs facturation">
+        <g transform={`translate(0, ${pad.top})`}>
           {gridLines(min, max, innerH, innerW).map((g) => (
-            <g key={g.key} transform={`translate(${PAD.left}, 0)`}>
+            <g key={g.key} transform={`translate(${pad.left}, 0)`}>
               {g}
             </g>
           ))}
@@ -147,11 +154,11 @@ export function RevenueTrendChart({
         <path d={invoicedPath} fill="none" stroke="#e5a817" strokeWidth={2.5} strokeLinejoin="round" />
         <path d={collectedPath} fill="none" stroke="#059669" strokeWidth={2} strokeLinejoin="round" strokeDasharray="2 2" />
         {points.map((p, i) => {
-          const x = PAD.left + xPos(i, points.length, innerW)
+          const x = pad.left + xPos(i, points.length, innerW)
           const show = points.length <= 6 || i % Math.ceil(points.length / 6) === 0 || i === points.length - 1
           if (!show) return null
           return (
-            <text key={p.month} x={x} y={CHART_H - 8} textAnchor="middle" className="fill-stone-500" fontSize={9}>
+            <text key={p.month} x={x} y={chartH - 6} textAnchor="middle" className="fill-stone-500" fontSize={9}>
               {p.label}
             </text>
           )

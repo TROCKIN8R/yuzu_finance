@@ -43,15 +43,27 @@ export function KpiCard({
   trend,
   trendLabel,
   to,
+  dense = false,
 }: {
-  label: string
+  label: ReactNode
   value: ReactNode
   sub?: ReactNode
   trend?: MomChange
   trendLabel?: string
   to?: string
+  /** Compact padding and typography for dense dashboards. */
+  dense?: boolean
 }) {
-  const inner = (
+  const inner = dense ? (
+    <div className="ui-card px-3 py-2.5 h-full flex flex-col gap-0.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="ui-metric-label leading-tight">{label}</div>
+        {trend && <TrendBadge change={trend} label="" />}
+      </div>
+      <div className="text-lg font-semibold tracking-tight tabular-nums leading-tight">{value}</div>
+      {sub && <div className="text-[11px] text-muted leading-snug">{sub}</div>}
+    </div>
+  ) : (
     <div className="ui-card px-4 py-4 h-full flex flex-col gap-1">
       <div className="ui-metric-label">{label}</div>
       <div className="text-xl sm:text-2xl font-semibold tracking-tight">{value}</div>
@@ -74,15 +86,23 @@ export function KpiCard({
   return inner
 }
 
-export function MetricGrid({ children, cols = 3 }: { children: ReactNode; cols?: 2 | 3 | 4 }) {
+export function MetricGrid({
+  children,
+  cols = 3,
+  dense = false,
+}: {
+  children: ReactNode
+  cols?: 2 | 3 | 4
+  dense?: boolean
+}) {
   const colClass = cols === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : cols === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'
-  return <div className={`grid grid-cols-1 ${colClass} gap-3`}>{children}</div>
+  return <div className={`grid grid-cols-1 ${colClass} ${dense ? 'gap-2' : 'gap-3'}`}>{children}</div>
 }
 
 export function DashboardSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="text-sm font-semibold text-ink mb-3">{title}</h2>
+      <h2 className="text-sm font-semibold text-ink mb-2">{title}</h2>
       {children}
     </section>
   )

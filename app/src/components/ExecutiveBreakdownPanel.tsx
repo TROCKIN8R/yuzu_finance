@@ -37,10 +37,12 @@ export function ExecutiveBreakdownPanel({
   title,
   rows,
   emptyMessage,
+  dense = false,
 }: {
   title: string
   rows: BreakdownRow[]
   emptyMessage: string
+  dense?: boolean
 }) {
   const [mode, setMode] = useState<BreakdownMode>('amount')
 
@@ -52,9 +54,11 @@ export function ExecutiveBreakdownPanel({
     return { worked, invoiced, collected, hours }
   }, [rows])
 
+  const cellY = dense ? 'py-1.5' : 'py-2'
+
   return (
-    <div className="ui-card p-4 h-full flex flex-col min-h-0">
-      <div className="flex items-center justify-between gap-2 mb-3">
+    <div className={`ui-card h-full flex flex-col min-h-0 ${dense ? 'p-3' : 'p-4'}`}>
+      <div className={`flex items-center justify-between gap-2 ${dense ? 'mb-2' : 'mb-3'}`}>
         <h3 className="font-semibold text-sm">{title}</h3>
         <BreakdownToggle mode={mode} onChange={setMode} />
       </div>
@@ -62,38 +66,38 @@ export function ExecutiveBreakdownPanel({
       {rows.length === 0 ? (
         <p className="text-sm text-muted flex-1">{emptyMessage}</p>
       ) : (
-        <div className="overflow-auto flex-1 -mx-1 px-1">
+        <div className="overflow-auto flex-1 -mx-1 px-1 max-h-[220px]">
           <table className="w-full text-sm min-w-[320px]">
-            <thead className="text-xs text-muted text-left border-b border-border">
+            <thead className="text-xs text-muted text-left border-b border-border sticky top-0 bg-white">
               <tr>
-                <th className="py-2 pr-2 font-medium">Nom</th>
-                <th className="py-2 pr-2 font-medium text-right">Prestations</th>
-                <th className="py-2 pr-2 font-medium text-right">Facturé</th>
-                <th className="py-2 font-medium text-right">Encaissé</th>
+                <th className={`${cellY} pr-2 font-medium`}>Nom</th>
+                <th className={`${cellY} pr-2 font-medium text-right`}>Prestations</th>
+                <th className={`${cellY} pr-2 font-medium text-right`}>Facturé</th>
+                <th className={`${cellY} font-medium text-right`}>Encaissé</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.map((row) => (
                 <tr key={row.id}>
-                  <td className="py-2 pr-2 font-medium truncate max-w-[140px]" title={row.label}>
+                  <td className={`${cellY} pr-2 font-medium truncate max-w-[140px]`} title={row.label}>
                     {row.label}
                   </td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{metricValue(row, 'worked', mode)}</td>
-                  <td className="py-2 pr-2 text-right tabular-nums">{metricValue(row, 'invoiced', mode)}</td>
-                  <td className="py-2 text-right tabular-nums">{metricValue(row, 'collected', mode)}</td>
+                  <td className={`${cellY} pr-2 text-right tabular-nums`}>{metricValue(row, 'worked', mode)}</td>
+                  <td className={`${cellY} pr-2 text-right tabular-nums`}>{metricValue(row, 'invoiced', mode)}</td>
+                  <td className={`${cellY} text-right tabular-nums`}>{metricValue(row, 'collected', mode)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="border-t border-border text-xs font-medium">
               <tr>
-                <td className="py-2 pr-2">Total</td>
-                <td className="py-2 pr-2 text-right tabular-nums">
+                <td className={`${cellY} pr-2`}>Total</td>
+                <td className={`${cellY} pr-2 text-right tabular-nums`}>
                   {mode === 'rate' && totals.hours > 0 ? `${formatCad(totals.worked / totals.hours)}/h` : formatCad(totals.worked)}
                 </td>
-                <td className="py-2 pr-2 text-right tabular-nums">
+                <td className={`${cellY} pr-2 text-right tabular-nums`}>
                   {mode === 'rate' && totals.hours > 0 ? `${formatCad(totals.invoiced / totals.hours)}/h` : formatCad(totals.invoiced)}
                 </td>
-                <td className="py-2 text-right tabular-nums">
+                <td className={`${cellY} text-right tabular-nums`}>
                   {mode === 'rate' && totals.hours > 0 ? `${formatCad(totals.collected / totals.hours)}/h` : formatCad(totals.collected)}
                 </td>
               </tr>
