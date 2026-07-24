@@ -23,6 +23,24 @@ export function weekStarts(weekStart: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => addWeeks(weekStart, i))
 }
 
+/**
+ * Mondays from the current week through the week that contains `fromIso + months`.
+ * Typical span: ~26 weeks for 6 months.
+ */
+export function weeksForNextMonths(fromIso: string, months: number): string[] {
+  const start = startOfWeekMonday(fromIso)
+  const endDate = new Date(fromIso + 'T12:00:00')
+  endDate.setMonth(endDate.getMonth() + months)
+  const last = startOfWeekMonday(endDate.toISOString().slice(0, 10))
+  const weeks: string[] = []
+  let cursor = start
+  while (cursor <= last) {
+    weeks.push(cursor)
+    cursor = addWeeks(cursor, 1)
+  }
+  return weeks
+}
+
 /** ISO-8601 week number for a date (week_start should be a Monday). */
 export function isoWeekNumber(weekStart: string): number {
   const date = new Date(weekStart + 'T12:00:00')
