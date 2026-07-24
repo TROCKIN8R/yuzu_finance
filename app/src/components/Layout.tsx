@@ -38,6 +38,10 @@ const otherModulePaths = [
   '/ledger',
   '/financial-reports',
   '/adjustments',
+  '/period-close',
+  '/tax-exports',
+  '/compliance',
+  '/backup',
 ]
 
 const mobilePageTitles: { match: (path: string) => boolean; title: string }[] = [

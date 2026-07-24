@@ -25,6 +25,8 @@ import { BankPage } from './pages/BankPage'
 import { AdjustmentsPage } from './pages/AdjustmentsPage'
 import { PeriodClosePage } from './pages/PeriodClosePage'
 import { TaxExportsPage } from './pages/TaxExportsPage'
+import { CompliancePage } from './pages/CompliancePage'
+import { BackupPage } from './pages/BackupPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -74,6 +76,8 @@ export default function App() {
           <Route path="adjustments" element={<AdjustmentsPage />} />
           <Route path="period-close" element={<PeriodClosePage />} />
           <Route path="tax-exports" element={<TaxExportsPage />} />
+          <Route path="compliance" element={<CompliancePage />} />
+          <Route path="backup" element={<BackupPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

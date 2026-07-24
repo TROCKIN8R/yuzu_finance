@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useOutletContext } from 'react-router-dom'
+import { deleteEntityDocuments } from '../lib/documents'
 import { supabase } from '../lib/supabase'
 import type { BillingType, Partner, Project, ProjectStatus } from '../lib/types'
 import { matchesSearch, countActiveFilters } from '../lib/filters'
@@ -8,6 +9,7 @@ import { billingTypeLabel, projectAmountLabel } from '../lib/invoice'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
+import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -116,15 +118,26 @@ export function ProjectsPage() {
     }
     if (editingId) {
       await supabase.from('projects').update(payload).eq('id', editingId)
+      setOpen(false)
     } else {
-      await supabase.from('projects').insert(payload)
+      const { data, error } = await supabase.from('projects').insert(payload).select('id').single()
+      if (!error && data?.id) {
+        setEditingId(data.id)
+        // Keep modal open so a PDF contract can be attached immediately.
+      } else {
+        setOpen(false)
+      }
     }
-    setOpen(false)
     load()
   }
 
   async function remove(id: string) {
     if (!confirm('Supprimer ce projet ?')) return
+    try {
+      await deleteEntityDocuments('project', id)
+    } catch {
+      // continue — project row must still be removable if storage cleanup fails
+    }
     await supabase.from('projects').delete().eq('id', id)
     load()
   }
@@ -320,6 +333,21 @@ export function ProjectsPage() {
               Les projets forfaitaires se facturent à l&apos;étape Factures. Le temps peut y être enregistré pour le suivi interne (non visible client).
             </p>
           )}
+          <Field label="Notes">
+            <textarea
+              className={inputClass}
+              rows={2}
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </Field>
+          <DocumentAttachments
+            entityType="project"
+            entityId={editingId}
+            pdfOnly
+            label="Contrat (PDF)"
+            hint="MSA, SOW ou entente client — PDF uniquement. Enregistrez d’abord le projet pour joindre un fichier."
+          />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Annuler

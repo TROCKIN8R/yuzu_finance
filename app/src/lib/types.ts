@@ -45,7 +45,34 @@ export interface AccountingAdjustment {
   updated_at: string
 }
 export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
-export type DocumentEntityType = 'invoice' | 'expense' | 'employee_expense'
+export type DocumentEntityType = 'invoice' | 'expense' | 'employee_expense' | 'project'
+
+export type ComplianceDeadlineStatus = 'open' | 'done' | 'skipped'
+export type ComplianceDeadlineCategory =
+  | 'payroll_remittance'
+  | 'sales_tax'
+  | 'corporate_tax'
+  | 'annual_return'
+  | 'insurance'
+  | 'contract'
+  | 'other'
+export type ComplianceDeadlineSource = 'manual' | 'seed' | 'sales_tax' | 'corporate_tax'
+
+export interface ComplianceDeadline {
+  id: string
+  user_id: string
+  title: string
+  category: ComplianceDeadlineCategory
+  due_date: string
+  status: ComplianceDeadlineStatus
+  source: ComplianceDeadlineSource
+  source_key: string | null
+  amount: number | null
+  notes: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
 
 export interface DocumentAttachment {
   id: string

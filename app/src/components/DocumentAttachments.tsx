@@ -16,6 +16,8 @@ type Props = {
   disabled?: boolean
   label?: string
   hint?: string
+  /** Restrict picker + validation to PDF only (e.g. project contracts). */
+  pdfOnly?: boolean
 }
 
 export function DocumentAttachments({
@@ -24,6 +26,7 @@ export function DocumentAttachments({
   disabled = false,
   label = 'Documents',
   hint,
+  pdfOnly = false,
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<DocumentAttachment[]>([])
@@ -59,7 +62,11 @@ export function DocumentAttachments({
     setUploading(true)
     setError(null)
     try {
-      const attachment = await uploadDocument(file, file.name, file.type, entityType, entityId)
+      const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : file.type)
+      if (pdfOnly && mime !== 'application/pdf') {
+        throw new Error('Seuls les fichiers PDF sont acceptés.')
+      }
+      const attachment = await uploadDocument(file, file.name, mime, entityType, entityId)
       setRows((prev) => [attachment, ...prev])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Téléversement échoué.')
@@ -101,7 +108,7 @@ export function DocumentAttachments({
           <input
             ref={fileRef}
             type="file"
-            accept={documentAcceptAttribute}
+            accept={pdfOnly ? '.pdf,application/pdf' : documentAcceptAttribute}
             className="hidden"
             disabled={disabled || !entityId || uploading}
             onChange={(e) => {
@@ -117,7 +124,7 @@ export function DocumentAttachments({
             disabled={disabled || !entityId || uploading}
             onClick={() => fileRef.current?.click()}
           >
-            {uploading ? 'Envoi…' : 'Joindre un fichier'}
+            {uploading ? 'Envoi…' : pdfOnly ? 'Joindre un PDF' : 'Joindre un fichier'}
           </Button>
         </div>
       </div>
@@ -129,7 +136,11 @@ export function DocumentAttachments({
       {loading && <p className="text-xs text-muted">Chargement…</p>}
 
       {!loading && entityId && rows.length === 0 && (
-        <p className="text-xs text-muted">Aucun document — PDF ou photo de facture/reçu (max 10 Mo).</p>
+        <p className="text-xs text-muted">
+          {pdfOnly
+            ? 'Aucun contrat PDF — max 10 Mo.'
+            : 'Aucun document — PDF ou photo de facture/reçu (max 10 Mo).'}
+        </p>
       )}
 
       {rows.length > 0 && (

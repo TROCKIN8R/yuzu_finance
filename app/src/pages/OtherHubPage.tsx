@@ -38,6 +38,12 @@ export function OtherHubPage() {
           description="Export CSV T4/RL-1, T5 et échéancier CO-17 — brouillon CPA."
         />
         <HubCard
+          to="/compliance"
+          title="Conformité"
+          description="Échéances retenues, TPS/TVQ, impôts, NEQ — rappels et suivi."
+          badge="Calendrier"
+        />
+        <HubCard
           to="/period-close"
           title="Clôture de période"
           description="Verrouille un mois : paie, banque, factures, temps, taxes, ajustements."
@@ -47,6 +53,11 @@ export function OtherHubPage() {
           to="/adjustments"
           title="Ajustements"
           description="Charges payées d'avance, à payer, amortissements et écritures manuelles."
+        />
+        <HubCard
+          to="/backup"
+          title="Sauvegarde"
+          description="Exporter un ZIP organisé : données + documents joints."
         />
       </div>
     </PageShell>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { fetchUpcomingDeadlines } from '../lib/compliance'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot } from '../lib/financials'
@@ -23,6 +24,8 @@ import { useDashboardPeriod } from '../hooks/useDashboardPeriod'
 import { RevenueTrendChart } from '../components/DashboardCharts'
 import { ExecutiveBreakdownPanel } from '../components/ExecutiveBreakdownPanel'
 import { KpiCard, MetricGrid, TrendBadge } from '../components/MetricCard'
+import { UpcomingDeadlinesCard } from '../components/UpcomingDeadlinesCard'
+import type { ComplianceDeadline } from '../lib/types'
 
 export function ExecutiveDashboardPage() {
   const { period, setPeriod, presets, ready } = useDashboardPeriod()
@@ -36,6 +39,7 @@ export function ExecutiveDashboardPage() {
   const [monthlySeries, setMonthlySeries] = useState<ReturnType<typeof buildMonthlySeries>>([])
   const [partnerRows, setPartnerRows] = useState<ReturnType<typeof buildPartnerBreakdown>>([])
   const [serviceRows, setServiceRows] = useState<ReturnType<typeof buildServiceTypeBreakdown>>([])
+  const [deadlines, setDeadlines] = useState<ComplianceDeadline[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -46,12 +50,13 @@ export function ExecutiveDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      const [billing, extras, { data: glData }, reportExtras, settingsRow] = await Promise.all([
+      const [billing, extras, { data: glData }, reportExtras, settingsRow, upcoming] = await Promise.all([
         fetchDashboardBillingData(),
         fetchExecutiveExtras(),
         fetchGeneralLedgerData(),
         fetchFinancialReportExtras(),
         supabase.from('organization_settings').select('*').maybeSingle(),
+        fetchUpcomingDeadlines({ withinDays: 90, limit: 6 }),
       ])
 
       const fin = buildFinancialSnapshot(
@@ -109,6 +114,7 @@ export function ExecutiveDashboardPage() {
           range
         )
       )
+      setDeadlines(upcoming)
     } catch (err) {
       console.error('Executive dashboard load failed:', err)
       setError(err instanceof Error ? err.message : 'Erreur lors du chargement du tableau de bord.')
@@ -200,17 +206,20 @@ export function ExecutiveDashboardPage() {
         <KpiCard label="À facturer (WIP)" value={formatCad(unbilled)} sub="Temps horaire + forfaits non facturés" to="/billing/invoices" />
       </MetricGrid>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="ui-card px-4 py-3">
-          <div className="ui-metric-label">$/h moyen — Horaire</div>
-          <div className="text-xl font-semibold mt-0.5">{hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}</div>
-          <div className="text-xs text-muted mt-1">{worked.hourlyHours} h · {formatCad(worked.hourly)} prestations</div>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="ui-card px-4 py-3">
+            <div className="ui-metric-label">$/h moyen — Horaire</div>
+            <div className="text-xl font-semibold mt-0.5">{hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}</div>
+            <div className="text-xs text-muted mt-1">{worked.hourlyHours} h · {formatCad(worked.hourly)} prestations</div>
+          </div>
+          <div className="ui-card px-4 py-3">
+            <div className="ui-metric-label">$/h moyen — Forfait</div>
+            <div className="text-xl font-semibold mt-0.5">{fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}</div>
+            <div className="text-xs text-muted mt-1">{worked.fixedHours} h internes · {formatCad(worked.fixed)} prorata</div>
+          </div>
         </div>
-        <div className="ui-card px-4 py-3">
-          <div className="ui-metric-label">$/h moyen — Forfait</div>
-          <div className="text-xl font-semibold mt-0.5">{fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}</div>
-          <div className="text-xs text-muted mt-1">{worked.fixedHours} h internes · {formatCad(worked.fixed)} prorata</div>
-        </div>
+        <UpcomingDeadlinesCard rows={deadlines} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[240px]">
