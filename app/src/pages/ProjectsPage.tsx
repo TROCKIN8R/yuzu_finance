@@ -3,7 +3,7 @@ import { useLocation, useOutletContext } from 'react-router-dom'
 import { deleteEntityDocuments } from '../lib/documents'
 import { supabase } from '../lib/supabase'
 import type { BillingType, Partner, Project, ProjectStatus } from '../lib/types'
-import { matchesSearch, countActiveFilters } from '../lib/filters'
+import { matchesSearch } from '../lib/filters'
 import { customerPartners } from '../lib/partners'
 import { billingTypeLabel, projectAmountLabel } from '../lib/invoice'
 import { Badge } from '../components/Badge'
@@ -13,7 +13,7 @@ import { DocumentAttachments } from '../components/DocumentAttachments'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { FilterSelect, ListToolbar } from '../components/ListToolbar'
+import { FilterSummary, FilterTh, HeaderSearch, HeaderSelect, PlainTh } from '../components/ColumnFilters'
 import { PageHeader } from '../components/PageHeader'
 import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
@@ -148,6 +148,12 @@ export function ProjectsPage() {
     </Button>
   )
 
+  const clearFilters = () => {
+    setSearch('')
+    setPartnerFilter('')
+    setStatusFilter('')
+  }
+
   const content = (
     <>
       {embedded ? (
@@ -164,74 +170,77 @@ export function ProjectsPage() {
         <EmptyState message="Aucun projet." />
       ) : (
         <>
-          <ListToolbar
-            variant={embedded ? 'plain' : 'card'}
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Projet, partenaire…"
+          <FilterSummary
             resultCount={filtered.length}
             totalCount={rows.length}
-            activeFilterCount={countActiveFilters(!!search, !!partnerFilter, !!statusFilter)}
-            clearVisible={hasFilters}
-            onClearFilters={() => {
-              setSearch('')
-              setPartnerFilter('')
-              setStatusFilter('')
-            }}
-            trailing={embedded ? newProjectBtn : undefined}
-          >
-            <FilterSelect
-              label="Partenaire"
-              value={partnerFilter}
-              onChange={setPartnerFilter}
-              options={[
-                { value: '', label: 'Tous' },
-                ...billablePartners.map((p) => ({ value: p.id, label: p.legal_name })),
-              ]}
-            />
-            <FilterSelect
-              label="Statut"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: '', label: 'Tous' },
-                { value: 'active', label: 'Actif' },
-                { value: 'on_hold', label: 'En pause' },
-                { value: 'completed', label: 'Terminé' },
-                { value: 'archived', label: 'Archivé' },
-              ]}
-            />
-          </ListToolbar>
-          {filtered.length === 0 ? (
-            <EmptyState message="Aucun projet ne correspond aux filtres." />
-          ) : (
-            <DataTable minWidth={900}>
-              <thead className="bg-stone-50 text-muted text-left">
+            hasFilters={hasFilters}
+            onClear={clearFilters}
+            actions={embedded ? newProjectBtn : undefined}
+          />
+          <DataTable minWidth={900}>
+            <thead className="bg-stone-50 text-left">
+              <tr>
+                <FilterTh label="Projet">
+                  <HeaderSearch
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Nom…"
+                    aria-label="Filtrer par projet"
+                  />
+                </FilterTh>
+                <FilterTh label="Partenaire">
+                  <HeaderSelect
+                    value={partnerFilter}
+                    onChange={setPartnerFilter}
+                    aria-label="Filtrer par partenaire"
+                    options={[
+                      { value: '', label: 'Tous' },
+                      ...billablePartners.map((p) => ({ value: p.id, label: p.legal_name })),
+                    ]}
+                  />
+                </FilterTh>
+                <PlainTh>Facturation</PlainTh>
+                <PlainTh>Montant</PlainTh>
+                <FilterTh label="Statut">
+                  <HeaderSelect
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    aria-label="Filtrer par statut"
+                    options={[
+                      { value: '', label: 'Tous' },
+                      { value: 'active', label: 'Actif' },
+                      { value: 'on_hold', label: 'En pause' },
+                      { value: 'completed', label: 'Terminé' },
+                      { value: 'archived', label: 'Archivé' },
+                    ]}
+                  />
+                </FilterTh>
+                <PlainTh className="w-px" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 font-medium">Projet</th>
-                  <th className="px-4 py-3 font-medium">Partenaire</th>
-                  <th className="px-4 py-3 font-medium">Facturation</th>
-                  <th className="px-4 py-3 font-medium">Montant</th>
-                  <th className="px-4 py-3 font-medium">Statut</th>
-                  <th className="px-4 py-3" />
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-muted">
+                    Aucun projet ne correspond aux filtres.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((p) => (
+              ) : (
+                filtered.map((p) => (
                   <tr key={p.id} className="hover:bg-stone-50/50">
-                    <td className="px-4 py-3 font-medium">{p.name}</td>
-                    <td className="px-4 py-3 text-muted">{p.partners?.legal_name ?? '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 font-medium">{p.name}</td>
+                    <td className="px-3 py-3 text-muted">{p.partners?.legal_name ?? '—'}</td>
+                    <td className="px-3 py-3">
                       <Badge label={billingTypeLabel(p.billing_type)} tone={p.billing_type === 'fixed' ? 'sent' : 'active'} />
                     </td>
-                    <td className="px-4 py-3">{projectAmountLabel(p)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">{projectAmountLabel(p)}</td>
+                    <td className="px-3 py-3">
                       <Badge label={p.status} tone={p.status} />
                       {p.billing_type === 'fixed' && p.invoice_id && (
                         <span className="ml-2 text-xs text-muted">facturé</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right space-x-2">
+                    <td className="px-3 py-3 text-right space-x-2">
                       <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(p)}>
                         Modifier
                       </Button>
@@ -240,10 +249,10 @@ export function ProjectsPage() {
                       </Button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </DataTable>
-          )}
+                ))
+              )}
+            </tbody>
+          </DataTable>
         </>
       )}
       <Modal title={editingId ? 'Modifier le projet' : 'Nouveau projet'} open={open} onClose={() => setOpen(false)}>

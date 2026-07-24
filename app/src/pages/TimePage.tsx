@@ -3,7 +3,7 @@ import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Employee, Project } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
-import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
+import { inDateRange, matchesSearch } from '../lib/filters'
 import { billingTypeLabel } from '../lib/invoice'
 import { isFixedProject } from '../lib/billingMetrics'
 import { employeeDisplayName } from '../lib/payrollCalc'
@@ -24,7 +24,14 @@ import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
-import { DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
+import {
+  FilterSummary,
+  FilterTh,
+  HeaderDateRange,
+  HeaderSearch,
+  HeaderSelect,
+  PlainTh,
+} from '../components/ColumnFilters'
 import { PageHeader } from '../components/PageHeader'
 import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
@@ -89,7 +96,6 @@ export function TimePage() {
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
   const [partnerFilter, setPartnerFilter] = useState('')
-  const [employeeFilter, setEmployeeFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [open, setOpen] = useState(false)
@@ -122,7 +128,6 @@ export function TimePage() {
       const lineText = lines.map((l) => `${l.item_name} ${l.notes ?? ''}`).join(' ')
       if (billingFilter === 'unbilled' && t.invoice_id) return false
       if (billingFilter === 'invoiced' && !t.invoice_id) return false
-      if (employeeFilter && t.employee_id !== employeeFilter) return false
       if (projectFilter && t.project_id !== projectFilter) return false
       if (partnerFilter && proj?.partner_id !== partnerFilter) return false
       if (!inDateRange(t.entry_date, dateFrom, dateTo)) return false
@@ -139,9 +144,9 @@ export function TimePage() {
         emp ? employeeDisplayName(emp) : ''
       )
     })
-  }, [rows, billingFilter, projectFilter, partnerFilter, employeeFilter, dateFrom, dateTo, search])
+  }, [rows, billingFilter, projectFilter, partnerFilter, dateFrom, dateTo, search])
 
-  const hasFilters = !!(search || projectFilter || partnerFilter || employeeFilter || dateFrom || dateTo || billingFilter !== 'all')
+  const hasFilters = !!(search || projectFilter || partnerFilter || dateFrom || dateTo || billingFilter !== 'all')
 
   useEffect(() => {
     load()
@@ -364,16 +369,6 @@ export function TimePage() {
     [rows]
   )
 
-  const filterCount = countActiveFilters(
-    !!search,
-    !!projectFilter,
-    !!partnerFilter,
-    !!employeeFilter,
-    !!dateFrom,
-    !!dateTo,
-    billingFilter !== 'all'
-  )
-
   const selectedProject = projects.find((p) => p.id === form.project_id)
   const fixedInternal = selectedProject ? isFixedProject(selectedProject) : false
   const formTotalHours = totalLineHours(form.lines)
@@ -384,6 +379,15 @@ export function TimePage() {
       Logger du temps
     </Button>
   )
+
+  const clearFilters = () => {
+    setSearch('')
+    setProjectFilter('')
+    setPartnerFilter('')
+    setDateFrom('')
+    setDateTo('')
+    setBillingFilter('all')
+  }
 
   const content = (
     <>
@@ -408,72 +412,77 @@ export function TimePage() {
         <EmptyState message="Aucune feuille de temps." />
       ) : (
         <>
-          <ListToolbar
-            variant={embedded ? 'plain' : 'card'}
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Projet, item, notes, partenaire…"
+          <FilterSummary
             resultCount={filtered.length}
             totalCount={rows.length}
-            activeFilterCount={filterCount}
-            clearVisible={hasFilters}
-            onClearFilters={() => {
-              setSearch('')
-              setProjectFilter('')
-              setPartnerFilter('')
-              setEmployeeFilter('')
-              setDateFrom('')
-              setDateTo('')
-              setBillingFilter('all')
-            }}
-            trailing={embedded ? logTimeBtn : undefined}
-          >
-            <FilterChips
-              value={billingFilter}
-              onChange={setBillingFilter}
-              options={[
-                { value: 'all', label: 'Tout' },
-                { value: 'unbilled', label: 'Non facturé' },
-                { value: 'invoiced', label: 'Facturé' },
-              ]}
-            />
-            <FilterSelect
-              label="Employé"
-              value={employeeFilter}
-              onChange={setEmployeeFilter}
-              options={[{ value: '', label: 'Tous' }, ...employees.map((e) => ({ value: e.id, label: employeeDisplayName(e) }))]}
-            />
-            <FilterSelect
-              label="Projet"
-              value={projectFilter}
-              onChange={setProjectFilter}
-              options={[{ value: '', label: 'Tous' }, ...allProjects.map((p) => ({ value: p.id, label: p.name }))]}
-            />
-            <FilterSelect
-              label="Partenaire"
-              value={partnerFilter}
-              onChange={setPartnerFilter}
-              options={[{ value: '', label: 'Tous' }, ...partnerOptions]}
-            />
-            <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
-          </ListToolbar>
-          {filtered.length === 0 ? (
-            <EmptyState message="Aucune feuille ne correspond aux filtres." />
-          ) : (
-            <DataTable minWidth={900}>
-              <thead className="bg-stone-50 text-muted text-left">
+            hasFilters={hasFilters}
+            onClear={clearFilters}
+            actions={embedded ? logTimeBtn : undefined}
+          />
+          <DataTable minWidth={960}>
+            <thead className="bg-stone-50 text-left">
+              <tr>
+                <FilterTh label="Date">
+                  <HeaderDateRange
+                    from={dateFrom}
+                    to={dateTo}
+                    onFromChange={setDateFrom}
+                    onToChange={setDateTo}
+                  />
+                </FilterTh>
+                <FilterTh label="Projet">
+                  <div className="flex flex-col gap-1 min-w-[8rem]">
+                    <HeaderSelect
+                      value={projectFilter}
+                      onChange={setProjectFilter}
+                      aria-label="Filtrer par projet"
+                      options={[
+                        { value: '', label: 'Tous les projets' },
+                        ...allProjects.map((p) => ({ value: p.id, label: p.name })),
+                      ]}
+                    />
+                    <HeaderSelect
+                      value={partnerFilter}
+                      onChange={setPartnerFilter}
+                      aria-label="Filtrer par partenaire"
+                      options={[{ value: '', label: 'Tous les partenaires' }, ...partnerOptions]}
+                    />
+                  </div>
+                </FilterTh>
+                <FilterTh label="Items">
+                  <HeaderSearch
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Item, notes…"
+                    aria-label="Filtrer par item"
+                  />
+                </FilterTh>
+                <PlainTh>Heures</PlainTh>
+                <PlainTh>Montant</PlainTh>
+                <FilterTh label="Facturation">
+                  <HeaderSelect
+                    value={billingFilter}
+                    onChange={(v) => setBillingFilter(v as Filter)}
+                    aria-label="Filtrer par facturation"
+                    options={[
+                      { value: 'all', label: 'Tout' },
+                      { value: 'unbilled', label: 'Non facturé' },
+                      { value: 'invoiced', label: 'Facturé' },
+                    ]}
+                  />
+                </FilterTh>
+                <PlainTh className="w-px" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-4 py-3 font-medium">Projet</th>
-                  <th className="px-4 py-3 font-medium">Items</th>
-                  <th className="px-4 py-3 font-medium">Heures</th>
-                  <th className="px-4 py-3 font-medium">Montant</th>
-                  <th className="px-4 py-3 font-medium">Facturation</th>
-                  <th className="px-4 py-3" />
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-muted">
+                    Aucune feuille ne correspond aux filtres.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((t) => {
+              ) : (
+                filtered.map((t) => {
                   const proj = relationOne(t.projects)
                   const internal = proj ? isFixedProject(proj as Project) : false
                   const lines = t.time_entry_lines ?? []
@@ -482,15 +491,15 @@ export function TimePage() {
                   const inv = relationOne(t.invoices)
                   return (
                     <tr key={t.id} className="hover:bg-stone-50/50">
-                      <td className="px-4 py-3">{formatDate(t.entry_date)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">{formatDate(t.entry_date)}</td>
+                      <td className="px-3 py-3">
                         <div className="font-medium">{proj?.name ?? '—'}</div>
                         <div className="text-xs text-muted">{proj?.partners?.legal_name}</div>
                       </td>
-                      <td className="px-4 py-3 text-muted max-w-md truncate">{sheetSummary(lines)}</td>
-                      <td className="px-4 py-3">{hours.toFixed(2)}</td>
-                      <td className="px-4 py-3">{internal ? '—' : amt > 0 ? formatCad(amt) : '—'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 text-muted max-w-md truncate">{sheetSummary(lines)}</td>
+                      <td className="px-3 py-3">{hours.toFixed(2)}</td>
+                      <td className="px-3 py-3">{internal ? '—' : amt > 0 ? formatCad(amt) : '—'}</td>
+                      <td className="px-3 py-3">
                         {internal ? (
                           <Badge label="Interne" tone="sent" />
                         ) : t.invoice_id ? (
@@ -499,7 +508,7 @@ export function TimePage() {
                           <Badge label="Non facturé" tone="unbilled" />
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right space-x-2">
+                      <td className="px-3 py-3 text-right space-x-2">
                         <Button variant="ghost" className={tableActionClass} onClick={() => openEdit(t)}>
                           Modifier
                         </Button>
@@ -509,10 +518,10 @@ export function TimePage() {
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </DataTable>
-          )}
+                })
+              )}
+            </tbody>
+          </DataTable>
         </>
       )}
 
