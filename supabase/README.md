@@ -25,6 +25,7 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 | `20260722180000_document_attachments.sql` | **`document_attachments` table** + private Storage bucket `documents` |
 | `20260628140000_shareholders.sql` | **`shareholders` table** + dividend allocations by shareholder |
 | `20260724220000_project_po_number.sql` | Optional `projects.po_number` (PO / BC) for invoices |
+| `20260724230000_project_week_plans.sql` | **`project_week_plans`** — planned hours per project/week (pipeline) |
 
 If Banque import fails with `relation "bank_transactions" does not exist`, run **`20260629100000_bank_import.sql`** — it now creates the table, RLS, and import columns in one step.
 
@@ -45,7 +46,7 @@ If Banque import fails with `relation "bank_transactions" does not exist`, run *
 
 | Module | Tables |
 |--------|--------|
-| Core | `organization_settings`, `partners`, `projects`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
+| Core | `organization_settings`, `partners`, `projects`, `project_week_plans`, `time_entries`, `invoices`, `invoice_line_items`, `payments` |
 | Finance v2 | `expenses`, `payroll_runs`, `sales_tax_periods`, `corporate_tax_records` |
 | Accounting v3 | `bank_transactions`, `accounting_adjustments` (+ extended `organization_settings`, `payroll_runs`) |
 | HR | `employees`, `employee_expenses`, `dividends`, `dividend_allocations` |

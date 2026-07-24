@@ -374,9 +374,9 @@ export function ProjectsPage() {
           </div>
         </form>
       </Modal>
-      {embedded && rows.some((p) => p.status === 'active' && p.billing_type === 'hourly') && (
-        <WorkflowFooter to="/billing/time" label="Enregistrer du temps">
-          Projet horaire actif ?
+      {embedded && rows.some((p) => p.status === 'active') && (
+        <WorkflowFooter to="/billing/pipeline" label="Planifier le pipeline">
+          Projet actif ?
         </WorkflowFooter>
       )}
     </>

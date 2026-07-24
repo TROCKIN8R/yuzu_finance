@@ -10,6 +10,7 @@ import { PageShell } from '../components/PageShell'
 import { BillingWorkflowNav, type BillingStep } from '../components/BillingWorkflowNav'
 
 function stepFromPath(pathname: string): BillingStep | undefined {
+  if (pathname.endsWith('/pipeline')) return 'pipeline'
   if (pathname.endsWith('/time')) return 'time'
   if (pathname.endsWith('/invoices')) return 'invoices'
   if (pathname.endsWith('/projects')) return 'projects'

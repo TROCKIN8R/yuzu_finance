@@ -7,6 +7,7 @@ import { DashboardDetailsPage } from './pages/DashboardDetailsPage'
 import { PartnersPage } from './pages/PartnersPage'
 import { BillingPage } from './pages/BillingPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { PipelinePage } from './pages/PipelinePage'
 import { TimePage } from './pages/TimePage'
 import { InvoicesPage } from './pages/InvoicesPage'
 import { EmployeeExpensesPage } from './pages/EmployeeExpensesPage'
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="billing" element={<BillingPage />}>
             <Route index element={<Navigate to="projects" replace />} />
             <Route path="projects" element={<ProjectsPage />} />
+            <Route path="pipeline" element={<PipelinePage />} />
             <Route path="time" element={<TimePage />} />
             <Route path="invoices" element={<InvoicesPage />} />
           </Route>

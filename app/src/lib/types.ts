@@ -304,6 +304,17 @@ export interface Project {
   partners?: Pick<Partner, 'legal_name' | 'kind'>
 }
 
+/** Planned (pipeline) hours for one project in one calendar week (Monday start). */
+export interface ProjectWeekPlan {
+  id: string
+  user_id: string
+  project_id: string
+  week_start: string
+  hours: number
+  created_at: string
+  updated_at: string
+}
+
 export interface InvoiceLineItem {
   id: string
   user_id: string

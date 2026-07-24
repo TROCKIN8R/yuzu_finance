@@ -29,7 +29,7 @@ All operational data (clients, projects, time, invoices, expenses, payroll, etc.
 
 1. Setup: `supabase/README.md` — run `supabase/setup.sql`, configure auth, set `app/.env.local`.
 2. Run: `cd app && npm install && npm run dev`.
-3. Tables (all RLS `user_id = auth.uid()`): `clients`, `projects`, `time_entries`, `invoices`, `payments`, `expenses`, `employees`, `payroll_runs`, `dividends`, `sales_tax_periods`, `corporate_tax_records`, `organization_settings`.
+3. Tables (all RLS `user_id = auth.uid()`): `clients`, `projects`, `project_week_plans`, `time_entries`, `invoices`, `payments`, `expenses`, `employees`, `payroll_runs`, `dividends`, `sales_tax_periods`, `corporate_tax_records`, `organization_settings`.
 4. Time entries link to invoices via `time_entries.invoice_id` — filter `invoice_id IS NULL` for unbilled.
 5. **Bulk/agent access**: use Supabase service role in gitignored local env for scripts only; never in the browser app.
 
