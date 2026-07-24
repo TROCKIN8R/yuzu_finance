@@ -19,6 +19,7 @@ export function BillingWorkflowNav({ current }: { current?: BillingStep }) {
       steps={steps}
       currentId={current}
       terminalSteps={terminal}
+      variant="tabs"
     />
   )
 }

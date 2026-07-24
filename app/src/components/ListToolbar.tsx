@@ -13,6 +13,7 @@ export function ListToolbar({
   clearVisible = false,
   trailing,
   hideSearch = false,
+  variant = 'card',
 }: {
   search: string
   onSearchChange: (v: string) => void
@@ -25,16 +26,25 @@ export function ListToolbar({
   clearVisible?: boolean
   trailing?: ReactNode
   hideSearch?: boolean
+  /** `plain` — borderless dense bar for workflow pages. */
+  variant?: 'card' | 'plain'
 }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const hasFilterControls = !!children
   const showCount = resultCount != null && totalCount != null
+  const plain = variant === 'plain'
 
   return (
-    <div className="ui-card p-3 sm:p-4 mb-4 space-y-3">
+    <div
+      className={
+        plain
+          ? 'mb-3 space-y-2'
+          : 'ui-card p-3 sm:p-4 mb-4 space-y-3'
+      }
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         {!hideSearch && (
-          <div className="relative flex-1 w-full sm:max-w-md">
+          <div className="relative flex-1 w-full sm:max-w-sm">
             <input
               type="search"
               className={`${inputClass} pl-9`}
@@ -49,7 +59,7 @@ export function ListToolbar({
           </div>
         )}
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
           {hasFilterControls && (
             <button
               type="button"
@@ -82,16 +92,20 @@ export function ListToolbar({
         <div
           className={`${
             filtersOpen ? 'block' : 'hidden'
-          } sm:block pt-1 sm:pt-0 border-t sm:border-t-0 border-border sm:border-0`}
+          } sm:block ${plain ? '' : 'pt-1 sm:pt-0 border-t sm:border-t-0 border-border sm:border-0'}`}
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end pt-3 sm:pt-0">
+          <div
+            className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end ${
+              plain ? 'sm:pt-0' : 'pt-3 sm:pt-0 gap-3'
+            }`}
+          >
             {children}
           </div>
         </div>
       )}
 
       {showCount && (
-        <p className="text-xs text-muted pt-0.5 border-t border-border sm:border-0">
+        <p className={`text-xs text-muted ${plain ? '' : 'pt-0.5 border-t border-border sm:border-0'}`}>
           {resultCount === totalCount
             ? `${totalCount} résultat${totalCount !== 1 ? 's' : ''}`
             : `${resultCount} sur ${totalCount}`}

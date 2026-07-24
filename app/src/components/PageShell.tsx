@@ -17,5 +17,6 @@ export function PageShell({
   width?: Width
   className?: string
 }) {
-  return <div className={`space-y-6 ${widthClass[width]} ${className}`.trim()}>{children}</div>
+  const spacing = /\bspace-y-/.test(className) ? '' : 'space-y-6'
+  return <div className={`${spacing} ${widthClass[width]} ${className}`.trim()}>{children}</div>
 }

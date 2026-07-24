@@ -26,7 +26,7 @@ import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { DateRangeFilter, FilterChips, FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
-import { StepPanelHeader } from '../components/WorkflowNav'
+import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 import { AlertBanner } from '../components/AlertBanner'
@@ -379,29 +379,21 @@ export function TimePage() {
   const formTotalHours = totalLineHours(form.lines)
   const datalistId = 'time-item-suggestions'
 
-  return (
-    <PageShell>
+  const logTimeBtn = (
+    <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
+      Logger du temps
+    </Button>
+  )
+
+  const content = (
+    <>
       {embedded ? (
-        <StepPanelHeader
-          step={2}
-          totalSteps={4}
-          title="Temps"
-          hint="Une feuille par projet et par jour — items libres à l'intérieur, totaux par item sur la facture."
-          actions={
-            <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
-              Logger du temps
-            </Button>
-          }
-        />
+        rows.length === 0 && <StepActionBar actions={logTimeBtn} />
       ) : (
         <PageHeader
           title="Suivi du temps"
           subtitle="Une feuille par projet et par jour. Les notes quotidiennes restent internes ; la facture regroupe par item."
-          actions={
-            <Button onClick={openNew} disabled={projects.length === 0 || employees.length === 0}>
-              Logger du temps
-            </Button>
-          }
+          actions={logTimeBtn}
         />
       )}
       {employees.length === 0 && (
@@ -417,6 +409,7 @@ export function TimePage() {
       ) : (
         <>
           <ListToolbar
+            variant={embedded ? 'plain' : 'card'}
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder="Projet, item, notes, partenaire…"
@@ -433,6 +426,7 @@ export function TimePage() {
               setDateTo('')
               setBillingFilter('all')
             }}
+            trailing={embedded ? logTimeBtn : undefined}
           >
             <FilterChips
               value={billingFilter}
@@ -695,6 +689,12 @@ export function TimePage() {
           {unbilledCount} feuille{unbilledCount > 1 ? 's' : ''} prête{unbilledCount > 1 ? 's' : ''} à facturer.
         </WorkflowFooter>
       )}
-    </PageShell>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-3">{content}</div>
+  }
+
+  return <PageShell>{content}</PageShell>
 }

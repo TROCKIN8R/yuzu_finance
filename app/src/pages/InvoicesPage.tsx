@@ -32,7 +32,7 @@ import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { DateRangeFilter, FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
-import { StepPanelHeader } from '../components/WorkflowNav'
+import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 
@@ -364,35 +364,25 @@ export function InvoicesPage() {
   const taxesEnabledInSettings = !!(settings?.charge_gst || settings?.charge_qst)
   const showTaxesOnInvoice = includeSalesTax && taxesEnabledInSettings
 
-  return (
-    <PageShell>
+  const createInvoiceBtn = (
+    <Button onClick={openCreate} disabled={billablePartners.length === 0}>
+      Créer une facture
+    </Button>
+  )
+
+  const content = (
+    <>
       {embedded ? (
-        <StepPanelHeader
-          step={3}
-          totalSteps={4}
-          title="Factures"
-          hint="Créer et suivre les factures client."
-          actions={
-            <Button onClick={openCreate} disabled={billablePartners.length === 0}>
-              Créer une facture
-            </Button>
-          }
-        />
+        rows.length === 0 && <StepActionBar actions={createInvoiceBtn} />
       ) : (
-        <PageHeader
-          title="Factures"
-          actions={
-            <Button onClick={openCreate} disabled={billablePartners.length === 0}>
-              Créer une facture
-            </Button>
-          }
-        />
+        <PageHeader title="Factures" actions={createInvoiceBtn} />
       )}
       {rows.length === 0 ? (
         <EmptyState message="Aucune facture — créez-en une à partir du temps ou d'un projet forfaitaire." />
       ) : (
         <>
           <ListToolbar
+            variant={embedded ? 'plain' : 'card'}
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder="N° facture, partenaire, montant…"
@@ -407,6 +397,7 @@ export function InvoicesPage() {
               setDateFrom('')
               setDateTo('')
             }}
+            trailing={embedded ? createInvoiceBtn : undefined}
           >
             <FilterSelect
               label="Partenaire"
@@ -727,6 +718,12 @@ export function InvoicesPage() {
           Facture envoyée ?
         </WorkflowFooter>
       )}
-    </PageShell>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-3">{content}</div>
+  }
+
+  return <PageShell>{content}</PageShell>
 }

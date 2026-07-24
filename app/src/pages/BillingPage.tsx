@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
@@ -7,7 +7,6 @@ import { FIXED_PROJECT_SELECT, TIME_ENTRY_SELECT } from '../lib/dashboardData'
 import { entriesToMetrics } from '../lib/timeEntries'
 import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
-import { MetricCard, MetricGrid } from '../components/MetricCard'
 import { BillingWorkflowNav, type BillingStep } from '../components/BillingWorkflowNav'
 
 function stepFromPath(pathname: string): BillingStep | undefined {
@@ -15,6 +14,15 @@ function stepFromPath(pathname: string): BillingStep | undefined {
   if (pathname.endsWith('/invoices')) return 'invoices'
   if (pathname.endsWith('/projects')) return 'projects'
   return undefined
+}
+
+function MetricChip({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-1.5 min-w-0">
+      <span className="text-xs text-muted whitespace-nowrap">{label}</span>
+      <span className="text-sm font-semibold tabular-nums truncate">{value}</span>
+    </div>
+  )
 }
 
 export function BillingPage() {
@@ -44,7 +52,7 @@ export function BillingPage() {
   }
 
   return (
-    <PageShell width="wide">
+    <PageShell width="wide" className="space-y-4">
       <PageHeader
         title="Prestations"
         subtitle={
@@ -58,12 +66,12 @@ export function BillingPage() {
         }
       />
 
-      <MetricGrid cols={4}>
-        <MetricCard label="Heures non facturées" value={`${metrics.unbilledHours} h`} hint="Projets horaires seulement" />
-        <MetricCard label="Temps à facturer" value={formatCad(metrics.unbilledAmount - metrics.fixedWip)} hint="Horaire non facturé" />
-        <MetricCard label="Forfaits à facturer" value={formatCad(metrics.fixedWip)} hint="Projets forfaitaires non facturés" />
-        <MetricCard label="Factures brouillon" value={metrics.draftInvoices} />
-      </MetricGrid>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border bg-white px-3 py-2.5">
+        <MetricChip label="Non facturé" value={`${metrics.unbilledHours} h`} />
+        <MetricChip label="Horaire" value={formatCad(metrics.unbilledAmount - metrics.fixedWip)} />
+        <MetricChip label="Forfaits" value={formatCad(metrics.fixedWip)} />
+        <MetricChip label="Brouillons" value={metrics.draftInvoices} />
+      </div>
 
       <BillingWorkflowNav current={current} />
 

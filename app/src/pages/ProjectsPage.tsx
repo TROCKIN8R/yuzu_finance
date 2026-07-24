@@ -15,7 +15,7 @@ import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
 import { FilterSelect, ListToolbar } from '../components/ListToolbar'
 import { PageHeader } from '../components/PageHeader'
-import { StepPanelHeader } from '../components/WorkflowNav'
+import { StepActionBar } from '../components/WorkflowNav'
 import { WorkflowFooter } from '../components/WorkflowFooter'
 import { PageShell } from '../components/PageShell'
 
@@ -142,32 +142,21 @@ export function ProjectsPage() {
     load()
   }
 
-  return (
-    <PageShell>
+  const newProjectBtn = (
+    <Button onClick={openNew} disabled={billablePartners.length === 0}>
+      Nouveau projet
+    </Button>
+  )
+
+  const content = (
+    <>
       {embedded ? (
-        <StepPanelHeader
-          step={1}
-          totalSteps={4}
-          title="Projets"
-          hint="Mandats horaires ou forfaitaires par partenaire client."
-          actions={
-            <Button onClick={openNew} disabled={billablePartners.length === 0}>
-              Nouveau projet
-            </Button>
-          }
-        />
+        rows.length === 0 && <StepActionBar actions={newProjectBtn} />
       ) : (
-        <PageHeader
-          title="Projets"
-          actions={
-            <Button onClick={openNew} disabled={billablePartners.length === 0}>
-              Nouveau projet
-            </Button>
-          }
-        />
+        <PageHeader title="Projets" actions={newProjectBtn} />
       )}
       {billablePartners.length === 0 && (
-        <p className="text-sm text-muted mb-4">
+        <p className="text-sm text-muted mb-3">
           Ajoutez un partenaire avec le rôle Client ou Client et fournisseur avant de créer un projet.
         </p>
       )}
@@ -176,6 +165,7 @@ export function ProjectsPage() {
       ) : (
         <>
           <ListToolbar
+            variant={embedded ? 'plain' : 'card'}
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder="Projet, partenaire…"
@@ -188,6 +178,7 @@ export function ProjectsPage() {
               setPartnerFilter('')
               setStatusFilter('')
             }}
+            trailing={embedded ? newProjectBtn : undefined}
           >
             <FilterSelect
               label="Partenaire"
@@ -361,6 +352,12 @@ export function ProjectsPage() {
           Projet horaire actif ?
         </WorkflowFooter>
       )}
-    </PageShell>
+    </>
   )
+
+  if (embedded) {
+    return <div className="space-y-3">{content}</div>
+  }
+
+  return <PageShell>{content}</PageShell>
 }
