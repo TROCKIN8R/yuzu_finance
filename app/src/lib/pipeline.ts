@@ -25,22 +25,25 @@ export function weekStarts(weekStart: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => addWeeks(weekStart, i))
 }
 
+/** Consecutive Monday dates from `startWeek` through `endWeek`, both inclusive. */
+export function weeksBetween(startWeek: string, endWeek: string): string[] {
+  const weeks: string[] = []
+  let cursor = startWeek
+  while (cursor <= endWeek) {
+    weeks.push(cursor)
+    cursor = addWeeks(cursor, 1)
+  }
+  return weeks
+}
+
 /**
  * Mondays from the current week through the week that contains `fromIso + months`.
  * Typical span: ~26 weeks for 6 months.
  */
 export function weeksForNextMonths(fromIso: string, months: number): string[] {
-  const start = startOfWeekMonday(fromIso)
   const endDate = new Date(fromIso + 'T12:00:00')
   endDate.setMonth(endDate.getMonth() + months)
-  const last = startOfWeekMonday(endDate.toISOString().slice(0, 10))
-  const weeks: string[] = []
-  let cursor = start
-  while (cursor <= last) {
-    weeks.push(cursor)
-    cursor = addWeeks(cursor, 1)
-  }
-  return weeks
+  return weeksBetween(startOfWeekMonday(fromIso), startOfWeekMonday(endDate.toISOString().slice(0, 10)))
 }
 
 /** ISO-8601 week number for a date (week_start should be a Monday). */
@@ -96,6 +99,16 @@ export function timeEntriesToBillableHoursMap(entries: TimeEntrySheetSource[]): 
     map.set(key, round2((map.get(key) ?? 0) + Number(line.hours || 0)))
   }
   return map
+}
+
+/** Earliest week present in a projectId|weekStart keyed map, or null when the map is empty. */
+export function earliestWeekInMap(map: Map<string, number>): string | null {
+  let earliest: string | null = null
+  for (const key of map.keys()) {
+    const week = key.split('|')[1]
+    if (earliest === null || week < earliest) earliest = week
+  }
+  return earliest
 }
 
 /** Actual minus planned hours; percent is unavailable when no hours were planned. */

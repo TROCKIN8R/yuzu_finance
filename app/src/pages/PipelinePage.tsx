@@ -7,6 +7,7 @@ import { projectAmountLabel } from '../lib/invoice'
 import type { TimeEntrySheetSource } from '../lib/timeEntries'
 import {
   cellRevenue,
+  earliestWeekInMap,
   formatWeekLabel,
   hoursKey,
   pipelineVariance,
@@ -16,6 +17,7 @@ import {
   timeEntriesToBillableHoursMap,
   totalHoursByProject,
   weekColumnTotals,
+  weeksBetween,
   weeksForNextMonths,
   type PipelineProject,
 } from '../lib/pipeline'
@@ -27,10 +29,16 @@ type BillingOutletContext = { refreshMetrics?: () => void }
 
 const HORIZON_MONTHS = 6
 const PIPELINE_STATUSES = new Set(['active', 'on_hold'])
+/** Width of the sticky project column, so auto-scroll never hides the current week behind it. */
+const PROJECT_COL_WIDTH = 220
 
 function formatSigned(value: number, suffix = '') {
   const formatted = new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 }).format(Math.abs(value))
   return `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatted}${suffix}`
+}
+
+function sumProjectHours(map: Map<string, number>, projectId: string, weeks: string[]) {
+  return Math.round(weeks.reduce((sum, week) => sum + (map.get(hoursKey(projectId, week)) ?? 0), 0) * 100) / 100
 }
 
 export function PipelinePage() {
@@ -39,12 +47,16 @@ export function PipelinePage() {
   const [plans, setPlans] = useState<ProjectWeekPlan[]>([])
   const [timeEntries, setTimeEntries] = useState<TimeEntrySheetSource[]>([])
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const draftRef = useRef<Map<string, string>>(new Map())
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const currentWeekRef = useRef<HTMLTableCellElement>(null)
+  const didScrollToCurrentWeek = useRef(false)
   const [, bump] = useState(0)
 
   const thisWeek = startOfWeekMonday(todayIso())
-  const weeks = useMemo(() => weeksForNextMonths(todayIso(), HORIZON_MONTHS), [])
+  const horizonWeeks = useMemo(() => weeksForNextMonths(todayIso(), HORIZON_MONTHS), [])
 
   const visibleProjects = useMemo(
     () => projects.filter((p) => PIPELINE_STATUSES.has(p.status)).sort((a, b) => a.name.localeCompare(b.name, 'fr')),
@@ -53,6 +65,14 @@ export function PipelinePage() {
 
   const hoursMap = useMemo(() => plansToHoursMap(plans), [plans])
   const actualHoursMap = useMemo(() => timeEntriesToBillableHoursMap(timeEntries), [timeEntries])
+
+  const weeks = useMemo(() => {
+    const firstBillableWeek = earliestWeekInMap(actualHoursMap)
+    if (!firstBillableWeek || firstBillableWeek >= horizonWeeks[0]) return horizonWeeks
+    return weeksBetween(firstBillableWeek, horizonWeeks[horizonWeeks.length - 1])
+  }, [actualHoursMap, horizonWeeks])
+  const completedWeeks = useMemo(() => weeks.filter((week) => week < thisWeek), [weeks, thisWeek])
+
   const totalsByProject = useMemo(
     () => totalHoursByProject(hoursMap, visibleProjects.map((p) => p.id)),
     [hoursMap, visibleProjects]
@@ -75,22 +95,40 @@ export function PipelinePage() {
     }
   }, [visibleProjects, weeks, hoursMap, actualHoursMap, totalsByProject])
 
-  const grandVariance = pipelineVariance(grand.actualHours, grand.plannedHours)
+  const grandVariance = useMemo(() => {
+    let plannedHours = 0
+    let actualHours = 0
+    for (const project of visibleProjects) {
+      plannedHours += sumProjectHours(hoursMap, project.id, completedWeeks)
+      actualHours += sumProjectHours(actualHoursMap, project.id, completedWeeks)
+    }
+    return pipelineVariance(actualHours, plannedHours)
+  }, [visibleProjects, completedWeeks, hoursMap, actualHoursMap])
 
   useEffect(() => {
     load()
   }, [])
 
+  // Past weeks push the current week off-screen, so land the view on it once data is in.
+  useEffect(() => {
+    if (!loaded || didScrollToCurrentWeek.current) return
+    const scroller = scrollerRef.current
+    const cell = currentWeekRef.current
+    if (!scroller || !cell) return
+    const offset = cell.getBoundingClientRect().left - scroller.getBoundingClientRect().left
+    scroller.scrollLeft += offset - PROJECT_COL_WIDTH
+    didScrollToCurrentWeek.current = true
+  }, [loaded, weeks])
+
   async function load() {
     setError(null)
-    const periodEnd = addDays(weeks[weeks.length - 1], 6)
+    const periodEnd = addDays(horizonWeeks[horizonWeeks.length - 1], 6)
     const [p, w, t] = await Promise.all([
       supabase.from('projects').select('id, name, billing_type, default_hourly_rate, fixed_price, status, partner_id, partners(legal_name)').order('name'),
       supabase.from('project_week_plans').select('*'),
       supabase
         .from('time_entries')
         .select('id, entry_date, hours, rate_override, billable, invoice_id, project_id, description, time_entry_lines(hours, billable, item_name)')
-        .gte('entry_date', weeks[0])
         .lte('entry_date', periodEnd),
     ])
     if (p.error) {
@@ -112,6 +150,7 @@ export function PipelinePage() {
     setProjects((p.data as PipelineProject[]) ?? [])
     setPlans((w.data as ProjectWeekPlan[]) ?? [])
     setTimeEntries((t.data as TimeEntrySheetSource[]) ?? [])
+    setLoaded(true)
     refreshMetrics?.()
   }
 
@@ -218,8 +257,8 @@ export function PipelinePage() {
       <div>
         <h2 className="text-base font-semibold text-ink">Pipeline</h2>
         <p className="text-sm text-muted mt-0.5">
-          Prochains {HORIZON_MONTHS} mois · heures prévues et heures facturables réelles par semaine · revenus estimés
-          (horaire × taux, forfait au prorata)
+          De la première heure facturable jusqu’aux prochains {HORIZON_MONTHS} mois · heures prévues et heures
+          facturables réelles par semaine · revenus estimés (horaire × taux, forfait au prorata)
         </p>
       </div>
 
@@ -230,7 +269,7 @@ export function PipelinePage() {
       {visibleProjects.length === 0 ? (
         <EmptyState message="Aucun projet actif ou en pause — créez-en un pour planifier la charge et les revenus." />
       ) : (
-        <div className="overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-white">
+        <div ref={scrollerRef} className="overflow-x-auto overscroll-x-contain rounded-xl border border-border bg-white">
           <table className="min-w-max w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-stone-50/80">
@@ -243,8 +282,13 @@ export function PipelinePage() {
                   return (
                     <th
                       key={week}
+                      ref={isCurrent ? currentWeekRef : undefined}
                       className={`px-2 py-2.5 text-center font-medium min-w-[88px] ${
-                        isCurrent ? 'bg-yuzu/10 text-yuzu-dark' : 'text-muted'
+                        isCurrent
+                          ? 'bg-yuzu/10 text-yuzu-dark'
+                          : week < thisWeek
+                            ? 'bg-stone-100/70 text-muted'
+                            : 'text-muted'
                       }`}
                     >
                       <div className="text-xs font-semibold">{label.week}</div>
@@ -255,10 +299,16 @@ export function PipelinePage() {
                 <th className="sticky right-[180px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[110px] border-l border-border">
                   Total
                 </th>
-                <th className="sticky right-[90px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]">
+                <th
+                  title="Heures réelles moins heures prévues, de la première semaine à la dernière semaine terminée"
+                  className="sticky right-[90px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]"
+                >
                   Écart h
                 </th>
-                <th className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]">
+                <th
+                  title="Écart en pourcentage, de la première semaine à la dernière semaine terminée"
+                  className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]"
+                >
                   Écart %
                 </th>
               </tr>
@@ -266,10 +316,10 @@ export function PipelinePage() {
             <tbody>
               {visibleProjects.map((project) => {
                 const row = projectRowTotals(project, weeks, hoursMap, totalsByProject.get(project.id) ?? 0)
-                const actualRowHours = Math.round(
-                  weeks.reduce((sum, week) => sum + (actualHoursMap.get(hoursKey(project.id, week)) ?? 0), 0) * 100
-                ) / 100
-                const variance = pipelineVariance(actualRowHours, row.hours)
+                const actualRowHours = sumProjectHours(actualHoursMap, project.id, weeks)
+                const comparisonPlannedHours = sumProjectHours(hoursMap, project.id, completedWeeks)
+                const comparisonActualHours = sumProjectHours(actualHoursMap, project.id, completedWeeks)
+                const variance = pipelineVariance(comparisonActualHours, comparisonPlannedHours)
                 const partner = relationOne(project.partners)?.legal_name
                 return (
                   <tr key={project.id} className="border-b border-border/70 hover:bg-stone-50/40">
@@ -297,7 +347,9 @@ export function PipelinePage() {
                       return (
                         <td
                           key={week}
-                          className={`px-1.5 py-1.5 text-center align-top ${isCurrent ? 'bg-yuzu/5' : ''}`}
+                          className={`px-1.5 py-1.5 text-center align-top ${
+                            isCurrent ? 'bg-yuzu/5' : week < thisWeek ? 'bg-stone-50/70' : ''
+                          }`}
                         >
                           <input
                             type="number"
@@ -381,8 +433,9 @@ export function PipelinePage() {
       )}
 
       <p className="text-xs text-muted">
-        Faites défiler horizontalement pour voir toutes les semaines. Forfaits : montant réparti au prorata de toutes
-        les heures planifiées du projet.
+        Faites défiler horizontalement pour voir toutes les semaines — les semaines passées (grisées) sont à gauche de
+        la semaine courante. Les écarts comparent le prévu au réel jusqu’à la dernière semaine terminée. Forfaits :
+        montant réparti au prorata de toutes les heures planifiées du projet.
       </p>
 
       <WorkflowFooter to="/billing/time" label="Enregistrer du temps">
