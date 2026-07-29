@@ -1,4 +1,6 @@
 import type { Project, ProjectWeekPlan } from './types'
+import type { TimeEntrySheetSource } from './timeEntries'
+import { flattenAllEntryLines } from './timeEntries'
 import { addDays, lineAmount } from './format'
 
 function round2(n: number) {
@@ -83,6 +85,26 @@ export function plansToHoursMap(plans: Pick<ProjectWeekPlan, 'project_id' | 'wee
     map.set(hoursKey(p.project_id, p.week_start), Number(p.hours) || 0)
   }
   return map
+}
+
+/** Map of projectId|weekStart → billable hours recorded in time sheets. */
+export function timeEntriesToBillableHoursMap(entries: TimeEntrySheetSource[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const line of flattenAllEntryLines(entries)) {
+    if (!line.billable) continue
+    const key = hoursKey(line.project_id, startOfWeekMonday(line.entry_date))
+    map.set(key, round2((map.get(key) ?? 0) + Number(line.hours || 0)))
+  }
+  return map
+}
+
+/** Actual minus planned hours; percent is unavailable when no hours were planned. */
+export function pipelineVariance(actualHours: number, plannedHours: number): { hours: number; percent: number | null } {
+  const hours = round2(actualHours - plannedHours)
+  return {
+    hours,
+    percent: plannedHours > 0 ? round2((hours / plannedHours) * 100) : null,
+  }
 }
 
 /** Total planned hours per project (all weeks). */

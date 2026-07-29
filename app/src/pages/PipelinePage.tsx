@@ -2,15 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Project, ProjectWeekPlan } from '../lib/types'
-import { formatCad, numberFieldValue, parseNumberField, relationOne, todayIso } from '../lib/format'
+import { addDays, formatCad, numberFieldValue, parseNumberField, relationOne, todayIso } from '../lib/format'
 import { projectAmountLabel } from '../lib/invoice'
+import type { TimeEntrySheetSource } from '../lib/timeEntries'
 import {
   cellRevenue,
   formatWeekLabel,
   hoursKey,
+  pipelineVariance,
   plansToHoursMap,
   projectRowTotals,
   startOfWeekMonday,
+  timeEntriesToBillableHoursMap,
   totalHoursByProject,
   weekColumnTotals,
   weeksForNextMonths,
@@ -25,10 +28,16 @@ type BillingOutletContext = { refreshMetrics?: () => void }
 const HORIZON_MONTHS = 6
 const PIPELINE_STATUSES = new Set(['active', 'on_hold'])
 
+function formatSigned(value: number, suffix = '') {
+  const formatted = new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 }).format(Math.abs(value))
+  return `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatted}${suffix}`
+}
+
 export function PipelinePage() {
   const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [projects, setProjects] = useState<PipelineProject[]>([])
   const [plans, setPlans] = useState<ProjectWeekPlan[]>([])
+  const [timeEntries, setTimeEntries] = useState<TimeEntrySheetSource[]>([])
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const draftRef = useRef<Map<string, string>>(new Map())
@@ -43,21 +52,30 @@ export function PipelinePage() {
   )
 
   const hoursMap = useMemo(() => plansToHoursMap(plans), [plans])
+  const actualHoursMap = useMemo(() => timeEntriesToBillableHoursMap(timeEntries), [timeEntries])
   const totalsByProject = useMemo(
     () => totalHoursByProject(hoursMap, visibleProjects.map((p) => p.id)),
     [hoursMap, visibleProjects]
   )
 
   const grand = useMemo(() => {
-    let hours = 0
+    let plannedHours = 0
+    let actualHours = 0
     let amount = 0
     for (const p of visibleProjects) {
       const row = projectRowTotals(p, weeks, hoursMap, totalsByProject.get(p.id) ?? 0)
-      hours += row.hours
+      plannedHours += row.hours
+      actualHours += weeks.reduce((sum, week) => sum + (actualHoursMap.get(hoursKey(p.id, week)) ?? 0), 0)
       amount += row.amount
     }
-    return { hours: Math.round(hours * 100) / 100, amount: Math.round(amount * 100) / 100 }
-  }, [visibleProjects, weeks, hoursMap, totalsByProject])
+    return {
+      plannedHours: Math.round(plannedHours * 100) / 100,
+      actualHours: Math.round(actualHours * 100) / 100,
+      amount: Math.round(amount * 100) / 100,
+    }
+  }, [visibleProjects, weeks, hoursMap, actualHoursMap, totalsByProject])
+
+  const grandVariance = pipelineVariance(grand.actualHours, grand.plannedHours)
 
   useEffect(() => {
     load()
@@ -65,9 +83,15 @@ export function PipelinePage() {
 
   async function load() {
     setError(null)
-    const [p, w] = await Promise.all([
+    const periodEnd = addDays(weeks[weeks.length - 1], 6)
+    const [p, w, t] = await Promise.all([
       supabase.from('projects').select('id, name, billing_type, default_hourly_rate, fixed_price, status, partner_id, partners(legal_name)').order('name'),
       supabase.from('project_week_plans').select('*'),
+      supabase
+        .from('time_entries')
+        .select('id, entry_date, hours, rate_override, billable, invoice_id, project_id, description, time_entry_lines(hours, billable, item_name)')
+        .gte('entry_date', weeks[0])
+        .lte('entry_date', periodEnd),
     ])
     if (p.error) {
       setError(p.error.message)
@@ -81,8 +105,13 @@ export function PipelinePage() {
       )
       return
     }
+    if (t.error) {
+      setError(t.error.message)
+      return
+    }
     setProjects((p.data as PipelineProject[]) ?? [])
     setPlans((w.data as ProjectWeekPlan[]) ?? [])
+    setTimeEntries((t.data as TimeEntrySheetSource[]) ?? [])
     refreshMetrics?.()
   }
 
@@ -189,8 +218,8 @@ export function PipelinePage() {
       <div>
         <h2 className="text-base font-semibold text-ink">Pipeline</h2>
         <p className="text-sm text-muted mt-0.5">
-          Prochains {HORIZON_MONTHS} mois · heures prévues par semaine · revenus estimés (horaire × taux, forfait au
-          prorata)
+          Prochains {HORIZON_MONTHS} mois · heures prévues et heures facturables réelles par semaine · revenus estimés
+          (horaire × taux, forfait au prorata)
         </p>
       </div>
 
@@ -223,14 +252,24 @@ export function PipelinePage() {
                     </th>
                   )
                 })}
-                <th className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[100px] border-l border-border">
+                <th className="sticky right-[180px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[110px] border-l border-border">
                   Total
+                </th>
+                <th className="sticky right-[90px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]">
+                  Écart h
+                </th>
+                <th className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]">
+                  Écart %
                 </th>
               </tr>
             </thead>
             <tbody>
               {visibleProjects.map((project) => {
                 const row = projectRowTotals(project, weeks, hoursMap, totalsByProject.get(project.id) ?? 0)
+                const actualRowHours = Math.round(
+                  weeks.reduce((sum, week) => sum + (actualHoursMap.get(hoursKey(project.id, week)) ?? 0), 0) * 100
+                ) / 100
+                const variance = pipelineVariance(actualRowHours, row.hours)
                 const partner = relationOne(project.partners)?.legal_name
                 return (
                   <tr key={project.id} className="border-b border-border/70 hover:bg-stone-50/40">
@@ -252,6 +291,7 @@ export function PipelinePage() {
                       const h = hoursMap.get(key) ?? 0
                       const draft = draftRef.current.get(key)
                       const weekHours = draft !== undefined ? parseNumberField(draft) : h
+                      const actualHours = actualHoursMap.get(key) ?? 0
                       const amount = cellRevenue(project, weekHours, totalsByProject.get(project.id) ?? 0)
                       const isCurrent = week === thisWeek
                       return (
@@ -274,8 +314,11 @@ export function PipelinePage() {
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                             }}
                           />
+                          <div className="mt-1 text-[10px] font-medium text-ink/70 tabular-nums">
+                            Réel {actualHours} h
+                          </div>
                           <div
-                            className={`mt-0.5 text-[10px] tabular-nums ${
+                            className={`text-[10px] tabular-nums ${
                               amount > 0 ? 'text-ink/70' : 'text-transparent'
                             }`}
                           >
@@ -284,9 +327,16 @@ export function PipelinePage() {
                         </td>
                       )
                     })}
-                    <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right border-l border-border align-top">
-                      <div className="font-semibold tabular-nums">{row.hours} h</div>
+                    <td className="sticky right-[180px] z-10 bg-white px-3 py-2 text-right border-l border-border align-top">
+                      <div className="font-semibold tabular-nums">Prévu {row.hours} h</div>
+                      <div className="text-xs text-ink/70 tabular-nums">Réel {actualRowHours} h</div>
                       <div className="text-xs text-muted tabular-nums">{formatCad(row.amount)}</div>
+                    </td>
+                    <td className="sticky right-[90px] z-10 bg-white px-3 py-2 text-right align-top font-semibold tabular-nums">
+                      {formatSigned(variance.hours, ' h')}
+                    </td>
+                    <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right align-top font-semibold tabular-nums">
+                      {variance.percent == null ? '—' : formatSigned(variance.percent, ' %')}
                     </td>
                   </tr>
                 )
@@ -299,16 +349,30 @@ export function PipelinePage() {
                 </td>
                 {weeks.map((week) => {
                   const col = weekColumnTotals(visibleProjects, week, hoursMap, totalsByProject)
+                  const actualHours = Math.round(
+                    visibleProjects.reduce(
+                      (sum, project) => sum + (actualHoursMap.get(hoursKey(project.id, week)) ?? 0),
+                      0
+                    ) * 100
+                  ) / 100
                   return (
                     <td key={week} className="px-1.5 py-2 text-center">
-                      <div className="text-xs tabular-nums">{col.hours} h</div>
+                      <div className="text-xs tabular-nums">P {col.hours} h</div>
+                      <div className="text-[10px] text-ink/70 tabular-nums">R {actualHours} h</div>
                       <div className="text-[10px] text-muted tabular-nums">{formatCad(col.amount)}</div>
                     </td>
                   )
                 })}
-                <td className="sticky right-0 z-10 bg-stone-50 px-3 py-2.5 text-right border-l border-border">
-                  <div className="font-semibold tabular-nums">{grand.hours} h</div>
+                <td className="sticky right-[180px] z-10 bg-stone-50 px-3 py-2.5 text-right border-l border-border">
+                  <div className="font-semibold tabular-nums">Prévu {grand.plannedHours} h</div>
+                  <div className="text-xs text-ink/70 tabular-nums">Réel {grand.actualHours} h</div>
                   <div className="text-xs text-muted tabular-nums">{formatCad(grand.amount)}</div>
+                </td>
+                <td className="sticky right-[90px] z-10 bg-stone-50 px-3 py-2.5 text-right font-semibold tabular-nums">
+                  {formatSigned(grandVariance.hours, ' h')}
+                </td>
+                <td className="sticky right-0 z-10 bg-stone-50 px-3 py-2.5 text-right font-semibold tabular-nums">
+                  {grandVariance.percent == null ? '—' : formatSigned(grandVariance.percent, ' %')}
                 </td>
               </tr>
             </tfoot>
