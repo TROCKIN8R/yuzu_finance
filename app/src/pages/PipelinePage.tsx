@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Project, ProjectWeekPlan } from '../lib/types'
@@ -41,6 +41,35 @@ function sumProjectHours(map: Map<string, number>, projectId: string, weeks: str
   return Math.round(weeks.reduce((sum, week) => sum + (map.get(hoursKey(projectId, week)) ?? 0), 0) * 100) / 100
 }
 
+function VarianceCell({
+  variance,
+  asHeader = false,
+}: {
+  variance?: { hours: number; percent: number | null }
+  asHeader?: boolean
+}) {
+  if (asHeader) {
+    return (
+      <th
+        title="Écart cumulé (réel − prévu) de la première semaine à la dernière semaine terminée"
+        className="px-2 py-2.5 text-center font-medium min-w-[96px] bg-amber-50 text-amber-900 border-x border-amber-200/80"
+      >
+        <div className="text-xs font-semibold">Écart</div>
+        <div className="text-[10px] font-normal whitespace-nowrap opacity-80">cumulé</div>
+      </th>
+    )
+  }
+  const v = variance ?? { hours: 0, percent: null }
+  return (
+    <td className="px-1.5 py-1.5 text-center align-top bg-amber-50/60 border-x border-amber-200/60">
+      <div className="font-semibold tabular-nums text-sm">{formatSigned(v.hours, ' h')}</div>
+      <div className="mt-0.5 text-[10px] tabular-nums text-ink/70">
+        {v.percent == null ? '—' : formatSigned(v.percent, ' %')}
+      </div>
+    </td>
+  )
+}
+
 export function PipelinePage() {
   const { refreshMetrics } = useOutletContext<BillingOutletContext>() ?? {}
   const [projects, setProjects] = useState<PipelineProject[]>([])
@@ -72,6 +101,8 @@ export function PipelinePage() {
     return weeksBetween(firstBillableWeek, horizonWeeks[horizonWeeks.length - 1])
   }, [actualHoursMap, horizonWeeks])
   const completedWeeks = useMemo(() => weeks.filter((week) => week < thisWeek), [weeks, thisWeek])
+  const lastCompletedWeek = completedWeeks[completedWeeks.length - 1] ?? null
+  const showVarianceColumn = lastCompletedWeek != null
 
   const totalsByProject = useMemo(
     () => totalHoursByProject(hoursMap, visibleProjects.map((p) => p.id)),
@@ -280,36 +311,26 @@ export function PipelinePage() {
                   const label = formatWeekLabel(week)
                   const isCurrent = week === thisWeek
                   return (
-                    <th
-                      key={week}
-                      ref={isCurrent ? currentWeekRef : undefined}
-                      className={`px-2 py-2.5 text-center font-medium min-w-[88px] ${
-                        isCurrent
-                          ? 'bg-yuzu/10 text-yuzu-dark'
-                          : week < thisWeek
-                            ? 'bg-stone-100/70 text-muted'
-                            : 'text-muted'
-                      }`}
-                    >
-                      <div className="text-xs font-semibold">{label.week}</div>
-                      <div className="text-[10px] font-normal whitespace-nowrap opacity-80">{label.range}</div>
-                    </th>
+                    <Fragment key={week}>
+                      <th
+                        ref={isCurrent ? currentWeekRef : undefined}
+                        className={`px-2 py-2.5 text-center font-medium min-w-[88px] ${
+                          isCurrent
+                            ? 'bg-yuzu/10 text-yuzu-dark'
+                            : week < thisWeek
+                              ? 'bg-stone-100/70 text-muted'
+                              : 'text-muted'
+                        }`}
+                      >
+                        <div className="text-xs font-semibold">{label.week}</div>
+                        <div className="text-[10px] font-normal whitespace-nowrap opacity-80">{label.range}</div>
+                      </th>
+                      {showVarianceColumn && week === lastCompletedWeek && <VarianceCell asHeader />}
+                    </Fragment>
                   )
                 })}
-                <th className="sticky right-[180px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[110px] border-l border-border">
+                <th className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[110px] border-l border-border">
                   Total
-                </th>
-                <th
-                  title="Heures réelles moins heures prévues, de la première semaine à la dernière semaine terminée"
-                  className="sticky right-[90px] z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]"
-                >
-                  Écart h
-                </th>
-                <th
-                  title="Écart en pourcentage, de la première semaine à la dernière semaine terminée"
-                  className="sticky right-0 z-20 bg-stone-50 px-3 py-2.5 text-right font-medium text-muted min-w-[90px]"
-                >
-                  Écart %
                 </th>
               </tr>
             </thead>
@@ -345,50 +366,46 @@ export function PipelinePage() {
                       const amount = cellRevenue(project, weekHours, totalsByProject.get(project.id) ?? 0)
                       const isCurrent = week === thisWeek
                       return (
-                        <td
-                          key={week}
-                          className={`px-1.5 py-1.5 text-center align-top ${
-                            isCurrent ? 'bg-yuzu/5' : week < thisWeek ? 'bg-stone-50/70' : ''
-                          }`}
-                        >
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min={0}
-                            step={0.25}
-                            aria-label={`Heures ${project.name} ${week}`}
-                            className="w-full max-w-[72px] mx-auto block px-1.5 py-1 rounded-md border border-border bg-white text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-yuzu/40 focus:border-yuzu"
-                            value={displayHours(project.id, week)}
-                            disabled={savingKey === key}
-                            onChange={(e) => onHoursChange(project.id, week, e.target.value)}
-                            onBlur={() => void commitHours(project.id, week)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                            }}
-                          />
-                          <div className="mt-1 text-[10px] font-medium text-ink/70 tabular-nums">
-                            Réel {actualHours} h
-                          </div>
-                          <div
-                            className={`text-[10px] tabular-nums ${
-                              amount > 0 ? 'text-ink/70' : 'text-transparent'
+                        <Fragment key={week}>
+                          <td
+                            className={`px-1.5 py-1.5 text-center align-top ${
+                              isCurrent ? 'bg-yuzu/5' : week < thisWeek ? 'bg-stone-50/70' : ''
                             }`}
                           >
-                            {formatCad(amount)}
-                          </div>
-                        </td>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.25}
+                              aria-label={`Heures ${project.name} ${week}`}
+                              className="w-full max-w-[72px] mx-auto block px-1.5 py-1 rounded-md border border-border bg-white text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-yuzu/40 focus:border-yuzu"
+                              value={displayHours(project.id, week)}
+                              disabled={savingKey === key}
+                              onChange={(e) => onHoursChange(project.id, week, e.target.value)}
+                              onBlur={() => void commitHours(project.id, week)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              }}
+                            />
+                            <div className="mt-1 text-[10px] font-medium text-ink/70 tabular-nums">
+                              Réel {actualHours} h
+                            </div>
+                            <div
+                              className={`text-[10px] tabular-nums ${
+                                amount > 0 ? 'text-ink/70' : 'text-transparent'
+                              }`}
+                            >
+                              {formatCad(amount)}
+                            </div>
+                          </td>
+                          {showVarianceColumn && week === lastCompletedWeek && <VarianceCell variance={variance} />}
+                        </Fragment>
                       )
                     })}
-                    <td className="sticky right-[180px] z-10 bg-white px-3 py-2 text-right border-l border-border align-top">
+                    <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right border-l border-border align-top">
                       <div className="font-semibold tabular-nums">Prévu {row.hours} h</div>
                       <div className="text-xs text-ink/70 tabular-nums">Réel {actualRowHours} h</div>
                       <div className="text-xs text-muted tabular-nums">{formatCad(row.amount)}</div>
-                    </td>
-                    <td className="sticky right-[90px] z-10 bg-white px-3 py-2 text-right align-top font-semibold tabular-nums">
-                      {formatSigned(variance.hours, ' h')}
-                    </td>
-                    <td className="sticky right-0 z-10 bg-white px-3 py-2 text-right align-top font-semibold tabular-nums">
-                      {variance.percent == null ? '—' : formatSigned(variance.percent, ' %')}
                     </td>
                   </tr>
                 )
@@ -408,23 +425,20 @@ export function PipelinePage() {
                     ) * 100
                   ) / 100
                   return (
-                    <td key={week} className="px-1.5 py-2 text-center">
-                      <div className="text-xs tabular-nums">P {col.hours} h</div>
-                      <div className="text-[10px] text-ink/70 tabular-nums">R {actualHours} h</div>
-                      <div className="text-[10px] text-muted tabular-nums">{formatCad(col.amount)}</div>
-                    </td>
+                    <Fragment key={week}>
+                      <td className="px-1.5 py-2 text-center">
+                        <div className="text-xs tabular-nums">P {col.hours} h</div>
+                        <div className="text-[10px] text-ink/70 tabular-nums">R {actualHours} h</div>
+                        <div className="text-[10px] text-muted tabular-nums">{formatCad(col.amount)}</div>
+                      </td>
+                      {showVarianceColumn && week === lastCompletedWeek && <VarianceCell variance={grandVariance} />}
+                    </Fragment>
                   )
                 })}
-                <td className="sticky right-[180px] z-10 bg-stone-50 px-3 py-2.5 text-right border-l border-border">
+                <td className="sticky right-0 z-10 bg-stone-50 px-3 py-2.5 text-right border-l border-border">
                   <div className="font-semibold tabular-nums">Prévu {grand.plannedHours} h</div>
                   <div className="text-xs text-ink/70 tabular-nums">Réel {grand.actualHours} h</div>
                   <div className="text-xs text-muted tabular-nums">{formatCad(grand.amount)}</div>
-                </td>
-                <td className="sticky right-[90px] z-10 bg-stone-50 px-3 py-2.5 text-right font-semibold tabular-nums">
-                  {formatSigned(grandVariance.hours, ' h')}
-                </td>
-                <td className="sticky right-0 z-10 bg-stone-50 px-3 py-2.5 text-right font-semibold tabular-nums">
-                  {grandVariance.percent == null ? '—' : formatSigned(grandVariance.percent, ' %')}
                 </td>
               </tr>
             </tfoot>
@@ -434,8 +448,8 @@ export function PipelinePage() {
 
       <p className="text-xs text-muted">
         Faites défiler horizontalement pour voir toutes les semaines — les semaines passées (grisées) sont à gauche de
-        la semaine courante. Les écarts comparent le prévu au réel jusqu’à la dernière semaine terminée. Forfaits :
-        montant réparti au prorata de toutes les heures planifiées du projet.
+        la semaine courante. La colonne Écart (après la dernière semaine terminée) compare le prévu au réel depuis le
+        début. Forfaits : montant réparti au prorata de toutes les heures planifiées du projet.
       </p>
 
       <WorkflowFooter to="/billing/time" label="Enregistrer du temps">
