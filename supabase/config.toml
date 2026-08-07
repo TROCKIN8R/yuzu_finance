@@ -385,6 +385,10 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Receipt OCR — JWT required; GEMINI_API_KEY via `supabase secrets set`
+[functions.extract-receipt]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

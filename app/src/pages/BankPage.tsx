@@ -21,7 +21,8 @@ import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { round2, splitPurchaseAmount, splitPurchaseTotal } from '../lib/taxes'
-import { documentAcceptAttribute, uploadDocument } from '../lib/documents'
+import { uploadDocument } from '../lib/documents'
+import type { ReceiptPurchaseFields } from '../lib/receiptOcr'
 import {
   assignBankCorporateTax,
   assignBankDividend,
@@ -44,6 +45,7 @@ import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
 import { Modal } from '../components/Modal'
 import { DocumentAttachments } from '../components/DocumentAttachments'
+import { ReceiptScanField } from '../components/ReceiptScanField'
 import { Field, inputClass } from '../components/Field'
 import { NumberInput } from '../components/NumberInput'
 import { EmptyState } from '../components/EmptyState'
@@ -122,7 +124,6 @@ function sourceLabel(tx: BankTransaction) {
 
 export function BankPage() {
   const fileRef = useRef<HTMLInputElement>(null)
-  const expenseReceiptRef = useRef<HTMLInputElement>(null)
   const { blockIfClosed } = usePeriodCloseGuard()
   const [rows, setRows] = useState<BankTransaction[]>([])
   const [invoices, setInvoices] = useState<InvoiceWithPaid[]>([])
@@ -406,6 +407,20 @@ export function BankPage() {
       const taxes = recalcExpenseTaxesFromTotal(prev.total, applyTax)
       return { ...prev, applyTax, ...taxes }
     })
+  }
+
+  function onExpenseReceiptExtracted(fields: ReceiptPurchaseFields) {
+    setExpForm((prev) => ({
+      ...prev,
+      vendor: fields.vendor ?? prev.vendor,
+      expense_date: fields.expense_date ?? prev.expense_date,
+      description: fields.description ?? prev.description,
+      amount: fields.amount,
+      gst: fields.gst,
+      qst: fields.qst,
+      total: fields.total,
+      applyTax: fields.applyTax,
+    }))
   }
 
   function onPartnerSelect(partnerId: string) {
@@ -963,33 +978,13 @@ export function BankPage() {
                   Arrondi au cent. Saisir le TTC ou le HT recalcule le reste.
                 </p>
               )}
-              <Field label="Facture fournisseur (optionnel)">
-                <input
-                  ref={expenseReceiptRef}
-                  type="file"
-                  accept={documentAcceptAttribute}
-                  className="hidden"
-                  onChange={(e) => {
-                    setExpenseReceiptFile(e.target.files?.[0] ?? null)
-                    e.target.value = ''
-                  }}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="secondary" className="!text-xs" onClick={() => expenseReceiptRef.current?.click()}>
-                    Choisir un fichier
-                  </Button>
-                  {expenseReceiptFile ? (
-                    <span className="text-xs truncate max-w-[240px]">{expenseReceiptFile.name}</span>
-                  ) : (
-                    <span className="text-xs text-muted">PDF ou image (max 10 Mo)</span>
-                  )}
-                  {expenseReceiptFile && (
-                    <Button type="button" variant="ghost" className="!text-xs" onClick={() => setExpenseReceiptFile(null)}>
-                      Retirer
-                    </Button>
-                  )}
-                </div>
-              </Field>
+              <ReceiptScanField
+                file={expenseReceiptFile}
+                onFileChange={setExpenseReceiptFile}
+                onExtracted={onExpenseReceiptExtracted}
+                applyTax={expForm.applyTax}
+                settings={settings}
+              />
             </>
           ) : assignKind === 'payroll' ? (
             <>

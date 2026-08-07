@@ -41,6 +41,28 @@ If Banque import fails with `relation "bank_transactions" does not exist`, run *
 |-----|-------|-------------------|
 | anon (public) | GitHub Secret → build | Yes — RLS + login protect data |
 | service_role | Never in git / never in browser | **No** — full DB access |
+| `GEMINI_API_KEY` | Supabase Edge Function secret only | **No** — never `VITE_*` / browser |
+
+## Receipt OCR (Gemini)
+
+Supplier invoices / receipts can pre-fill expense forms (Banque assign + Frais employé) via Edge Function `extract-receipt`.
+
+1. Create a **Free Tier** API key in [Google AI Studio](https://aistudio.google.com/) (do not link billing if you want to stay free).
+2. Deploy and set the secret (do **not** paste the key into chat or git):
+
+```bash
+supabase link --project-ref YOUR_PROJECT_REF
+supabase secrets set GEMINI_API_KEY=your_key_here
+supabase functions deploy extract-receipt
+```
+
+Optional: `supabase secrets set GEMINI_MODEL=gemini-2.5-flash` (default is `gemini-2.5-flash-lite`).
+
+3. In the app: choose a PDF/image → **Scanner (Gemini)** → review pre-filled vendor / date / TPS / TVQ / total → save.
+
+Files are uploaded briefly to `{user_id}/ocr-inbox/` then deleted after extraction. The model receives the document bytes (privacy: leaves your project to Google). Extraction never auto-saves — owner review required (draft for CPA).
+
+If the function is missing or quota is exhausted, the UI shows an error and you enter amounts manually.
 
 ## Schema overview
 

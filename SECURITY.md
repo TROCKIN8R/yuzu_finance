@@ -16,6 +16,7 @@ This is normal for client-side apps. The anon key is **not** a secret in the tra
 | Service role key | Supabase dashboard only / local `.env` (gitignored) |
 | Bank details, payroll slips | Local machine only — **not** in this repo |
 | Invoice PDFs, supplier bills, employee receipts | Supabase Storage (`documents` bucket) — private, RLS by user |
+| `GEMINI_API_KEY` (receipt OCR) | Supabase Edge Function secrets only — never `VITE_*` / git |
 
 ## How access is blocked
 
@@ -23,6 +24,7 @@ This is normal for client-side apps. The anon key is **not** a secret in the tra
 2. **Login required** — the app has no public data routes; unauthenticated users see only the login screen.
 3. **No service role in the browser** — full database bypass is impossible from the published site.
 4. **Sign-ups disabled** in production (`VITE_ALLOW_SIGNUP=false` + Supabase dashboard).
+5. **Receipt OCR** (`extract-receipt` Edge Function) — Gemini key stays server-side; scanned files are sent to Google for extraction. Prefer a Free Tier key with no billing linked (see `supabase/README.md`).
 
 Without your email + password, a visitor cannot list, read, or modify your financial rows — even with the anon key from the JS bundle.
 

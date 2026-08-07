@@ -7,11 +7,13 @@ import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
 import { round2, splitPurchaseAmount, splitPurchaseTotal } from '../lib/taxes'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
-import { deleteEntityDocuments } from '../lib/documents'
+import { deleteEntityDocuments, uploadDocument } from '../lib/documents'
+import type { ReceiptPurchaseFields } from '../lib/receiptOcr'
 import { Badge } from '../components/Badge'
 import { Button, tableActionClass } from '../components/Button'
 import { DataTable } from '../components/DataTable'
 import { DocumentAttachments } from '../components/DocumentAttachments'
+import { ReceiptScanField } from '../components/ReceiptScanField'
 import { Modal } from '../components/Modal'
 import { NumberInput } from '../components/NumberInput'
 import { Field, inputClass } from '../components/Field'
@@ -58,6 +60,7 @@ export function EmployeeExpensesPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [taxEntryMode, setTaxEntryMode] = useState<TaxEntryMode>('total')
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
   const defaultEmployeeId = activeEmployees.length === 1 ? activeEmployees[0].id : ''
@@ -148,9 +151,25 @@ export function EmployeeExpensesPage() {
     })
   }
 
+  function onReceiptExtracted(fields: ReceiptPurchaseFields) {
+    setTaxEntryMode('total')
+    setForm((prev) => ({
+      ...prev,
+      vendor: fields.vendor ?? prev.vendor,
+      expense_date: fields.expense_date ?? prev.expense_date,
+      description: fields.description ?? prev.description,
+      amount: fields.amount,
+      gst: fields.gst,
+      qst: fields.qst,
+      total: fields.total,
+      applyTax: fields.applyTax,
+    }))
+  }
+
   function openNew() {
     setForm({ ...empty, employee_id: defaultEmployeeId })
     setTaxEntryMode('total')
+    setReceiptFile(null)
     setEditingId(null)
     setOpen(true)
   }
@@ -175,6 +194,7 @@ export function EmployeeExpensesPage() {
       notes: e.notes ?? '',
     })
     setTaxEntryMode('total')
+    setReceiptFile(null)
     setEditingId(e.id)
     setOpen(true)
   }
@@ -205,18 +225,39 @@ export function EmployeeExpensesPage() {
       taxable: form.taxable,
       notes: form.notes || null,
     }
-    if (editingId) {
-      await supabase.from('employee_expenses').update(payload).eq('id', editingId)
-      setOpen(false)
-    } else {
-      const { data, error } = await supabase.from('employee_expenses').insert(payload).select('id').single()
-      if (error) {
-        alert(error.message)
-        return
+    try {
+      let entityId = editingId
+      if (editingId) {
+        const { error } = await supabase.from('employee_expenses').update(payload).eq('id', editingId)
+        if (error) {
+          alert(error.message)
+          return
+        }
+      } else {
+        const { data, error } = await supabase.from('employee_expenses').insert(payload).select('id').single()
+        if (error) {
+          alert(error.message)
+          return
+        }
+        entityId = data.id
+        setEditingId(data.id)
       }
-      setEditingId(data.id)
+      if (receiptFile && entityId) {
+        await uploadDocument(
+          receiptFile,
+          receiptFile.name,
+          receiptFile.type ||
+            (receiptFile.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : receiptFile.type),
+          'employee_expense',
+          entityId
+        )
+        setReceiptFile(null)
+      }
+      if (editingId) setOpen(false)
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur d’enregistrement.')
     }
-    load()
   }
 
   async function remove(e: EmployeeExpense) {
@@ -513,11 +554,21 @@ export function EmployeeExpensesPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </Field>
+          <ReceiptScanField
+            file={receiptFile}
+            onFileChange={setReceiptFile}
+            onExtracted={onReceiptExtracted}
+            applyTax={form.applyTax}
+            settings={settings}
+            label="Reçu à analyser (optionnel)"
+            hint="Choisissez un fichier puis Scanner pour préremplir. Le fichier sera joint à l’enregistrement."
+            disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
+          />
           <DocumentAttachments
             entityType="employee_expense"
             entityId={editingId}
             disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
-            label="Reçu / facture employé"
+            label="Pièces jointes enregistrées"
             hint="Photo ou PDF du reçu soumis par l'employé."
           />
           <div className="flex justify-end gap-2">
