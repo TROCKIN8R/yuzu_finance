@@ -875,6 +875,15 @@ export function BankPage() {
             </>
           ) : assignKind === 'expense' ? (
             <>
+              <ReceiptScanField
+                file={expenseReceiptFile}
+                onFileChange={setExpenseReceiptFile}
+                onExtracted={onExpenseReceiptExtracted}
+                applyTax={expForm.applyTax}
+                settings={settings}
+                label="Reçu / facture"
+                hint="PDF ou image (max 10 Mo). Joint à la dépense à l’enregistrement."
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Date de dépense *">
                   <input
@@ -978,13 +987,6 @@ export function BankPage() {
                   Arrondi au cent. Saisir le TTC ou le HT recalcule le reste.
                 </p>
               )}
-              <ReceiptScanField
-                file={expenseReceiptFile}
-                onFileChange={setExpenseReceiptFile}
-                onExtracted={onExpenseReceiptExtracted}
-                applyTax={expForm.applyTax}
-                settings={settings}
-              />
             </>
           ) : assignKind === 'payroll' ? (
             <>

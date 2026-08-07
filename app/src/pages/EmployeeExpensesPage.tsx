@@ -416,6 +416,16 @@ export function EmployeeExpensesPage() {
 
       <Modal title={editingId ? 'Modifier frais' : 'Nouveau frais'} open={open} onClose={() => setOpen(false)} wide>
         <form onSubmit={save} className="space-y-3">
+          <ReceiptScanField
+            file={receiptFile}
+            onFileChange={setReceiptFile}
+            onExtracted={onReceiptExtracted}
+            applyTax={form.applyTax}
+            settings={settings}
+            label="Reçu / facture"
+            hint="PDF ou image (max 10 Mo). Joint au frais à l’enregistrement."
+            disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
+          />
           <Field label="Employé *">
             <select
               className={inputClass}
@@ -554,23 +564,15 @@ export function EmployeeExpensesPage() {
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </Field>
-          <ReceiptScanField
-            file={receiptFile}
-            onFileChange={setReceiptFile}
-            onExtracted={onReceiptExtracted}
-            applyTax={form.applyTax}
-            settings={settings}
-            label="Reçu à analyser (optionnel)"
-            hint="Choisissez un fichier puis Scanner pour préremplir. Le fichier sera joint à l’enregistrement."
-            disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
-          />
-          <DocumentAttachments
-            entityType="employee_expense"
-            entityId={editingId}
-            disabled={!!(editingId && rows.find((r) => r.id === editingId)?.payroll_run_id)}
-            label="Pièces jointes enregistrées"
-            hint="Photo ou PDF du reçu soumis par l'employé."
-          />
+          {editingId && (
+            <DocumentAttachments
+              entityType="employee_expense"
+              entityId={editingId}
+              disabled={!!rows.find((r) => r.id === editingId)?.payroll_run_id}
+              label="Pièces déjà enregistrées"
+              hint={receiptFile ? 'Un nouveau reçu ci-dessus sera ajouté à l’enregistrement.' : undefined}
+            />
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Annuler

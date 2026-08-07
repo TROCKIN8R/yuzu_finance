@@ -19,6 +19,8 @@ type Props = {
   label?: string
   hint?: string
   disabled?: boolean
+  /** When true (default), choosing a file starts Gemini extraction immediately. */
+  autoScan?: boolean
 }
 
 export function ReceiptScanField({
@@ -27,22 +29,23 @@ export function ReceiptScanField({
   onExtracted,
   applyTax,
   settings,
-  label = 'Facture fournisseur (optionnel)',
-  hint = 'PDF ou image (max 10 Mo). L’extraction préremplit le formulaire — vérifiez avant d’enregistrer.',
+  label = 'Reçu / facture',
+  hint = 'PDF ou image (max 10 Mo). Ce fichier sera joint à l’enregistrement.',
   disabled = false,
+  autoScan = true,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanNote, setScanNote] = useState<string | null>(null)
 
-  async function handleScan() {
-    if (!file || disabled || scanning) return
+  async function runScan(nextFile: File) {
+    if (disabled) return
     setScanning(true)
     setError(null)
     setScanNote(null)
     try {
-      const raw = await extractReceiptFromFile(file)
+      const raw = await extractReceiptFromFile(nextFile)
       const fields = mergeReceiptIntoPurchase(raw, applyTax, settings)
       onExtracted(fields, raw)
       const conf =
@@ -57,6 +60,15 @@ export function ReceiptScanField({
     }
   }
 
+  async function handleFilePicked(next: File | null) {
+    onFileChange(next)
+    setError(null)
+    setScanNote(null)
+    if (next && autoScan) {
+      await runScan(next)
+    }
+  }
+
   return (
     <Field label={label}>
       <input
@@ -64,12 +76,11 @@ export function ReceiptScanField({
         type="file"
         accept={documentAcceptAttribute}
         className="hidden"
-        disabled={disabled}
+        disabled={disabled || scanning}
         onChange={(e) => {
-          onFileChange(e.target.files?.[0] ?? null)
-          setError(null)
-          setScanNote(null)
+          const next = e.target.files?.[0] ?? null
           e.target.value = ''
+          void handleFilePicked(next)
         }}
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -77,32 +88,32 @@ export function ReceiptScanField({
           type="button"
           variant="secondary"
           className="!text-xs"
-          disabled={disabled}
+          disabled={disabled || scanning}
           onClick={() => inputRef.current?.click()}
         >
-          Choisir un fichier
+          {scanning ? 'Analyse…' : file ? 'Changer le fichier' : 'Joindre et scanner'}
         </Button>
         {file ? (
           <span className="text-xs truncate max-w-[240px]">{file.name}</span>
         ) : (
           <span className="text-xs text-muted">{hint}</span>
         )}
-        {file && (
+        {file && !scanning && (
           <>
             <Button
               type="button"
               variant="secondary"
               className="!text-xs"
-              disabled={disabled || scanning}
-              onClick={handleScan}
+              disabled={disabled}
+              onClick={() => void runScan(file)}
             >
-              {scanning ? 'Analyse…' : 'Scanner (Gemini)'}
+              Rescanner
             </Button>
             <Button
               type="button"
               variant="ghost"
               className="!text-xs"
-              disabled={disabled || scanning}
+              disabled={disabled}
               onClick={() => {
                 onFileChange(null)
                 setError(null)
