@@ -13,7 +13,9 @@ company/legal-index.local.md
 .env.*
 !.env.example
 !app/.env.example
+!supabase/.env.local.example
 app/.env.local
+supabase/.env.local
 *.pem
 credentials.json
 **/secrets/

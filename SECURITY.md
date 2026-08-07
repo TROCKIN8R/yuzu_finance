@@ -17,6 +17,7 @@ This is normal for client-side apps. The anon key is **not** a secret in the tra
 | Bank details, payroll slips | Local machine only — **not** in this repo |
 | Invoice PDFs, supplier bills, employee receipts | Supabase Storage (`documents` bucket) — private, RLS by user |
 | `GEMINI_API_KEY` (receipt OCR) | Supabase Edge Function secrets only — never `VITE_*` / git |
+| `SUPABASE_ACCESS_TOKEN` (CLI deploys) | `supabase/.env.local` only (gitignored) |
 
 ## How access is blocked
 

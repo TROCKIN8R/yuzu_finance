@@ -42,21 +42,42 @@ If Banque import fails with `relation "bank_transactions" does not exist`, run *
 | anon (public) | GitHub Secret → build | Yes — RLS + login protect data |
 | service_role | Never in git / never in browser | **No** — full DB access |
 | `GEMINI_API_KEY` | Supabase Edge Function secret only | **No** — never `VITE_*` / browser |
+| `SUPABASE_ACCESS_TOKEN` | `supabase/.env.local` (gitignored) for CLI deploys | **No** |
+
+## CLI deploy (same project, agent-friendly)
+
+Store a [personal access token](https://supabase.com/dashboard/account/tokens) in **`supabase/.env.local`** (gitignored; see `.env.local.example`):
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_…
+SUPABASE_PROJECT_REF=gqpafbmlherrwuigsjxy
+```
+
+Then deploy Edge Functions without pasting secrets into chat:
+
+```bash
+chmod +x scripts/deploy-edge-functions.sh
+./scripts/deploy-edge-functions.sh              # default: extract-receipt
+./scripts/deploy-edge-functions.sh extract-receipt
+```
+
+`GEMINI_API_KEY` is set once on the project (`supabase secrets set`) and is not stored in this repo.
 
 ## Receipt OCR (Gemini)
 
 Supplier invoices / receipts can pre-fill expense forms (Banque assign + Frais employé) via Edge Function `extract-receipt`.
 
 1. Create a **Free Tier** API key in [Google AI Studio](https://aistudio.google.com/) (do not link billing if you want to stay free).
-2. Deploy and set the secret (do **not** paste the key into chat or git):
+2. Put your Supabase access token in `supabase/.env.local` (see above). Set the Gemini secret once, then deploy:
 
 ```bash
-supabase link --project-ref YOUR_PROJECT_REF
-supabase secrets set GEMINI_API_KEY=your_key_here
-supabase functions deploy extract-receipt
+# From repo root — token loaded from supabase/.env.local
+export $(grep -v '^#' supabase/.env.local | xargs)
+npx supabase secrets set GEMINI_API_KEY=your_gemini_key --project-ref "$SUPABASE_PROJECT_REF"
+./scripts/deploy-edge-functions.sh extract-receipt
 ```
 
-Optional: `supabase secrets set GEMINI_MODEL=gemini-2.5-flash` (default is `gemini-2.5-flash-lite`).
+Optional: `npx supabase secrets set GEMINI_MODEL=gemini-2.5-flash --project-ref "$SUPABASE_PROJECT_REF"` (default is `gemini-2.5-flash-lite`).
 
 3. In the app: choose a PDF/image → **Scanner (Gemini)** → review pre-filled vendor / date / TPS / TVQ / total → save.
 
