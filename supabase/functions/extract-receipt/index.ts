@@ -8,8 +8,11 @@ const ALLOWED_MIMES = new Set([
   'image/png',
   'image/webp',
 ])
-/** Free-tier multimodal; 2.5-flash-lite is blocked for new API keys. */
-const DEFAULT_MODEL = 'gemini-2.5-flash'
+/** Alias that tracks Google’s current Flash model — avoids hard-coding 3.x versions. */
+const DEFAULT_MODEL = 'gemini-flash-latest'
+
+/** Tried in order when preferred model returns 404 / unavailable. */
+const MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash'] as const
 
 const EXTRACTION_PROMPT = `You are extracting structured fields from a Canadian (Québec) supplier invoice or receipt for bookkeeping.
 
@@ -161,55 +164,86 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Fichier trop volumineux (max 10 Mo).' }, 400)
     }
 
-    const model = Deno.env.get('GEMINI_MODEL')?.trim() || DEFAULT_MODEL
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    const preferred = Deno.env.get('GEMINI_MODEL')?.trim() || DEFAULT_MODEL
+    const models = [...new Set([preferred, ...MODEL_FALLBACKS])]
+
+    const base64 = arrayBufferToBase64(bytes)
+    const requestBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: EXTRACTION_PROMPT },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
+    }
 
     // Avoid responseSchema — it often 400s on free-tier / lite models. JSON mime + prompt is enough.
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': geminiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: EXTRACTION_PROMPT },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: arrayBufferToBase64(bytes),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      }),
-    })
+    let geminiRes: Response | null = null
+    let lastErrText = ''
+    let usedModel = preferred
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      const quota =
-        geminiRes.status === 429 || /RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(errText)
-      console.error('Gemini error', geminiRes.status, errText.slice(0, 800))
+    for (const model of models) {
+      usedModel = model
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+      const res = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': geminiKey,
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (res.ok) {
+        geminiRes = res
+        break
+      }
+
+      lastErrText = await res.text()
+      const modelGone =
+        res.status === 404 || /no longer available|NOT_FOUND|not found/i.test(lastErrText)
+      console.error('Gemini error', model, res.status, lastErrText.slice(0, 400))
+      if (!modelGone) {
+        const quota =
+          res.status === 429 || /RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(lastErrText)
+        return jsonResponse(
+          {
+            error: quota
+              ? 'Quota Gemini atteint (gratuit). Réessayez plus tard ou saisissez manuellement.'
+              : `Erreur Gemini (${res.status}).`,
+            detail: lastErrText.slice(0, 800),
+            model,
+          },
+          quota ? 429 : 502
+        )
+      }
+    }
+
+    if (!geminiRes) {
       return jsonResponse(
         {
-          error: quota
-            ? 'Quota Gemini atteint (gratuit). Réessayez plus tard ou saisissez manuellement.'
-            : `Erreur Gemini (${geminiRes.status}).`,
-          detail: errText.slice(0, 800),
+          error: 'Aucun modèle Gemini disponible pour cette clé API.',
+          detail: lastErrText.slice(0, 800),
+          tried: models,
         },
-        quota ? 429 : 502
+        502
       )
     }
 
     const geminiJson = await geminiRes.json()
+    console.log('extract-receipt model', usedModel)
     const text =
       geminiJson?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ??
       ''
@@ -222,6 +256,7 @@ Deno.serve(async (req) => {
             ? `Document refusé par Gemini (${block}).`
             : 'Aucune donnée extraite.',
           detail: finish ? `finishReason=${finish}` : null,
+          model: usedModel,
         },
         422
       )
@@ -239,6 +274,7 @@ Deno.serve(async (req) => {
       currency: strOrNull(raw.currency) ?? 'CAD',
       apply_tax: typeof raw.apply_tax === 'boolean' ? raw.apply_tax : null,
       confidence: numOrNull(raw.confidence),
+      model: usedModel,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erreur inattendue.'

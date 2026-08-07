@@ -77,7 +77,8 @@ npx supabase secrets set GEMINI_API_KEY=your_gemini_key --project-ref "$SUPABASE
 ./scripts/deploy-edge-functions.sh extract-receipt
 ```
 
-Optional override: `npx supabase secrets set GEMINI_MODEL=gemini-3.1-flash-lite --project-ref "$SUPABASE_PROJECT_REF"` (default is `gemini-2.5-flash`; avoid `gemini-2.5-flash-lite` — blocked for new keys).
+Default model is `gemini-flash-latest` (Google’s current Flash alias). Override only if needed:
+`npx supabase secrets set GEMINI_MODEL=… --project-ref "$SUPABASE_PROJECT_REF"`. Avoid `gemini-2.5-*` — blocked for new API keys.
 
 3. In the app: choose a PDF/image → **Scanner (Gemini)** → review pre-filled vendor / date / TPS / TVQ / total → save.
 
