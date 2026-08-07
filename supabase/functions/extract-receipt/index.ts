@@ -8,7 +8,8 @@ const ALLOWED_MIMES = new Set([
   'image/png',
   'image/webp',
 ])
-const DEFAULT_MODEL = 'gemini-2.5-flash-lite'
+/** Free-tier multimodal; 2.5-flash-lite is blocked for new API keys. */
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 
 const EXTRACTION_PROMPT = `You are extracting structured fields from a Canadian (Québec) supplier invoice or receipt for bookkeeping.
 
