@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { DOCUMENTS_BUCKET, MAX_DOCUMENT_BYTES, ALLOWED_DOCUMENT_TYPES } from './documents'
 import { round2, splitPurchaseAmount, splitPurchaseTotal, type TaxSettings } from './taxes'
@@ -77,18 +78,35 @@ export async function extractReceiptFromFile(file: File): Promise<ReceiptExtract
       body: { storagePath, mimeType },
     })
 
-    if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
-      throw new Error(String((data as { error: string }).error))
-    }
-
     if (error) {
-      const msg = error.message || 'Échec de l’extraction.'
-      if (/Failed to send|FunctionsFetchError|network|not found|404/i.test(msg)) {
+      let detail = ''
+      if (error instanceof FunctionsHttpError) {
+        try {
+          const body = await error.context.json()
+          if (body && typeof body === 'object') {
+            const errObj = body as { error?: string; detail?: string }
+            detail = [errObj.error, errObj.detail].filter(Boolean).join(' — ')
+          }
+        } catch {
+          try {
+            detail = await error.context.text()
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      const msg = detail || error.message || 'Échec de l’extraction.'
+      if (/Failed to send|FunctionsFetchError|network|not found|404/i.test(msg) && !detail) {
         throw new Error(
           'Fonction extract-receipt indisponible. Déployez-la et configurez GEMINI_API_KEY (voir supabase/README.md).'
         )
       }
       throw new Error(msg)
+    }
+
+    if (data && typeof data === 'object' && 'error' in data && (data as { error?: string }).error) {
+      const errObj = data as { error: string; detail?: string }
+      throw new Error([errObj.error, errObj.detail].filter(Boolean).join(' — '))
     }
 
     return data as ReceiptExtract

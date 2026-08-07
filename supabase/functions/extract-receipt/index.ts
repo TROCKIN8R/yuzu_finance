@@ -12,20 +12,22 @@ const DEFAULT_MODEL = 'gemini-2.5-flash-lite'
 
 const EXTRACTION_PROMPT = `You are extracting structured fields from a Canadian (Québec) supplier invoice or receipt for bookkeeping.
 
-Return ONLY JSON matching the schema. Rules:
-- Language on the document may be French or English (TPS/GST, TVQ/QST).
-- expense_date: ISO date YYYY-MM-DD when visible; otherwise null.
-- vendor: merchant / supplier legal or trade name (not the buyer).
-- description: short one-line summary of what was purchased (null if unclear).
-- amount: subtotal before tax (HT), CAD dollars as a number.
-- gst: TPS / GST amount if shown, else null.
-- qst: TVQ / QST amount if shown, else null.
-- total: amount including all taxes (TTC) if shown, else null.
-- currency: ISO code, usually CAD.
-- apply_tax: true if GST/QST/TPS/TVQ lines appear (even if 0); false if clearly tax-exempt or no tax lines; null if unsure.
-- confidence: 0 to 1 overall extraction confidence.
-- Prefer printed totals over line-item sums when both exist.
-- Do not invent amounts. Use null when a field is not visible.`
+Return ONLY a JSON object with these keys (use null when not visible):
+- expense_date: ISO date YYYY-MM-DD
+- vendor: merchant / supplier name (not the buyer)
+- description: short one-line purchase summary
+- amount: subtotal before tax (HT) as a number
+- gst: TPS / GST amount as a number
+- qst: TVQ / QST amount as a number
+- total: amount including all taxes (TTC) as a number
+- currency: ISO code, usually CAD
+- apply_tax: true if GST/QST/TPS/TVQ lines appear; false if no tax; null if unsure
+- confidence: 0 to 1
+
+Rules:
+- Document may be French or English (TPS/GST, TVQ/QST).
+- Prefer printed totals over line-item sums.
+- Do not invent amounts.`
 
 type ExtractBody = {
   storagePath?: string
@@ -95,6 +97,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseAnon = Deno.env.get('SUPABASE_ANON_KEY')
+    const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!supabaseUrl || !supabaseAnon) {
       return jsonResponse({ error: 'Configuration Supabase manquante.' }, 500)
     }
@@ -104,16 +107,19 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Non authentifié.' }, 401)
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnon, {
+    const userClient = createClient(supabaseUrl, supabaseAnon, {
       global: { headers: { Authorization: authHeader } },
     })
 
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser()
+    } = await userClient.auth.getUser()
     if (userError || !user) {
-      return jsonResponse({ error: 'Session invalide.' }, 401)
+      return jsonResponse(
+        { error: 'Session invalide.', detail: userError?.message ?? null },
+        401
+      )
     }
 
     const body = (await req.json()) as ExtractBody
@@ -130,7 +136,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Chemin de fichier non autorisé.' }, 403)
     }
 
-    const { data: fileBlob, error: downloadError } = await supabase.storage
+    // Prefer service role for Storage download after path ownership check (avoids RLS edge cases).
+    const storageClient = serviceRole
+      ? createClient(supabaseUrl, serviceRole)
+      : userClient
+
+    const { data: fileBlob, error: downloadError } = await storageClient.storage
       .from(DOCUMENTS_BUCKET)
       .download(storagePath)
 
@@ -152,6 +163,7 @@ Deno.serve(async (req) => {
     const model = Deno.env.get('GEMINI_MODEL')?.trim() || DEFAULT_MODEL
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
+    // Avoid responseSchema — it often 400s on free-tier / lite models. JSON mime + prompt is enough.
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: {
@@ -161,6 +173,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         contents: [
           {
+            role: 'user',
             parts: [
               { text: EXTRACTION_PROMPT },
               {
@@ -175,21 +188,6 @@ Deno.serve(async (req) => {
         generationConfig: {
           temperature: 0.1,
           responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              vendor: { type: 'STRING', nullable: true },
-              expense_date: { type: 'STRING', nullable: true },
-              description: { type: 'STRING', nullable: true },
-              amount: { type: 'NUMBER', nullable: true },
-              gst: { type: 'NUMBER', nullable: true },
-              qst: { type: 'NUMBER', nullable: true },
-              total: { type: 'NUMBER', nullable: true },
-              currency: { type: 'STRING', nullable: true },
-              apply_tax: { type: 'BOOLEAN', nullable: true },
-              confidence: { type: 'NUMBER', nullable: true },
-            },
-          },
         },
       }),
     })
@@ -197,14 +195,14 @@ Deno.serve(async (req) => {
     if (!geminiRes.ok) {
       const errText = await geminiRes.text()
       const quota =
-        geminiRes.status === 429 ||
-        /RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(errText)
+        geminiRes.status === 429 || /RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(errText)
+      console.error('Gemini error', geminiRes.status, errText.slice(0, 800))
       return jsonResponse(
         {
           error: quota
             ? 'Quota Gemini atteint (gratuit). Réessayez plus tard ou saisissez manuellement.'
             : `Erreur Gemini (${geminiRes.status}).`,
-          detail: errText.slice(0, 500),
+          detail: errText.slice(0, 800),
         },
         quota ? 429 : 502
       )
@@ -216,14 +214,20 @@ Deno.serve(async (req) => {
       ''
     if (!text) {
       const block = geminiJson?.promptFeedback?.blockReason
+      const finish = geminiJson?.candidates?.[0]?.finishReason
       return jsonResponse(
-        { error: block ? `Document refusé par Gemini (${block}).` : 'Aucune donnée extraite.' },
+        {
+          error: block
+            ? `Document refusé par Gemini (${block}).`
+            : 'Aucune donnée extraite.',
+          detail: finish ? `finishReason=${finish}` : null,
+        },
         422
       )
     }
 
     const raw = parseGeminiJson(text)
-    const result = {
+    return jsonResponse({
       vendor: strOrNull(raw.vendor),
       expense_date: strOrNull(raw.expense_date),
       description: strOrNull(raw.description),
@@ -234,11 +238,10 @@ Deno.serve(async (req) => {
       currency: strOrNull(raw.currency) ?? 'CAD',
       apply_tax: typeof raw.apply_tax === 'boolean' ? raw.apply_tax : null,
       confidence: numOrNull(raw.confidence),
-    }
-
-    return jsonResponse(result)
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erreur inattendue.'
+    console.error('extract-receipt', message)
     return jsonResponse({ error: message }, 500)
   }
 })
