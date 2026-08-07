@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Employee, EmployeeExpense, ExpenseCategory, OrganizationSettings } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch, countActiveFilters } from '../lib/filters'
-import { splitPurchaseTotal } from '../lib/taxes'
+import { round2, splitPurchaseAmount, splitPurchaseTotal } from '../lib/taxes'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { deleteEntityDocuments } from '../lib/documents'
@@ -23,9 +23,8 @@ import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
 const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'other']
 
-function round2(n: number) {
-  return Math.round(n * 100) / 100
-}
+/** Which amount field drives auto tax calculation. */
+type TaxEntryMode = 'total' | 'amount'
 
 type Filter = 'all' | 'unreimbursed' | 'reimbursed'
 
@@ -58,6 +57,7 @@ export function EmployeeExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [taxEntryMode, setTaxEntryMode] = useState<TaxEntryMode>('total')
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
   const defaultEmployeeId = activeEmployees.length === 1 ? activeEmployees[0].id : ''
@@ -90,9 +90,12 @@ export function EmployeeExpensesPage() {
   }, [])
 
   useEffect(() => {
-    if (!open || !form.applyTax || form.total <= 0) return
+    if (!open || !form.applyTax) return
     setForm((prev) => {
-      const taxes = splitPurchaseTotal(prev.total, prev.applyTax, settings)
+      const taxes =
+        taxEntryMode === 'amount'
+          ? splitPurchaseAmount(prev.amount, prev.applyTax, settings)
+          : splitPurchaseTotal(prev.total, prev.applyTax, settings)
       if (
         prev.amount === taxes.amount &&
         prev.gst === taxes.gst &&
@@ -103,7 +106,7 @@ export function EmployeeExpensesPage() {
       }
       return { ...prev, ...taxes }
     })
-  }, [open, settings, form.applyTax, form.total])
+  }, [open, settings, form.applyTax, taxEntryMode])
 
   async function load() {
     const [{ data }, { data: emp }, { data: set }] = await Promise.all([
@@ -120,21 +123,34 @@ export function EmployeeExpensesPage() {
   }
 
   function onTotalChange(total: number) {
+    setTaxEntryMode('total')
     setForm((prev) => {
       const taxes = splitPurchaseTotal(total, prev.applyTax, settings)
       return { ...prev, ...taxes }
     })
   }
 
+  function onAmountChange(amount: number) {
+    setTaxEntryMode('amount')
+    setForm((prev) => {
+      const taxes = splitPurchaseAmount(amount, prev.applyTax, settings)
+      return { ...prev, ...taxes }
+    })
+  }
+
   function onTaxToggle(applyTax: boolean) {
     setForm((prev) => {
-      const taxes = splitPurchaseTotal(prev.total, applyTax, settings)
+      const taxes =
+        taxEntryMode === 'amount'
+          ? splitPurchaseAmount(prev.amount, applyTax, settings)
+          : splitPurchaseTotal(prev.total, applyTax, settings)
       return { ...prev, applyTax, ...taxes }
     })
   }
 
   function openNew() {
     setForm({ ...empty, employee_id: defaultEmployeeId })
+    setTaxEntryMode('total')
     setEditingId(null)
     setOpen(true)
   }
@@ -158,6 +174,7 @@ export function EmployeeExpensesPage() {
       taxable: e.taxable,
       notes: e.notes ?? '',
     })
+    setTaxEntryMode('total')
     setEditingId(e.id)
     setOpen(true)
   }
@@ -170,21 +187,21 @@ export function EmployeeExpensesPage() {
     }
     const prior = editingId ? rows.find((r) => r.id === editingId) : undefined
     if (blockIfClosed(prior?.expense_date, form.expense_date)) return
-    const taxes = splitPurchaseTotal(form.total, form.applyTax, settings)
-    const amount = form.applyTax ? taxes.amount : round2(form.total)
-    const gst = form.applyTax ? taxes.gst : 0
-    const qst = form.applyTax ? taxes.qst : 0
-    const total = form.applyTax ? taxes.total : amount
+    const taxes = form.applyTax
+      ? taxEntryMode === 'amount'
+        ? splitPurchaseAmount(form.amount, true, settings)
+        : splitPurchaseTotal(form.total, true, settings)
+      : { amount: round2(form.total || form.amount), gst: 0, qst: 0, total: round2(form.total || form.amount) }
     const payload = {
       employee_id: form.employee_id,
       expense_date: form.expense_date,
       vendor: form.vendor,
       category: form.category,
       description: form.description || null,
-      amount,
-      gst,
-      qst,
-      total,
+      amount: taxes.amount,
+      gst: taxes.gst,
+      qst: taxes.qst,
+      total: taxes.total,
       taxable: form.taxable,
       notes: form.notes || null,
     }
@@ -414,7 +431,7 @@ export function EmployeeExpensesPage() {
           </Field>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.applyTax} onChange={(e) => onTaxToggle(e.target.checked)} />
-            Calculer TPS/TVQ (Québec) à partir du total TTC
+            Calculer TPS/TVQ (Québec) — saisie TTC ou HT
           </label>
           {!settings && form.applyTax && (
             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -436,7 +453,7 @@ export function EmployeeExpensesPage() {
                 step="0.01"
                 min="0"
                 value={form.amount}
-                onChange={(amount) => setForm((prev) => ({ ...prev, amount }))}
+                onChange={onAmountChange}
               />
             </Field>
             <Field label="TPS (CTI)">
@@ -444,7 +461,12 @@ export function EmployeeExpensesPage() {
                 step="0.01"
                 min="0"
                 value={form.gst}
-                onChange={(gst) => setForm((prev) => ({ ...prev, gst }))}
+                onChange={(gst) =>
+                  setForm((prev) => {
+                    const nextGst = round2(gst)
+                    return { ...prev, gst: nextGst, total: round2(prev.amount + nextGst + prev.qst) }
+                  })
+                }
               />
             </Field>
             <Field label="TVQ (RTI)">
@@ -452,13 +474,22 @@ export function EmployeeExpensesPage() {
                 step="0.01"
                 min="0"
                 value={form.qst}
-                onChange={(qst) => setForm((prev) => ({ ...prev, qst }))}
+                onChange={(qst) =>
+                  setForm((prev) => {
+                    const nextQst = round2(qst)
+                    return { ...prev, qst: nextQst, total: round2(prev.amount + prev.gst + nextQst) }
+                  })
+                }
               />
             </Field>
           </div>
-          {settings && form.applyTax && (
+          {form.applyTax && (
             <p className="text-xs text-muted">
-              TPS {Math.round(Number(settings.gst_rate) * 10000) / 100}% · TVQ {Math.round(Number(settings.qst_rate) * 10000) / 100}% sur HT+TPS
+              {settings
+                ? `TPS ${Math.round(Number(settings.gst_rate) * 10000) / 100}% · TVQ ${Math.round(Number(settings.qst_rate) * 10000) / 100}% sur HT+TPS`
+                : 'TPS 5 % · TVQ 9,975 % sur HT+TPS'}
+              {' · '}
+              Arrondi au cent (chaque taxe). Saisir le TTC ou le HT recalcule le reste.
             </p>
           )}
           <label className="flex items-center gap-2 text-sm">

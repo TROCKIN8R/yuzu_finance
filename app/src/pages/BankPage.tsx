@@ -20,7 +20,7 @@ import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
 import { employeeDisplayName } from '../lib/payrollCalc'
-import { splitPurchaseTotal } from '../lib/taxes'
+import { round2, splitPurchaseAmount, splitPurchaseTotal } from '../lib/taxes'
 import { documentAcceptAttribute, uploadDocument } from '../lib/documents'
 import {
   assignBankCorporateTax,
@@ -104,10 +104,6 @@ const ASSIGN_KINDS: { id: AssignKind; label: string; outflow: boolean }[] = [
 interface InvoiceWithPaid extends Invoice {
   paid: number
   balance: number
-}
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100
 }
 
 function inferPaymentMethod(description: string): string {
@@ -325,8 +321,12 @@ export function BankPage() {
     }
   }
 
-  function recalcExpenseTaxes(total: number, applyTax: boolean) {
+  function recalcExpenseTaxesFromTotal(total: number, applyTax: boolean) {
     return splitPurchaseTotal(total, applyTax, settings)
+  }
+
+  function recalcExpenseTaxesFromAmount(amount: number, applyTax: boolean) {
+    return splitPurchaseAmount(amount, applyTax, settings)
   }
 
   function openAssign(tx: BankTransaction) {
@@ -347,7 +347,7 @@ export function BankPage() {
         reference: tx.description.slice(0, 120),
       })
     } else {
-      const taxes = recalcExpenseTaxes(absAmount, true)
+      const taxes = recalcExpenseTaxesFromTotal(absAmount, true)
       setExpForm({
         expense_date: tx.transaction_date,
         partner_id: '',
@@ -389,14 +389,21 @@ export function BankPage() {
 
   function onExpenseTotalChange(total: number) {
     setExpForm((prev) => {
-      const taxes = recalcExpenseTaxes(total, prev.applyTax)
+      const taxes = recalcExpenseTaxesFromTotal(total, prev.applyTax)
+      return { ...prev, ...taxes }
+    })
+  }
+
+  function onExpenseAmountChange(amount: number) {
+    setExpForm((prev) => {
+      const taxes = recalcExpenseTaxesFromAmount(amount, prev.applyTax)
       return { ...prev, ...taxes }
     })
   }
 
   function onExpenseTaxToggle(applyTax: boolean) {
     setExpForm((prev) => {
-      const taxes = recalcExpenseTaxes(prev.total, applyTax)
+      const taxes = recalcExpenseTaxesFromTotal(prev.total, applyTax)
       return { ...prev, applyTax, ...taxes }
     })
   }
@@ -902,7 +909,7 @@ export function BankPage() {
               </Field>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={expForm.applyTax} onChange={(e) => onExpenseTaxToggle(e.target.checked)} />
-                Calculer TPS/TVQ (Québec) à partir du total TTC
+                Calculer TPS/TVQ (Québec) — saisie TTC ou HT
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <Field label="Total TTC *">
@@ -919,7 +926,7 @@ export function BankPage() {
                     step="0.01"
                     min="0"
                     value={expForm.amount}
-                    onChange={(amount) => setExpForm((prev) => ({ ...prev, amount }))}
+                    onChange={onExpenseAmountChange}
                   />
                 </Field>
                 <Field label="TPS (CTI)">
@@ -927,7 +934,12 @@ export function BankPage() {
                     step="0.01"
                     min="0"
                     value={expForm.gst}
-                    onChange={(gst) => setExpForm((prev) => ({ ...prev, gst }))}
+                    onChange={(gst) =>
+                      setExpForm((prev) => {
+                        const nextGst = round2(gst)
+                        return { ...prev, gst: nextGst, total: round2(prev.amount + nextGst + prev.qst) }
+                      })
+                    }
                   />
                 </Field>
                 <Field label="TVQ (RTI)">
@@ -935,13 +947,20 @@ export function BankPage() {
                     step="0.01"
                     min="0"
                     value={expForm.qst}
-                    onChange={(qst) => setExpForm((prev) => ({ ...prev, qst }))}
+                    onChange={(qst) =>
+                      setExpForm((prev) => {
+                        const nextQst = round2(qst)
+                        return { ...prev, qst: nextQst, total: round2(prev.amount + prev.gst + nextQst) }
+                      })
+                    }
                   />
                 </Field>
               </div>
               {settings && expForm.applyTax && (
                 <p className="text-xs text-muted">
                   TPS {Math.round(settings.gst_rate * 10000) / 100}% · TVQ {Math.round(settings.qst_rate * 10000) / 100}% sur HT+TPS
+                  {' · '}
+                  Arrondi au cent. Saisir le TTC ou le HT recalcule le reste.
                 </p>
               )}
               <Field label="Facture fournisseur (optionnel)">
