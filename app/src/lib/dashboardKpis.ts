@@ -4,7 +4,7 @@ import {
   computeWorkedRevenueMetrics,
   type MetricsTimeEntry,
 } from './billingMetrics'
-import type { DateRange } from './fiscalPeriod'
+import { currentYearMonth, previousYearMonth, type DateRange } from './fiscalPeriod'
 
 export interface MomChange {
   current: number
@@ -47,15 +47,23 @@ export function computeWorkedHours(entries: MetricsTimeEntry[], period: DateRang
 
 export function momFromSeries(
   points: MonthlySeriesPoint[],
-  pick: (p: MonthlySeriesPoint) => number
+  pick: (p: MonthlySeriesPoint) => number,
+  ref: Date = new Date()
 ): MomChange {
-  if (points.length < 2) {
-    const last = points.at(-1)
-    return computeMomChange(last ? pick(last) : 0, 0)
+  if (points.length === 0) return computeMomChange(0, 0)
+
+  const byMonth = new Map(points.map((p) => [p.month, p]))
+  const currentYm = currentYearMonth(ref)
+  const currentPt = byMonth.get(currentYm)
+
+  if (currentPt) {
+    const priorPt = byMonth.get(previousYearMonth(currentYm))
+    return computeMomChange(pick(currentPt), priorPt ? pick(priorPt) : 0)
   }
-  const current = pick(points[points.length - 1])
-  const prior = pick(points[points.length - 2])
-  return computeMomChange(current, prior)
+
+  const last = points[points.length - 1]
+  const priorPt = byMonth.get(previousYearMonth(last.month)) ?? (points.length >= 2 ? points[points.length - 2] : undefined)
+  return computeMomChange(pick(last), priorPt ? pick(priorPt) : 0)
 }
 
 export function buildServiceKpiTrends(points: MonthlySeriesPoint[]): ServiceKpiTrends {

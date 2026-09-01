@@ -11,6 +11,7 @@ import {
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { matchesSearch, countActiveFilters } from '../lib/filters'
 import { supabase } from '../lib/supabase'
+import { DEFAULT_FISCAL_YEAR_END_DAY, DEFAULT_FISCAL_YEAR_END_MONTH } from '../lib/fiscalPeriod'
 import type {
   ComplianceDeadline,
   ComplianceDeadlineCategory,
@@ -158,8 +159,8 @@ export function CompliancePage() {
       const { data: settings } = await supabase.from('organization_settings').select('*').maybeSingle()
       const row = settings as OrganizationSettings | null
       const seeded = await seedComplianceCalendar({
-        fiscal_year_end_month: row?.fiscal_year_end_month ?? 12,
-        fiscal_year_end_day: row?.fiscal_year_end_day ?? 31,
+        fiscal_year_end_month: row?.fiscal_year_end_month ?? DEFAULT_FISCAL_YEAR_END_MONTH,
+        fiscal_year_end_day: row?.fiscal_year_end_day ?? DEFAULT_FISCAL_YEAR_END_DAY,
         charge_gst: row?.charge_gst ?? true,
         charge_qst: row?.charge_qst ?? true,
       })

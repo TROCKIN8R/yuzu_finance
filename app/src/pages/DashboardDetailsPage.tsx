@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot, type FinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
-import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData } from '../lib/dashboardSeries'
+import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData, seriesInSelectedPeriod } from '../lib/dashboardSeries'
 import { computeUnbilledWip } from '../lib/billingMetrics'
 import {
   averageRate,
@@ -100,7 +100,8 @@ export function DashboardDetailsPage() {
     return buildMonthlySeries(chartSource, period)
   }, [chartSource, period])
 
-  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(monthlySeries), [monthlySeries])
+  const chartSeries = useMemo(() => (period ? seriesInSelectedPeriod(monthlySeries, period) : monthlySeries), [monthlySeries, period])
+  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(chartSeries), [chartSeries])
 
   const trends = useMemo(() => buildServiceKpiTrends(monthlySeries), [monthlySeries])
 
@@ -286,14 +287,14 @@ export function DashboardDetailsPage() {
       </DashboardSection>
 
       <DashboardSection title={`Tendances — ${period.label}`}>
-        {hasChartData(monthlySeries) ? (
+        {hasChartData(chartSeries) ? (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             <RevenueTrendChart points={cumulativeSeries} cumulative compact />
-            <ProfitabilityChart points={monthlySeries} />
-            <CashFlowChart points={monthlySeries} />
-            <PayrollTrendChart points={monthlySeries} />
+            <ProfitabilityChart points={chartSeries} />
+            <CashFlowChart points={chartSeries} />
+            <PayrollTrendChart points={chartSeries} />
             <div className="xl:col-span-2">
-              <CapitalChart points={monthlySeries} equity={eq} openingCash={Number(settings?.opening_cash_balance ?? 0)} />
+              <CapitalChart points={chartSeries} equity={eq} openingCash={Number(settings?.opening_cash_balance ?? 0)} />
             </div>
           </div>
         ) : (

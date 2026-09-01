@@ -9,7 +9,7 @@ import {
 } from './billingMetrics'
 import { payrollEmployerTotal } from './financials'
 import { payrollAllRemittancesTotal } from './payrollRemittance'
-import type { DateRange } from './fiscalPeriod'
+import { currentYearMonth, previousYearMonth, type DateRange } from './fiscalPeriod'
 import { isCollectiblePayment, isRevenueInvoice } from './taxes'
 
 export interface MonthlySeriesPoint {
@@ -113,15 +113,36 @@ function monthsBetween(start: string, end: string): string[] {
   return months
 }
 
+/** Drop the extra prior month used for MoM so charts stay on the selected range. */
+export function seriesInSelectedPeriod(points: MonthlySeriesPoint[], period: DateRange): MonthlySeriesPoint[] {
+  if (!period.start) return points
+  const startYm = period.start.slice(0, 7)
+  const endYm = period.end ? period.end.slice(0, 7) : undefined
+  return points.filter((p) => p.month >= startYm && (!endYm || p.month <= endYm))
+}
+
 export function chartMonths(period: DateRange, ref = new Date()): string[] {
+  let months: string[]
   if (period.start && period.end) {
-    return monthsBetween(period.start, period.end)
+    months = monthsBetween(period.start, period.end)
+  } else {
+    months = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1)
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
   }
-  const months: string[] = []
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(ref.getFullYear(), ref.getMonth() - i, 1)
-    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+
+  const currentYm = currentYearMonth(ref)
+  months = months.filter((m) => m <= currentYm)
+
+  // Include the previous calendar month so % diffs can compare MoM even on a 1-month view
+  // or in May (first month of the fiscal year).
+  if (months.includes(currentYm)) {
+    const priorYm = previousYearMonth(currentYm)
+    if (!months.includes(priorYm)) months = [priorYm, ...months]
   }
+
   return months
 }
 

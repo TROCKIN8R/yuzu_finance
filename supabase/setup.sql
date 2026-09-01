@@ -89,7 +89,7 @@ create table public.organization_settings (
   opening_retained_earnings numeric(12, 2) not null default 0,
   opening_cash_balance numeric(12, 2) not null default 0,
   opening_balance_date date,
-  fiscal_year_end_month integer not null default 6 check (fiscal_year_end_month between 1 and 12),
+  fiscal_year_end_month integer not null default 4 check (fiscal_year_end_month between 1 and 12),
   fiscal_year_end_day integer not null default 30 check (fiscal_year_end_day between 1 and 31),
   estimated_corp_tax_rate numeric(6, 5) not null default 0.12,
   wip_accrual_enabled boolean not null default false,

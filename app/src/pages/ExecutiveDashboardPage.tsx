@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
-import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData } from '../lib/dashboardSeries'
+import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData, seriesInSelectedPeriod } from '../lib/dashboardSeries'
 import {
   averageRate,
   buildPartnerBreakdown,
@@ -142,7 +142,8 @@ export function ExecutiveDashboardPage() {
   }
 
   const trends = useMemo(() => buildServiceKpiTrends(monthlySeries), [monthlySeries])
-  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(monthlySeries), [monthlySeries])
+  const chartSeries = useMemo(() => (period ? seriesInSelectedPeriod(monthlySeries, period) : monthlySeries), [monthlySeries, period])
+  const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(chartSeries), [chartSeries])
   const hourlyAvg = averageRate(worked.hourly, worked.hourlyHours)
   const fixedAvg = averageRate(worked.fixed, worked.fixedHours)
 
@@ -266,7 +267,7 @@ export function ExecutiveDashboardPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
         <div className="xl:col-span-2">
-          {hasChartData(monthlySeries) ? (
+          {hasChartData(chartSeries) ? (
             <RevenueTrendChart points={cumulativeSeries} cumulative compact />
           ) : (
             <div className="ui-card px-4 py-8 text-center text-sm text-muted">

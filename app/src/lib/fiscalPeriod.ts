@@ -4,6 +4,29 @@ export interface DateRange {
   label: string
 }
 
+/** Fiscal year starts 1 May (ends 30 April). */
+export const DEFAULT_FISCAL_YEAR_END_MONTH = 4
+export const DEFAULT_FISCAL_YEAR_END_DAY = 30
+
+export function fiscalYearEndFromSettings(
+  settings?: { fiscal_year_end_month?: number | null; fiscal_year_end_day?: number | null } | null
+) {
+  return {
+    month: Number(settings?.fiscal_year_end_month ?? DEFAULT_FISCAL_YEAR_END_MONTH),
+    day: Number(settings?.fiscal_year_end_day ?? DEFAULT_FISCAL_YEAR_END_DAY),
+  }
+}
+
+export function currentYearMonth(ref: Date = new Date()): string {
+  return `${ref.getFullYear()}-${pad(ref.getMonth() + 1)}`
+}
+
+export function previousYearMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  if (m <= 1) return `${y - 1}-12`
+  return `${y}-${pad(m - 1)}`
+}
+
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }
@@ -89,10 +112,10 @@ export function allTimeRange(): DateRange {
 
 export function periodPresets(fyeMonth: number, fyeDay: number): DateRange[] {
   return [
-    allTimeRange(),
+    currentFiscalYearRangeFixed(fyeMonth, fyeDay),
     monthToDateRange(),
     calendarYearRange(),
-    currentFiscalYearRangeFixed(fyeMonth, fyeDay),
+    allTimeRange(),
   ]
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { buildFinancialSnapshot, type FinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
-import { periodPresets, type DateRange } from '../lib/fiscalPeriod'
+import { fiscalYearEndFromSettings, periodPresets, type DateRange } from '../lib/fiscalPeriod'
 import type { OrganizationSettings } from '../lib/types'
 import {
   BalanceSheetStatement,
@@ -45,8 +45,7 @@ export function FinancialReportsPage() {
       const { data: settingsRow } = await supabase.from('organization_settings').select('*').maybeSingle()
       const orgSettings = settingsRow ?? null
       setSettings(orgSettings)
-      const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
-      const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
+      const { month: fyeMonth, day: fyeDay } = fiscalYearEndFromSettings(orgSettings)
       const ranges = periodPresets(fyeMonth, fyeDay)
       setPresets(ranges)
       const initial = ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0]

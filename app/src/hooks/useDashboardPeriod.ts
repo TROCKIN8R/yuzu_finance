@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react'
 import { fetchOrganizationSettings } from '../lib/dashboardData'
-import { currentFiscalYearRangeFixed, periodPresets, type DateRange } from '../lib/fiscalPeriod'
+import {
+  currentFiscalYearRangeFixed,
+  DEFAULT_FISCAL_YEAR_END_DAY,
+  DEFAULT_FISCAL_YEAR_END_MONTH,
+  periodPresets,
+  type DateRange,
+} from '../lib/fiscalPeriod'
 import type { OrganizationSettings } from '../lib/types'
+
+function initPeriod(fyeMonth: number, fyeDay: number) {
+  const fy = currentFiscalYearRangeFixed(fyeMonth, fyeDay)
+  const ranges = periodPresets(fyeMonth, fyeDay)
+  const selected = ranges.find((r) => r.label === fy.label && r.start === fy.start && r.end === fy.end) ?? fy
+  return { ranges, selected }
+}
 
 export function useDashboardPeriod() {
   const [period, setPeriod] = useState<DateRange | null>(null)
@@ -13,18 +26,16 @@ export function useDashboardPeriod() {
     fetchOrganizationSettings()
       .then((orgSettings) => {
         setSettings(orgSettings)
-        const fyeMonth = Number(orgSettings?.fiscal_year_end_month ?? 6)
-        const fyeDay = Number(orgSettings?.fiscal_year_end_day ?? 30)
-        const ranges = periodPresets(fyeMonth, fyeDay)
+        const { ranges, selected } = initPeriod(DEFAULT_FISCAL_YEAR_END_MONTH, DEFAULT_FISCAL_YEAR_END_DAY)
         setPresets(ranges)
-        setPeriod(ranges.find((r) => r.label.startsWith('AF')) ?? ranges[0] ?? currentFiscalYearRangeFixed(fyeMonth, fyeDay))
+        setPeriod(selected)
         setReady(true)
       })
       .catch((err) => {
         console.error('Dashboard period init failed:', err)
-        const ranges = periodPresets(6, 30)
+        const { ranges, selected } = initPeriod(DEFAULT_FISCAL_YEAR_END_MONTH, DEFAULT_FISCAL_YEAR_END_DAY)
         setPresets(ranges)
-        setPeriod(ranges[0] ?? currentFiscalYearRangeFixed(6, 30))
+        setPeriod(selected)
         setReady(true)
       })
   }, [])

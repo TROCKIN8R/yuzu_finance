@@ -1,3 +1,4 @@
+import { DEFAULT_FISCAL_YEAR_END_DAY, DEFAULT_FISCAL_YEAR_END_MONTH } from './fiscalPeriod'
 import type { OrganizationSettings } from './types'
 
 export type OrganizationSettingsForm = Omit<OrganizationSettings, 'user_id'>
@@ -156,8 +157,8 @@ export function mapSettingsRowToForm(data: OrganizationSettings): OrganizationSe
     opening_retained_earnings: Number(data.opening_retained_earnings ?? 0),
     opening_cash_balance: Number(data.opening_cash_balance ?? 0),
     opening_balance_date: data.opening_balance_date ?? null,
-    fiscal_year_end_month: Number(data.fiscal_year_end_month ?? 6),
-    fiscal_year_end_day: Number(data.fiscal_year_end_day ?? 30),
+    fiscal_year_end_month: Number(data.fiscal_year_end_month ?? DEFAULT_FISCAL_YEAR_END_MONTH),
+    fiscal_year_end_day: Number(data.fiscal_year_end_day ?? DEFAULT_FISCAL_YEAR_END_DAY),
     estimated_corp_tax_rate: Number(data.estimated_corp_tax_rate ?? 0.12),
     wip_accrual_enabled: Boolean(data.wip_accrual_enabled ?? false),
     hsf_rate: Number(data.hsf_rate ?? 0.0165),

@@ -12,6 +12,7 @@ import {
   composePaymentInstructions,
   DEFAULT_BILLING_EMAIL,
 } from '../lib/paymentInstructions'
+import { DEFAULT_FISCAL_YEAR_END_DAY, DEFAULT_FISCAL_YEAR_END_MONTH } from '../lib/fiscalPeriod'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -50,8 +51,8 @@ const defaults: OrganizationSettingsForm = {
   opening_retained_earnings: 0,
   opening_cash_balance: 0,
   opening_balance_date: null,
-  fiscal_year_end_month: 6,
-  fiscal_year_end_day: 30,
+  fiscal_year_end_month: DEFAULT_FISCAL_YEAR_END_MONTH,
+  fiscal_year_end_day: DEFAULT_FISCAL_YEAR_END_DAY,
   estimated_corp_tax_rate: 0.12,
   wip_accrual_enabled: false,
   hsf_rate: 0.0165,
