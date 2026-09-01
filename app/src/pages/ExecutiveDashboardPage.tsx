@@ -15,6 +15,7 @@ import {
   type MomChange,
 } from '../lib/dashboardKpis'
 import { fetchDashboardBillingData, fetchExecutiveExtras } from '../lib/dashboardData'
+import { DEFAULT_ESTIMATED_CORP_TAX_RATE } from '../lib/organizationSettings'
 import { useDashboardPeriod } from '../hooks/useDashboardPeriod'
 import { RevenueTrendChart } from '../components/DashboardCharts'
 import { ExecutiveBreakdownPanel } from '../components/ExecutiveBreakdownPanel'
@@ -149,7 +150,21 @@ export function ExecutiveDashboardPage() {
       setRecognized(fin.income.revenueSubtotal)
       setCollected(fin.cashIn)
       setCollectionRate(fin.billing.collectionRatePct)
-      setDues(buildEstimatedDues(fin))
+      setDues(
+        buildEstimatedDues(fin, {
+          invoices: glData.invoices,
+          payments: glData.payments,
+          expenses: glData.expenses,
+          employeeExpenses: glData.employeeExpenses,
+          salesTaxRemittances: glData.salesTaxRemittances,
+          estimatedCorpTaxRate: Number(
+            settingsRow.data?.estimated_corp_tax_rate ??
+              glData.settings?.estimated_corp_tax_rate ??
+              DEFAULT_ESTIMATED_CORP_TAX_RATE
+          ),
+          asOf: range.end || '9999-12-31',
+        })
+      )
       setMonthlySeries(series)
       setPartnerRows(
         buildPartnerBreakdown(
@@ -300,7 +315,8 @@ export function ExecutiveDashboardPage() {
           <p className="text-[11px] text-muted mt-2 leading-snug">
             {dues.cashFromBankImport ? 'Solde relevé importé' : 'Solde GL (aucun relevé importé)'}
             {' · '}
-            cotisations = retenues + charges patronales non versées · TPS/TVQ nettes · impôt dû + provision.
+            TPS/TVQ sur factures encaissées, nettes d'ITCs et remises · impôt = (ventes HT − salaires − coûts) ×{' '}
+            {(dues.corpTaxRate * 100).toFixed(1)} % (brouillon).
           </p>
         </div>
       </div>

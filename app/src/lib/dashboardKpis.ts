@@ -6,6 +6,7 @@ import {
 } from './billingMetrics'
 import { currentYearMonth, previousYearMonth, type DateRange } from './fiscalPeriod'
 import type { FinancialSnapshot } from './financials'
+import { outstandingSalesTaxOnPaidInvoices } from './salesTaxCalc'
 
 export interface MomChange {
   current: number
@@ -90,19 +91,50 @@ export interface EstimatedDues {
   payrollUnpaid: number
   salesTaxUnpaid: number
   companyTaxUnpaid: number
+  corpTaxRate: number
   totalDue: number
   estimatedRemaining: number
 }
 
-export function buildEstimatedDues(fin: FinancialSnapshot): EstimatedDues {
+export interface EstimatedDuesSource {
+  invoices: { id: string; gst: number; qst: number; total: number; status: string; invoice_date: string }[]
+  payments: { invoice_id: string; payment_date?: string | null; amount: number }[]
+  expenses: { gst: number; qst: number; expense_date: string; category?: string; payroll_run_id?: string | null }[]
+  employeeExpenses?: {
+    gst: number
+    qst: number
+    expense_date: string
+    taxable?: boolean
+    payroll_run_id?: string | null
+  }[]
+  salesTaxRemittances: { gst_net: number; qst_net: number; status?: string; filed_date?: string | null; period_end: string }[]
+  estimatedCorpTaxRate: number
+  asOf: string
+}
+
+/** (Sales HT − salary − costs) × estimated corp tax rate, minus tax already paid in the period. */
+export function estimateCompanyTaxUnpaid(fin: FinancialSnapshot, rate: number): number {
+  const sales = fin.income.invoicedSubtotal
+  const salary = fin.income.payrollGross
+  const costs = round2(fin.income.operatingExpenses + fin.income.employerPayrollContributions)
+  const taxable = Math.max(0, round2(sales - salary - costs))
+  const estimated = round2(taxable * rate)
+  return Math.max(0, round2(estimated - fin.corpTax.paid))
+}
+
+export function buildEstimatedDues(fin: FinancialSnapshot, source: EstimatedDuesSource): EstimatedDues {
   const bank = fin.balanceSheet.bankStatementBalance
   const cash = bank != null ? bank : fin.balanceSheet.cash
   const payrollUnpaid = Math.max(0, fin.balanceSheet.payrollRemittancesPending)
-  const salesTaxUnpaid = Math.max(0, fin.balanceSheet.salesTaxNetPosition)
-  const companyTaxUnpaid = Math.max(
-    0,
-    round2(fin.balanceSheet.corporateTaxDue + fin.balanceSheet.corpTaxProvision)
-  )
+  const salesTaxUnpaid = outstandingSalesTaxOnPaidInvoices({
+    asOf: source.asOf,
+    invoices: source.invoices,
+    payments: source.payments,
+    expenses: source.expenses,
+    employeeExpenses: source.employeeExpenses,
+    remittances: source.salesTaxRemittances,
+  })
+  const companyTaxUnpaid = estimateCompanyTaxUnpaid(fin, source.estimatedCorpTaxRate)
   const totalDue = round2(payrollUnpaid + salesTaxUnpaid + companyTaxUnpaid)
   return {
     cash,
@@ -110,6 +142,7 @@ export function buildEstimatedDues(fin: FinancialSnapshot): EstimatedDues {
     payrollUnpaid,
     salesTaxUnpaid,
     companyTaxUnpaid,
+    corpTaxRate: source.estimatedCorpTaxRate,
     totalDue,
     estimatedRemaining: round2(cash - totalDue),
   }

@@ -28,6 +28,18 @@ function isGlEmployeeExpense(e: { taxable?: boolean; payroll_run_id?: string | n
   return !!e.payroll_run_id
 }
 
+export function invoicePaidThroughDate(
+  invoice: { id: string; total: number; status: string },
+  payments: { invoice_id: string; payment_date?: string | null; amount: number }[],
+  asOf: string
+): boolean {
+  if (!isRevenueInvoice(invoice.status)) return false
+  const paid = payments
+    .filter((p) => p.invoice_id === invoice.id && p.payment_date && p.payment_date <= asOf)
+    .reduce((s, p) => s + Number(p.amount), 0)
+  return paid + 0.005 >= Number(invoice.total)
+}
+
 export function calculateSalesTaxPeriod(
   periodStart: string,
   periodEnd: string,
@@ -69,4 +81,28 @@ export function calculateSalesTaxPeriod(
     gst_net: round2(gst_collected - gst_itc),
     qst_net: round2(qst_collected - qst_itr),
   }
+}
+
+/** Net TPS/TVQ still to remit, counting collected tax only on invoices fully paid through asOf. Draft for CPA review. */
+export function outstandingSalesTaxOnPaidInvoices(params: {
+  asOf: string
+  invoices: { id: string; gst: number; qst: number; total: number; status: string; invoice_date: string }[]
+  payments: { invoice_id: string; payment_date?: string | null; amount: number }[]
+  expenses: { gst: number; qst: number; expense_date: string; category?: string; payroll_run_id?: string | null }[]
+  employeeExpenses?: {
+    gst: number
+    qst: number
+    expense_date: string
+    taxable?: boolean
+    payroll_run_id?: string | null
+  }[]
+  remittances: { gst_net: number; qst_net: number; status?: string; filed_date?: string | null; period_end: string }[]
+}): number {
+  const { asOf, invoices, payments, expenses, employeeExpenses = [], remittances } = params
+  const paidInvoices = invoices.filter((inv) => invoicePaidThroughDate(inv, payments, asOf))
+  const totals = calculateSalesTaxPeriod('0001-01-01', asOf, paidInvoices, expenses, employeeExpenses)
+  const remitted = remittances
+    .filter((r) => (r.status ?? 'paid') === 'paid' && (r.filed_date || r.period_end) <= asOf)
+    .reduce((s, r) => s + Number(r.gst_net) + Number(r.qst_net), 0)
+  return Math.max(0, round2(totals.gst_net + totals.qst_net - remitted))
 }
