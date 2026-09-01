@@ -982,7 +982,7 @@ export function BankPage() {
               </div>
               {settings && expForm.applyTax && (
                 <p className="text-xs text-muted">
-                  TPS {Math.round(settings.gst_rate * 10000) / 100}% · TVQ {Math.round(settings.qst_rate * 10000) / 100}% sur HT+TPS
+                  TPS {Math.round(settings.gst_rate * 10000) / 100}% · TVQ {Math.round(settings.qst_rate * 10000) / 100}% sur HT (chacune)
                   {' · '}
                   Arrondi au cent. Saisir le TTC ou le HT recalcule le reste.
                 </p>

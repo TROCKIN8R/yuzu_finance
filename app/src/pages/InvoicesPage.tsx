@@ -20,7 +20,7 @@ import {
 } from '../lib/invoice'
 import { DEFAULT_CURRENCY, addDays, formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
-import { effectiveTaxSettings } from '../lib/taxes'
+import { defaultIncludeSalesTax, effectiveTaxSettings, hasSalesTaxNumbers } from '../lib/taxes'
 import { deleteInvoice } from '../lib/invoiceActions'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { downloadInvoicePdf, saveInvoicePdfToStorage } from '../lib/invoicePdf'
@@ -187,7 +187,7 @@ export function InvoicesPage() {
   }
 
   async function openCreate() {
-    setIncludeSalesTax(false)
+    setIncludeSalesTax(defaultIncludeSalesTax(settings))
     setCreateOpen(true)
     if (createPartnerId) await loadUnbilled(createPartnerId)
   }
@@ -395,7 +395,11 @@ export function InvoicesPage() {
   const preview = previewTotals()
   const canCreate = selectedEntryIds.size > 0 || selectedProjectIds.size > 0
   const nothingToBill = unbilled.length === 0 && unbilledFixed.length === 0
-  const taxesEnabledInSettings = !!(settings?.charge_gst || settings?.charge_qst)
+  const taxesEnabledInSettings = !!(
+    settings?.charge_gst ||
+    settings?.charge_qst ||
+    hasSalesTaxNumbers(settings)
+  )
   const showTaxesOnInvoice = includeSalesTax && taxesEnabledInSettings
 
   const createInvoiceBtn = (
@@ -541,8 +545,8 @@ export function InvoicesPage() {
             <span>
               <span className="font-medium">Inclure TPS / TVQ sur cette facture</span>
               <span className="block text-xs text-muted mt-0.5">
-                Désactivé par défaut — cochez seulement si vous êtes inscrit aux taxes de vente. Les taux et numéros
-                d&apos;inscription se configurent dans Paramètres.
+                Coché par défaut si les numéros TPS/TVQ sont dans Paramètres. Décochez pour une fourniture
+                détaxée ou hors Québec. TPS 5 % et TVQ 9,975 % s&apos;appliquent chacune sur le hors taxes.
               </span>
             </span>
           </label>

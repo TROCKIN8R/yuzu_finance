@@ -1,6 +1,6 @@
 import type { Project, TimeEntry } from './types'
 import { effectiveRate, formatCad, lineAmount } from './format'
-import { computeSalesTaxes, type TaxSettings } from './taxes'
+import { computeSalesTaxes, round2, type TaxSettings } from './taxes'
 
 export type LineTaxes = ReturnType<typeof computeSalesTaxes>
 
@@ -17,10 +17,6 @@ export interface InvoiceLineDraft {
   qst: number
   total: number
   sort_order: number
-}
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100
 }
 
 export function computeLineTaxes(subtotal: number, settings: TaxSettings) {

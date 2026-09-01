@@ -187,8 +187,10 @@ export function SettingsPage() {
         <section className="space-y-3">
           <h2 className="font-medium">TPS / TVQ</h2>
           <p className="text-xs text-muted">
-            Activez ici lorsque votre entreprise est inscrite. Chaque facture propose ensuite une case à cocher pour
-            inclure ou non les taxes.
+            Activez ici lorsque votre entreprise est inscrite. Si un n° TPS ou TVQ est saisi, les nouvelles factures
+            incluent les taxes par défaut (décochable par facture). TPS et TVQ s&apos;appliquent chacune sur le montant
+            hors taxes (règle en vigueur depuis 2013 — pas de TVQ sur la TPS). Entrez les taux en décimal : 0,05 =
+            5&nbsp;%, 0,09975 = 9,975&nbsp;%.
           </p>
           <div className="flex flex-wrap gap-4 text-sm">
             <label className="flex items-center gap-2"><input type="checkbox" checked={form.charge_gst} onChange={(e) => setForm({ ...form, charge_gst: e.target.checked })} /> Percevoir TPS</label>

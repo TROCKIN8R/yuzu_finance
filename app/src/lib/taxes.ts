@@ -1,6 +1,7 @@
 import type { OrganizationSettings } from './types'
 
-export type TaxSettings = Pick<OrganizationSettings, 'charge_gst' | 'charge_qst' | 'gst_rate' | 'qst_rate'>
+export type TaxSettings = Pick<OrganizationSettings, 'charge_gst' | 'charge_qst' | 'gst_rate' | 'qst_rate'> &
+  Partial<Pick<OrganizationSettings, 'gst_number' | 'qst_number'>>
 
 export type TaxBreakdown = {
   subtotal: number
@@ -21,12 +22,30 @@ export function round2(n: number) {
   return Math.round((n + Math.sign(n) * Number.EPSILON) * 100) / 100
 }
 
-/** Apply per-invoice include flag on top of organization tax registration. */
+/** Registered for sales tax when a TPS or TVQ number is on file. */
+export function hasSalesTaxNumbers(
+  settings: Pick<OrganizationSettings, 'gst_number' | 'qst_number'> | null | undefined
+): boolean {
+  return Boolean(settings?.gst_number?.trim() || settings?.qst_number?.trim())
+}
+
+/** New invoices include TPS/TVQ when the org has registration numbers. */
+export function defaultIncludeSalesTax(
+  settings: Pick<OrganizationSettings, 'gst_number' | 'qst_number'> | null | undefined
+): boolean {
+  return hasSalesTaxNumbers(settings)
+}
+
+/** Apply per-invoice include flag. A filled TPS/TVQ number counts as registered for that tax. */
 export function effectiveTaxSettings(settings: TaxSettings, includeSalesTax: boolean): TaxSettings {
   if (!includeSalesTax) {
     return { ...settings, charge_gst: false, charge_qst: false }
   }
-  return settings
+  return {
+    ...settings,
+    charge_gst: settings.charge_gst || Boolean(settings.gst_number?.trim()),
+    charge_qst: settings.charge_qst || Boolean(settings.qst_number?.trim()),
+  }
 }
 
 /** Purchase receipts: split using statutory rates for ITC/RTI — not sales charge flags. */
@@ -81,23 +100,28 @@ export function splitPurchaseAmount(
   return { amount: t.subtotal, gst: t.gst, qst: t.qst, total: t.total }
 }
 
-/** Québec: TPS on taxable amount; TVQ on taxable amount + TPS. Each tax rounded to the cent. */
+/**
+ * Québec sales tax since 1 Jan 2013 (CITCA / Revenu Québec):
+ * TPS and TVQ apply in parallel on the same tax-exclusive consideration.
+ * Do not calculate TVQ on HT+TPS — that was the pre-2013 9.5% stacked rule.
+ * Each tax is rounded to the cent (half-up).
+ */
 export function computeSalesTaxes(subtotal: number, settings: TaxSettings): TaxBreakdown {
   const base = round2(subtotal)
   const gst = settings.charge_gst ? round2(base * settings.gst_rate) : 0
-  const qst = settings.charge_qst ? round2(round2(base + gst) * settings.qst_rate) : 0
+  const qst = settings.charge_qst ? round2(base * settings.qst_rate) : 0
   return { subtotal: base, gst, qst, total: round2(base + gst + qst) }
 }
 
-/** ITC / RTI on purchases — same Québec compound rule. */
+/** ITC / RTI on purchases — same Québec parallel rule as sales. */
 export function computePurchaseTaxes(amount: number, settings: TaxSettings): TaxBreakdown {
   return computeSalesTaxes(amount, purchaseReceiptTaxSettings(settings))
 }
 
 /**
- * Back-calculate HT + TPS/TVQ from a TTC purchase total (Québec compound).
+ * Back-calculate HT + TPS/TVQ from a TTC purchase total (Québec parallel taxes).
  *
- * 1. Guess HT = round(TTC / ((1+TPS)×(1+TVQ)))
+ * 1. Guess HT = round(TTC / (1 + TPS + TVQ))
  * 2. Search nearby cents for an HT whose forward-rounded taxes equal the entered TTC
  *    (matches how most invoices are printed: HT first, then rounded taxes)
  * 3. If no exact match, keep the closest HT/TPS and put the residual cent(s) on TVQ
@@ -112,13 +136,13 @@ export function computePurchaseTaxesFromTotal(totalInclTax: number, settings: Ta
 
   const gstRate = receiptSettings.charge_gst ? receiptSettings.gst_rate : 0
   const qstRate = receiptSettings.charge_qst ? receiptSettings.qst_rate : 0
-  const divisor = (1 + gstRate) * (1 + qstRate)
+  const divisor = 1 + gstRate + qstRate
   const guessed = round2(total / divisor)
 
   let best = computeSalesTaxes(guessed, receiptSettings)
   let bestDiff = Math.abs(best.total - total)
 
-  // Search ±5¢ — enough to absorb compound rounding drift on typical receipt amounts
+  // Search ±5¢ — enough to absorb per-cent rounding drift on typical receipt amounts
   for (let delta = -5; delta <= 5; delta++) {
     if (delta === 0) continue
     const candidateHt = round2(guessed + delta / 100)

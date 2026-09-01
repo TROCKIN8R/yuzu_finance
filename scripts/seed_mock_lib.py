@@ -121,14 +121,15 @@ def calculate_employer_levies(gross_pay: float) -> dict[str, float]:
 
 
 def sales_tax(subtotal: float) -> dict[str, float]:
+    """TPS and TVQ in parallel on HT (Québec since 2013)."""
     base = round2(subtotal)
     gst = round2(base * GST_RATE)
-    qst = round2((base + gst) * QST_RATE)
+    qst = round2(base * QST_RATE)
     return {"subtotal": base, "gst": gst, "qst": qst, "total": round2(base + gst + qst)}
 
 
 def purchase_tax_from_total(total_incl: float) -> dict[str, float]:
-    divisor = (1 + GST_RATE) * (1 + QST_RATE)
+    divisor = 1 + GST_RATE + QST_RATE
     subtotal = round2(total_incl / divisor)
     return sales_tax(subtotal)
 

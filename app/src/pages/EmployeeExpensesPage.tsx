@@ -537,8 +537,8 @@ export function EmployeeExpensesPage() {
           {form.applyTax && (
             <p className="text-xs text-muted">
               {settings
-                ? `TPS ${Math.round(Number(settings.gst_rate) * 10000) / 100}% · TVQ ${Math.round(Number(settings.qst_rate) * 10000) / 100}% sur HT+TPS`
-                : 'TPS 5 % · TVQ 9,975 % sur HT+TPS'}
+                ? `TPS ${Math.round(Number(settings.gst_rate) * 10000) / 100}% · TVQ ${Math.round(Number(settings.qst_rate) * 10000) / 100}% sur HT (chacune)`
+                : 'TPS 5 % · TVQ 9,975 % sur HT (chacune)'}
               {' · '}
               Arrondi au cent (chaque taxe). Saisir le TTC ou le HT recalcule le reste.
             </p>

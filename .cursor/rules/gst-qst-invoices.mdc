@@ -10,6 +10,8 @@ alwaysApply: false
 
 Required fields: invoice #, date, client legal name, description, **currency (CAD)**, **subtotal, GST, QST, total**, payment terms, company GST/QST numbers from `organization_settings`. All invoice amounts are CAD only.
 
+**Calculation (since 1 Jan 2013):** TPS = round(HT × gst_rate); TVQ = round(HT × qst_rate). Both on the same tax-exclusive amount — never TVQ on HT+TPS. Default rates 5% and 9.975%. Taxes are computed per invoice line then summed.
+
 Numbering: sequential, no gaps without documented reason in `company/decision-log.md`.
 
 ## Received invoices (Supabase `expenses`)
@@ -24,6 +26,7 @@ Numbering: sequential, no gaps without documented reason in `company/decision-lo
 ## Small supplier
 
 - If company settings mark small supplier, do not charge GST/QST until registration threshold is met — confirm with owner before first charge.
+- New invoices default **include TPS/TVQ** when `organization_settings` has a GST or QST number. Uncheck per invoice for zero-rated / out-of-Québec supplies.
 
 ## Bilingual
 
