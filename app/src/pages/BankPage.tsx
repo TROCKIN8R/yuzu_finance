@@ -27,6 +27,8 @@ import {
   assignBankCorporateTax,
   assignBankDividend,
   assignBankExpense,
+  assignBankInterest,
+  assignBankCapital,
   assignBankPayment,
   assignBankPayroll,
   assignBankSalesTax,
@@ -86,16 +88,23 @@ type AssignmentFilter =
   | 'unassigned'
   | 'all'
   | 'payment'
+  | 'capital'
+  | 'interest'
   | 'expense'
   | 'payroll'
   | 'dividend'
   | 'sales_tax'
   | 'corporate_tax'
   | 'ignored'
-type AssignKind = 'payment' | 'expense' | 'payroll' | 'dividend' | 'sales_tax' | 'corporate_tax'
+type AssignKind = 'payment' | 'capital' | 'interest' | 'expense' | 'payroll' | 'dividend' | 'sales_tax' | 'corporate_tax'
+
+const REVENUE_MATCH_CAPITAL = '__capital__'
+const REVENUE_MATCH_INTEREST = '__interest__'
 
 const ASSIGN_KINDS: { id: AssignKind; label: string; outflow: boolean }[] = [
   { id: 'payment', label: 'Paiement client', outflow: false },
+  { id: 'capital', label: 'Apport en capital', outflow: false },
+  { id: 'interest', label: 'Intérêts sur placement', outflow: false },
   { id: 'expense', label: 'Dépense', outflow: true },
   { id: 'payroll', label: 'Paie', outflow: true },
   { id: 'dividend', label: 'Dividende', outflow: true },
@@ -114,6 +123,21 @@ function inferPaymentMethod(description: string): string {
   if (d.includes('cheque') || d.includes('chèque')) return 'cheque'
   if (d.includes('direct deposit') || d.includes('dépôt direct')) return 'virement'
   return 'virement'
+}
+
+function inferInflowKind(description: string): AssignKind {
+  const d = description.toLowerCase()
+  if (d.includes('interest') || d.includes('intérêt') || d.includes('interet')) return 'interest'
+  if (d.includes('transfer into the account') || d.includes('apport') || /\bcapital\b/.test(d)) {
+    return 'capital'
+  }
+  return 'payment'
+}
+
+function revenueMatchValue(kind: AssignKind, invoiceId: string) {
+  if (kind === 'capital') return REVENUE_MATCH_CAPITAL
+  if (kind === 'interest') return REVENUE_MATCH_INTEREST
+  return invoiceId
 }
 
 function sourceLabel(tx: BankTransaction) {
@@ -341,7 +365,7 @@ export function BankPage() {
     setAssignTx(tx)
     setExpenseReceiptFile(null)
     const outflow = Number(tx.amount) < 0
-    const kind: AssignKind = outflow ? 'expense' : 'payment'
+    const kind: AssignKind = outflow ? 'expense' : inferInflowKind(tx.description)
     setAssignKind(kind)
     const absAmount = round2(Math.abs(Number(tx.amount)))
 
@@ -395,6 +419,20 @@ export function BankPage() {
     setAssignOpen(true)
   }
 
+  function onRevenueMatchChange(value: string) {
+    if (value === REVENUE_MATCH_CAPITAL) {
+      setAssignKind('capital')
+      return
+    }
+    if (value === REVENUE_MATCH_INTEREST) {
+      setAssignKind('interest')
+      return
+    }
+    setAssignKind('payment')
+    const inv = invoices.find((i) => i.id === value)
+    setPayForm((prev) => ({ ...prev, invoice_id: value, amount: inv?.balance ?? prev.amount }))
+  }
+
   function onExpenseTotalChange(total: number) {
     setExpForm((prev) => {
       const taxes = recalcExpenseTaxesFromTotal(total, prev.applyTax)
@@ -445,6 +483,10 @@ export function BankPage() {
     if (blockIfClosed(assignTx.transaction_date)) return
     try {
       if (assignKind === 'payment') {
+        if (!payForm.invoice_id) {
+          alert('Sélectionnez une facture, un apport en capital ou des intérêts sur placement.')
+          return
+        }
         if (blockIfClosed(payForm.payment_date)) return
         await assignBankPayment(
           assignTx.id,
@@ -528,6 +570,10 @@ export function BankPage() {
           corpTaxForm.paid_amount,
           corpTaxForm.paid_date
         )
+      } else if (assignKind === 'interest') {
+        await assignBankInterest(assignTx.id)
+      } else if (assignKind === 'capital') {
+        await assignBankCapital(assignTx.id)
       }
       setAssignOpen(false)
       setAssignTx(null)
@@ -590,6 +636,8 @@ export function BankPage() {
       const inv = relationOne(p?.invoices)
       return inv ? `Paiement · ${inv.invoice_number}` : 'Paiement'
     }
+    if (tx.match_source === 'capital') return 'Apport en capital'
+    if (tx.match_source === 'interest') return 'Intérêts sur placement'
     if (tx.match_source === 'expense' && tx.match_id) {
       const ex = expenseMap[tx.match_id]
       return ex ? `Dépense · ${ex.vendor}` : 'Dépense'
@@ -714,6 +762,8 @@ export function BankPage() {
                 { value: 'unassigned', label: 'Non affectées' },
                 { value: 'all', label: 'Toutes' },
                 { value: 'payment', label: 'Paiements clients' },
+                { value: 'capital', label: 'Apport en capital' },
+                { value: 'interest', label: 'Intérêts sur placement' },
                 { value: 'expense', label: 'Dépenses' },
                 { value: 'payroll', label: 'Paie' },
                 { value: 'dividend', label: 'Dividendes' },
@@ -823,29 +873,37 @@ export function BankPage() {
         </div>
 
         <form onSubmit={saveAssignment} className="space-y-3">
-          {assignKind === 'payment' ? (
+          {(assignKind === 'payment' || assignKind === 'capital' || assignKind === 'interest') ? (
             <>
-              {outstanding.length === 0 ? (
-                <p className="text-sm text-amber-800">Aucune facture ouverte — créez une facture d&apos;abord.</p>
-              ) : (
-                <>
-                  <Field label="Facture *">
-                    <select
-                      className={inputClass}
-                      required
-                      value={payForm.invoice_id}
-                      onChange={(e) => {
-                        const inv = invoices.find((i) => i.id === e.target.value)
-                        setPayForm({ ...payForm, invoice_id: e.target.value, amount: inv?.balance ?? payForm.amount })
-                      }}
-                    >
-                      {outstanding.map((inv) => (
+              <Field label="Affecter à *">
+                <select
+                  className={inputClass}
+                  required
+                  value={revenueMatchValue(assignKind, payForm.invoice_id)}
+                  onChange={(e) => onRevenueMatchChange(e.target.value)}
+                >
+                  <option value="">— Choisir —</option>
+                  <optgroup label="Autres encaissements">
+                    <option value={REVENUE_MATCH_CAPITAL}>Apport en capital (investissement)</option>
+                    <option value={REVENUE_MATCH_INTEREST}>Intérêts sur placement</option>
+                  </optgroup>
+                  <optgroup label="Factures ouvertes">
+                    {outstanding.length === 0 ? (
+                      <option value="__none__" disabled>
+                        Aucune facture ouverte
+                      </option>
+                    ) : (
+                      outstanding.map((inv) => (
                         <option key={inv.id} value={inv.id}>
                           {inv.invoice_number} — {inv.partners?.legal_name} — solde {formatCad(inv.balance)}
                         </option>
-                      ))}
-                    </select>
-                  </Field>
+                      ))
+                    )}
+                  </optgroup>
+                </select>
+              </Field>
+              {assignKind === 'payment' && payForm.invoice_id && (
+                <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Field label="Date de paiement *">
                       <input
@@ -878,6 +936,20 @@ export function BankPage() {
                     <input className={inputClass} value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} />
                   </Field>
                 </>
+              )}
+              {assignKind === 'capital' && (
+                <p className="text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+                  Écriture : débit banque 1010 · crédit capital-actions 3000 pour{' '}
+                  {assignTx ? formatCad(Math.abs(Number(assignTx.amount))) : ''}. Si ce montant est déjà dans
+                  Paramètres (capital d&apos;ouverture), ne l&apos;affectez pas ici — brouillon pour révision CPA.
+                </p>
+              )}
+              {assignKind === 'interest' && (
+                <p className="text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+                  Écriture : débit banque 1010 · crédit intérêts sur placements 4100 pour{' '}
+                  {assignTx ? formatCad(Math.abs(Number(assignTx.amount))) : ''}. Revenu autre que les services —
+                  brouillon pour révision CPA.
+                </p>
               )}
             </>
           ) : assignKind === 'expense' ? (
@@ -1197,7 +1269,7 @@ export function BankPage() {
             <Button
               type="submit"
               disabled={
-                (assignKind === 'payment' && outstanding.length === 0) ||
+                (assignKind === 'payment' && !payForm.invoice_id) ||
                 (assignKind === 'payroll' && payrollRuns.length === 0) ||
                 (assignKind === 'dividend' && declaredDividends.length === 0) ||
                 (assignKind === 'sales_tax' && salesTaxPeriods.length === 0) ||

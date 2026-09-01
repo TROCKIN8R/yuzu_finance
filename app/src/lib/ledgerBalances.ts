@@ -7,6 +7,8 @@ function round2(n: number) {
 
 export interface CashFlowBreakdown {
   clientPayments: number
+  interestReceived: number
+  capitalContributions: number
   expensesPaid: number
   payrollNetToEmployee: number
   employeeWithholdings: number
@@ -102,6 +104,7 @@ const OPERATING_EXPENSE_CODES = new Set(['5010', '5020', '5030', '5040', '5050',
 
 export interface PeriodIncomeDetail {
   revenueSubtotal: number
+  interestIncome: number
   operatingExpenses: number
   payrollGross: number
   employerPayrollContributions: number
@@ -186,6 +189,7 @@ export function corpTaxFromPeriodEntries(entries: JournalEntry[]): CorpTaxPeriod
 
 export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDetail {
   let revenueSubtotal = 0
+  let interestIncome = 0
   let operatingExpenses = 0
   let payrollGross = 0
   let employerPayrollContributions = 0
@@ -196,6 +200,7 @@ export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDe
     for (const line of e.lines) {
       const code = line.accountCode
       if (code === '4000') revenueSubtotal += line.credit - line.debit
+      if (code === '4100') interestIncome += line.credit - line.debit
       if (OPERATING_EXPENSE_CODES.has(code)) operatingExpenses += line.debit - line.credit
       if (code === '5100') payrollGross += line.debit - line.credit
       if (code === '5110') employerPayrollContributions += line.debit - line.credit
@@ -207,9 +212,10 @@ export function incomeFromPeriodEntries(entries: JournalEntry[]): PeriodIncomeDe
   }
 
   const operatingIncome = round2(revenueSubtotal - operatingExpenses - payrollGross - employerPayrollContributions)
-  const netIncome = round2(operatingIncome - corpTaxExpense)
+  const netIncome = round2(operatingIncome + interestIncome - corpTaxExpense)
   return {
     revenueSubtotal: round2(revenueSubtotal),
+    interestIncome: round2(interestIncome),
     operatingExpenses: round2(operatingExpenses),
     payrollGross: round2(payrollGross),
     employerPayrollContributions: round2(employerPayrollContributions),
@@ -233,6 +239,8 @@ function cashMovement(entry: JournalEntry): { inflow: number; outflow: number } 
 
 export function cashFlowFromPeriodEntries(entries: JournalEntry[]): CashFlowBreakdown {
   let clientPayments = 0
+  let interestReceived = 0
+  let capitalContributions = 0
   let expensesPaid = 0
   let payrollNetToEmployee = 0
   let payrollRemittancesPaid = 0
@@ -247,6 +255,12 @@ export function cashFlowFromPeriodEntries(entries: JournalEntry[]): CashFlowBrea
     switch (e.sourceType) {
       case 'payment':
         clientPayments += inflow
+        break
+      case 'interest':
+        interestReceived += inflow
+        break
+      case 'capital':
+        capitalContributions += inflow
         break
       case 'expense':
         expensesPaid += outflow
@@ -286,6 +300,8 @@ export function cashFlowFromPeriodEntries(entries: JournalEntry[]): CashFlowBrea
 
   return {
     clientPayments: round2(clientPayments),
+    interestReceived: round2(interestReceived),
+    capitalContributions: round2(capitalContributions),
     expensesPaid: round2(expensesPaid),
     payrollNetToEmployee: round2(payrollNetToEmployee),
     employeeWithholdings: round2(employeeWithholdings),

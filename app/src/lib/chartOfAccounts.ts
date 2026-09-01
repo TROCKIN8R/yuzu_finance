@@ -31,6 +31,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '3100', name: 'Bénéfices non répartis', type: 'equity' },
   { code: '3200', name: 'Dividendes déclarés', type: 'equity' },
   { code: '4000', name: 'Revenus de services', type: 'revenue' },
+  { code: '4100', name: 'Intérêts sur placements', type: 'revenue' },
   { code: '5010', name: 'Logiciels', type: 'expense' },
   { code: '5020', name: 'Bureau', type: 'expense' },
   { code: '5030', name: 'Déplacements', type: 'expense' },

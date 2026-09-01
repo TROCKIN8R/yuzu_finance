@@ -720,7 +720,8 @@ create table public.bank_transactions (
   amount numeric(12, 2) not null,
   reconciled boolean not null default false,
   match_source text check (match_source is null or match_source in (
-    'payment', 'expense', 'payroll', 'dividend', 'sales_tax', 'corporate_tax', 'manual'
+    'payment', 'expense', 'payroll', 'dividend', 'sales_tax', 'corporate_tax', 'manual',
+    'interest', 'capital'
   )),
   match_id uuid,
   source_format text check (

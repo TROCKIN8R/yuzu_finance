@@ -185,6 +185,15 @@ export function buildGeneralLedger(data: {
     qst_net: number
     status: string
   }[]
+  /** Matched bank inflows posted directly (interest, capital). Payments/expenses stay on their own tables. */
+  bankMatches?: {
+    id: string
+    transaction_date: string
+    description: string
+    amount: number
+    match_source: string | null
+    transaction_code?: string | null
+  }[]
   adjustments?: AccountingAdjustment[]
   timeEntries?: MetricsTimeEntry[]
   fixedProjects?: MetricsProject[]
@@ -457,6 +466,36 @@ export function buildGeneralLedger(data: {
         lines
       )
     )
+  }
+
+  for (const tx of data.bankMatches ?? []) {
+    const amt = round2(Number(tx.amount))
+    if (amt <= 0) continue
+    if (tx.match_source === 'interest') {
+      entries.push(
+        entry(
+          `bank-int-${tx.id}`,
+          tx.transaction_date,
+          'interest',
+          tx.id,
+          tx.transaction_code || 'INT',
+          tx.description,
+          [jl('1010', amt, 0), jl('4100', 0, amt)]
+        )
+      )
+    } else if (tx.match_source === 'capital') {
+      entries.push(
+        entry(
+          `bank-cap-${tx.id}`,
+          tx.transaction_date,
+          'capital',
+          tx.id,
+          tx.transaction_code || 'CAP',
+          tx.description,
+          [jl('1010', amt, 0), jl('3000', 0, amt)]
+        )
+      )
+    }
   }
 
   const cap = data.periodEnd ?? '9999-12-31'

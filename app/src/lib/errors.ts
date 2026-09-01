@@ -16,8 +16,12 @@ export function bankImportSetupHint(message: string): string {
     lower.includes('source_format') ||
     lower.includes('transaction_code') ||
     lower.includes('schema cache') ||
-    lower.includes('column')
+    lower.includes('column') ||
+    lower.includes('match_source')
   ) {
+    if (lower.includes('match_source')) {
+      return `${message} — exécutez supabase/migrations/20260831220000_bank_match_interest_capital.sql dans l’éditeur SQL Supabase.`
+    }
     return `${message} — exécutez supabase/migrations/20260629100000_bank_import.sql dans l’éditeur SQL Supabase.`
   }
   return message

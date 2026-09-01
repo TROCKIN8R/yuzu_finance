@@ -64,6 +64,8 @@ export interface BalanceSheetDetail {
 export interface IncomeDetail {
   /** GL account 4000 (+ WIP accrual) for the period */
   revenueSubtotal: number
+  /** GL account 4100 — interest on cash / investments */
+  interestIncome: number
   /** Invoice subtotals (HT) by invoice date — operational billing */
   invoicedSubtotal: number
   operatingExpenses: number
@@ -290,7 +292,9 @@ export function buildFinancialSnapshot(
   const salesTaxNetPosition = round2(gstPayable + qstPayable - gstReceivable - qstReceivable)
   const salesTaxPayable = round2(gstPayable + qstPayable)
 
-  const cashIn = cashFlow.clientPayments
+  const cashIn = round2(
+    cashFlow.clientPayments + cashFlow.interestReceived + cashFlow.capitalContributions
+  )
   const cashOut = cashOutTotal(cashFlow)
   const periodNetCashFlow = round2(cashIn - cashOut)
 
@@ -372,6 +376,7 @@ export function buildFinancialSnapshot(
     },
     income: {
       revenueSubtotal: income.revenueSubtotal,
+      interestIncome: income.interestIncome,
       invoicedSubtotal,
       operatingExpenses: income.operatingExpenses,
       payrollGross: income.payrollGross,

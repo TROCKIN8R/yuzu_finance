@@ -21,6 +21,7 @@ export async function fetchGeneralLedgerData(): Promise<{
     settingsRow,
     timeEntries,
     fixedProjects,
+    bankMatches,
   ] = await Promise.all([
     supabase.from('invoices').select('id, invoice_number, invoice_date, subtotal, gst, qst, total, status'),
     supabase.from('payments').select('id, payment_date, amount, invoice_id, reference, invoices(invoice_number, status)'),
@@ -48,6 +49,9 @@ export async function fetchGeneralLedgerData(): Promise<{
       .from('projects')
       .select('id, partner_id, billing_type, fixed_price, invoice_id, status, default_hourly_rate')
       .eq('billing_type', 'fixed'),
+    supabase
+      .from('bank_transactions')
+      .select('id, transaction_date, description, amount, match_source, transaction_code'),
   ])
 
   const warnings: string[] = []
@@ -75,6 +79,7 @@ export async function fetchGeneralLedgerData(): Promise<{
       dividends: dividends.data ?? [],
       corporateTax: corpTax.data ?? [],
       salesTaxRemittances: salesTax.data ?? [],
+      bankMatches: bankMatches.data ?? [],
       adjustments: adjustments.data ?? [],
       settings: settingsRow.data,
       timeEntries: entriesToMetrics(timeEntries.data ?? []),

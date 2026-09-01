@@ -56,6 +56,9 @@ export function CashFlowStatement({ fin, periodLabel }: { fin: FinancialSnapshot
 
       <StmtSection title="Encaissements" />
       <StmtRow label="Paiements clients reçus" value={formatCad(cf.clientPayments)} />
+      <StmtRow label="Intérêts sur placements" value={formatCad(cf.interestReceived)} indent />
+      <StmtRow label="Apport en capital" value={formatCad(cf.capitalContributions)} indent />
+      <StmtRow label="Total encaissements" value={formatCad(fin.cashIn)} bold />
 
       <StmtSection title="Décaissements" />
       <StmtRow label="Dépenses payées (TTC)" value={formatCad(cf.expensesPaid)} indent negative />
@@ -209,6 +212,7 @@ export function IncomeStatement({ fin, periodLabel }: { fin: FinancialSnapshot; 
       <StmtRow label="Salaires bruts" value={formatCad(inc.payrollGross)} indent negative />
       <StmtRow label="Cotisations employeur" value={formatCad(inc.employerPayrollContributions)} indent negative />
       <StmtRow label="Résultat d'exploitation" value={formatCad(inc.operatingIncome)} bold />
+      <StmtRow label="Intérêts sur placements" value={formatCad(inc.interestIncome)} indent />
 
       <StmtSection title="Impôt sur le revenu des sociétés" />
       <StmtRow label="Charge d'impôt société (GL 5900)" value={formatCad(inc.corpTaxExpense)} indent negative />

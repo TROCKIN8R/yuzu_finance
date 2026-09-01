@@ -68,6 +68,7 @@ export function TaxExportsPage() {
         buildCo17Schedule({
           year,
           revenueSubtotal: fin.income.revenueSubtotal,
+          interestIncome: fin.income.interestIncome,
           operatingExpenses: fin.income.operatingExpenses,
           payrollGross: fin.income.payrollGross,
           employerPayrollContributions: fin.income.employerPayrollContributions,

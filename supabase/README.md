@@ -26,6 +26,7 @@ Do **not** run `setup.sql` — tables already exist. If you are missing a module
 | `20260628140000_shareholders.sql` | **`shareholders` table** + dividend allocations by shareholder |
 | `20260724220000_project_po_number.sql` | Optional `projects.po_number` (PO / BC) for invoices |
 | `20260831210000_employee_voting_control.sql` | Employee `over_40_percent_voting` — no EI if >40% voting shares |
+| `20260831220000_bank_match_interest_capital.sql` | Bank match: `interest` (intérêts sur placement) and `capital` (apport) |
 
 If Banque import fails with `relation "bank_transactions" does not exist`, run **`20260629100000_bank_import.sql`** — it now creates the table, RLS, and import columns in one step.
 

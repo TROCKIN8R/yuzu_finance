@@ -138,6 +138,7 @@ export function buildT5Schedule(
 export interface Co17ScheduleInput {
   year: number
   revenueSubtotal: number
+  interestIncome: number
   operatingExpenses: number
   payrollGross: number
   employerPayrollContributions: number
@@ -148,12 +149,13 @@ export interface Co17ScheduleInput {
 }
 
 export function buildCo17Schedule(input: Co17ScheduleInput): CsvRow[] {
-  const taxableEstimate = round2(Math.max(0, input.operatingIncome))
+  const taxableEstimate = round2(Math.max(0, input.operatingIncome + input.interestIncome))
   const provisionEstimate = round2(taxableEstimate * input.estimatedRate)
   return [
     ['Section', 'Montant (CAD)', 'Notes'],
     ['Exercice', String(input.year), 'Brouillon — CO-17 / T2'],
     ['Revenus de services', input.revenueSubtotal.toFixed(2), 'État des résultats'],
+    ['Intérêts sur placements', input.interestIncome.toFixed(2), 'Compte 4100'],
     ['Charges d\'exploitation', input.operatingExpenses.toFixed(2), 'Hors paie'],
     ['Salaires bruts', input.payrollGross.toFixed(2), 'Compte 5100'],
     ['Charges patronales', input.employerPayrollContributions.toFixed(2), 'Compte 5110'],

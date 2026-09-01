@@ -56,6 +56,9 @@ function cashFlowLines(fin: FinancialSnapshot): StmtLine[] {
   return [
     { label: 'ENCAISSEMENTS', value: '' },
     { label: 'Paiements clients reçus', value: cad(cf.clientPayments), indent: true },
+    { label: 'Intérêts sur placements', value: cad(cf.interestReceived), indent: true },
+    { label: 'Apport en capital', value: cad(cf.capitalContributions), indent: true },
+    { label: 'Total encaissements', value: cad(fin.cashIn), bold: true },
     { label: 'DÉCAISSEMENTS', value: '' },
     { label: 'Dépenses payées (TTC)', value: cad(-cf.expensesPaid), indent: true },
     { label: 'Salaire net versé aux employés', value: cad(-cf.payrollNetToEmployee), indent: true },
@@ -170,6 +173,7 @@ function incomeLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Salaires bruts', value: cad(-inc.payrollGross), indent: true },
     { label: 'Cotisations employeur', value: cad(-inc.employerPayrollContributions), indent: true },
     { label: "Résultat d'exploitation", value: cad(inc.operatingIncome), bold: true },
+    { label: 'Intérêts sur placements', value: cad(inc.interestIncome), indent: true },
     { label: 'IMPÔT SUR LE REVENU DES SOCIÉTÉS', value: '' },
     { label: "Charge d'impôt société (GL 5900)", value: cad(-inc.corpTaxExpense), indent: true },
   ]

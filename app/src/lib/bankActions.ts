@@ -412,6 +412,32 @@ export async function assignBankCorporateTax(
   if (bankErr) throw new Error(bankErr.message)
 }
 
+export async function assignBankInterest(bankId: string) {
+  const { error } = await supabase
+    .from('bank_transactions')
+    .update({
+      reconciled: true,
+      match_source: 'interest',
+      match_id: null,
+      notes: 'interest_income',
+    })
+    .eq('id', bankId)
+  if (error) throw new Error(error.message)
+}
+
+export async function assignBankCapital(bankId: string) {
+  const { error } = await supabase
+    .from('bank_transactions')
+    .update({
+      reconciled: true,
+      match_source: 'capital',
+      match_id: null,
+      notes: 'capital_contribution',
+    })
+    .eq('id', bankId)
+  if (error) throw new Error(error.message)
+}
+
 function round2(n: number) {
   return Math.round(n * 100) / 100
 }

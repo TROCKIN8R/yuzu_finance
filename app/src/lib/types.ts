@@ -8,6 +8,8 @@ export type BankMatchSource =
   | 'sales_tax'
   | 'corporate_tax'
   | 'manual'
+  | 'interest'
+  | 'capital'
 
 export type BankSourceFormat = 'chequing' | 'credit_card' | 'manual'
 
