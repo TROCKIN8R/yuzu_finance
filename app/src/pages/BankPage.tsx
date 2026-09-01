@@ -19,6 +19,7 @@ import { fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
 import { providerPartners } from '../lib/partners'
+import { EXPENSE_CATEGORY_LABELS } from '../lib/chartOfAccounts'
 import { employeeDisplayName } from '../lib/payrollCalc'
 import { round2, splitPurchaseAmount, splitPurchaseTotal } from '../lib/taxes'
 import { uploadDocument } from '../lib/documents'
@@ -58,7 +59,16 @@ import { MetricCard, MetricGrid } from '../components/MetricCard'
 import { AlertBanner } from '../components/AlertBanner'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
-const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other']
+const CATEGORIES: ExpenseCategory[] = [
+  'software',
+  'office',
+  'travel',
+  'professional',
+  'marketing',
+  'insurance',
+  'payroll',
+  'other',
+]
 
 /** Partial payroll rows loaded for bank assignment UI. */
 type BankPayrollRun = {
@@ -980,7 +990,7 @@ export function BankPage() {
                     onChange={(e) => setExpForm({ ...expForm, category: e.target.value as ExpenseCategory })}
                   >
                     {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>
                     ))}
                   </select>
                 </Field>

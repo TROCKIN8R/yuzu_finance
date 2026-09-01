@@ -51,7 +51,7 @@ class Supabase:
 
 EXPENSE_ACCT = {
     "software": "5010", "office": "5020", "travel": "5030", "professional": "5040",
-    "marketing": "5050", "payroll": "5060", "other": "5090",
+    "marketing": "5050", "insurance": "5070", "payroll": "5060", "other": "5090",
 }
 
 ACCOUNT_TYPES: dict[str, str] = {
@@ -63,7 +63,7 @@ ACCOUNT_TYPES: dict[str, str] = {
     "3000": "equity", "3100": "equity",
     "4000": "revenue",
     "5010": "expense", "5020": "expense", "5030": "expense", "5040": "expense", "5050": "expense",
-    "5060": "expense", "5090": "expense", "5100": "expense", "5110": "expense", "5200": "expense", "5900": "expense",
+    "5060": "expense", "5070": "expense", "5090": "expense", "5100": "expense", "5110": "expense", "5200": "expense", "5900": "expense",
 }
 
 ASSET_BS_CODES = ("1010", "1100", "1200", "1210", "1300", "1400")
@@ -165,7 +165,7 @@ def balance_sheet_totals(entries: list[dict]) -> dict[str, float]:
     }
 
 
-OPERATING_EXPENSE_CODES = frozenset({"5010", "5020", "5030", "5040", "5050", "5090", "5200"})
+OPERATING_EXPENSE_CODES = frozenset({"5010", "5020", "5030", "5040", "5050", "5070", "5090", "5200"})
 
 
 def entries_in_period(entries: list[dict], start: str, end: str) -> list[dict]:

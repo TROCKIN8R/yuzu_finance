@@ -45,7 +45,7 @@ $$;
 create type public.project_status as enum ('active', 'on_hold', 'completed', 'archived');
 create type public.invoice_status as enum ('draft', 'sent', 'partial', 'paid', 'void');
 create type public.expense_category as enum (
-  'software', 'office', 'travel', 'professional', 'marketing', 'payroll', 'other'
+  'software', 'office', 'travel', 'professional', 'marketing', 'insurance', 'payroll', 'other'
 );
 create type public.tax_period_status as enum ('open', 'filed', 'paid');
 create type public.corp_tax_status as enum ('estimated', 'due', 'paid');
@@ -91,7 +91,7 @@ create table public.organization_settings (
   opening_balance_date date,
   fiscal_year_end_month integer not null default 4 check (fiscal_year_end_month between 1 and 12),
   fiscal_year_end_day integer not null default 30 check (fiscal_year_end_day between 1 and 31),
-  estimated_corp_tax_rate numeric(6, 5) not null default 0.12,
+  estimated_corp_tax_rate numeric(6, 5) not null default 0.205,
   wip_accrual_enabled boolean not null default false,
   hsf_rate numeric(6, 5) not null default 0.0165,
   cnesst_rate numeric(6, 5) not null default 0.01,

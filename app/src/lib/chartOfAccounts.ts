@@ -38,6 +38,7 @@ export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '5040', name: 'Services professionnels', type: 'expense' },
   { code: '5050', name: 'Marketing', type: 'expense' },
   { code: '5060', name: 'Paie (manuel)', type: 'expense' },
+  { code: '5070', name: 'Assurances', type: 'expense' },
   { code: '5090', name: 'Autres dépenses', type: 'expense' },
   { code: '5100', name: 'Salaires et traitements', type: 'expense' },
   { code: '5110', name: 'Charges sociales employeur', type: 'expense' },
@@ -51,6 +52,7 @@ const EXPENSE_CATEGORY_ACCOUNTS: Record<ExpenseCategory, string> = {
   travel: '5030',
   professional: '5040',
   marketing: '5050',
+  insurance: '5070',
   payroll: '5060',
   other: '5090',
 }
@@ -61,6 +63,7 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   travel: 'Déplacements',
   professional: 'Services professionnels',
   marketing: 'Marketing',
+  insurance: 'Assurances',
   payroll: 'Paie (manuel)',
   other: 'Autres',
 }

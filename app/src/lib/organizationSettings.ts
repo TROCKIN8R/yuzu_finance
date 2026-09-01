@@ -3,6 +3,9 @@ import type { OrganizationSettings } from './types'
 
 export type OrganizationSettingsForm = Omit<OrganizationSettings, 'user_id'>
 
+/** Combined planning rate: federal CCPC SBD 9% + Québec general 11.5%. Draft for CPA review. */
+export const DEFAULT_ESTIMATED_CORP_TAX_RATE = 0.205
+
 /** Columns persisted to organization_settings — keep in sync with setup.sql */
 export function buildOrganizationSettingsRow(
   userId: string,
@@ -159,7 +162,7 @@ export function mapSettingsRowToForm(data: OrganizationSettings): OrganizationSe
     opening_balance_date: data.opening_balance_date ?? null,
     fiscal_year_end_month: Number(data.fiscal_year_end_month ?? DEFAULT_FISCAL_YEAR_END_MONTH),
     fiscal_year_end_day: Number(data.fiscal_year_end_day ?? DEFAULT_FISCAL_YEAR_END_DAY),
-    estimated_corp_tax_rate: Number(data.estimated_corp_tax_rate ?? 0.12),
+    estimated_corp_tax_rate: Number(data.estimated_corp_tax_rate ?? DEFAULT_ESTIMATED_CORP_TAX_RATE),
     wip_accrual_enabled: Boolean(data.wip_accrual_enabled ?? false),
     hsf_rate: Number(data.hsf_rate ?? 0.0165),
     cnesst_rate: Number(data.cnesst_rate ?? 0.01),

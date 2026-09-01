@@ -46,7 +46,15 @@ export interface AccountingAdjustment {
   created_at: string
   updated_at: string
 }
-export type ExpenseCategory = 'software' | 'office' | 'travel' | 'professional' | 'marketing' | 'payroll' | 'other'
+export type ExpenseCategory =
+  | 'software'
+  | 'office'
+  | 'travel'
+  | 'professional'
+  | 'marketing'
+  | 'insurance'
+  | 'payroll'
+  | 'other'
 export type DocumentEntityType = 'invoice' | 'expense' | 'employee_expense' | 'project'
 
 export type ComplianceDeadlineStatus = 'open' | 'done' | 'skipped'

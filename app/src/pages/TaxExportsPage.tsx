@@ -9,6 +9,7 @@ import {
   downloadScheduleCsv,
 } from '../lib/taxYearExports'
 import type { Dividend, Employee, OrganizationSettings, PayrollRun, Shareholder } from '../lib/types'
+import { DEFAULT_ESTIMATED_CORP_TAX_RATE } from '../lib/organizationSettings'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { PageHeader } from '../components/PageHeader'
@@ -75,7 +76,7 @@ export function TaxExportsPage() {
           operatingIncome: fin.income.operatingIncome,
           corpTaxProvision: fin.balanceSheet.corpTaxProvision,
           corpTaxPaid: fin.cashFlow.corporateTaxPaid,
-          estimatedRate: Number(settingsRow?.estimated_corp_tax_rate ?? 0.12),
+          estimatedRate: Number(settingsRow?.estimated_corp_tax_rate ?? DEFAULT_ESTIMATED_CORP_TAX_RATE),
         })
       )
       setCo17Ready(true)

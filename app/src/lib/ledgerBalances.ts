@@ -100,7 +100,7 @@ export function balanceSheetTotals(balances: Map<string, number>) {
   }
 }
 
-const OPERATING_EXPENSE_CODES = new Set(['5010', '5020', '5030', '5040', '5050', '5090', '5200'])
+const OPERATING_EXPENSE_CODES = new Set(['5010', '5020', '5030', '5040', '5050', '5070', '5090', '5200'])
 
 export interface PeriodIncomeDetail {
   revenueSubtotal: number

@@ -4,6 +4,7 @@ import type { OrganizationSettings } from '../lib/types'
 import {
   buildOrganizationSettingsRow,
   buildOrganizationSettingsRowLegacy,
+  DEFAULT_ESTIMATED_CORP_TAX_RATE,
   mapSettingsRowToForm,
   settingsSaveErrorMessage,
   type OrganizationSettingsForm,
@@ -53,7 +54,7 @@ const defaults: OrganizationSettingsForm = {
   opening_balance_date: null,
   fiscal_year_end_month: DEFAULT_FISCAL_YEAR_END_MONTH,
   fiscal_year_end_day: DEFAULT_FISCAL_YEAR_END_DAY,
-  estimated_corp_tax_rate: 0.12,
+  estimated_corp_tax_rate: DEFAULT_ESTIMATED_CORP_TAX_RATE,
   wip_accrual_enabled: false,
   hsf_rate: 0.0165,
   cnesst_rate: 0.01,
@@ -294,6 +295,8 @@ export function SettingsPage() {
           <p className="text-xs text-muted">
             Le capital-actions et la trésorerie d&apos;ouverture génèrent une écriture d&apos;ouverture dans le grand
             livre (Dr banque · Cr capital-actions). Indiquez la date d&apos;apport (incorporation ou virement initial).
+            Taux d&apos;impôt société : décimal de planification (0,205 = 20,5 %) — féd. 9 % DPE + QC 11,5 %
+            général, brouillon CPA.
           </p>
           <Field label="Date des soldes d'ouverture">
             <input
@@ -309,7 +312,7 @@ export function SettingsPage() {
             <Field label="Capital-actions ($)"><input type="number" step="0.01" className={inputClass} value={form.share_capital} onChange={(e) => setForm({ ...form, share_capital: Number(e.target.value) })} /></Field>
             <Field label="BNR d'ouverture ($)"><input type="number" step="0.01" className={inputClass} value={form.opening_retained_earnings} onChange={(e) => setForm({ ...form, opening_retained_earnings: Number(e.target.value) })} /></Field>
             <Field label="Trésorerie d'ouverture ($)"><input type="number" step="0.01" className={inputClass} value={form.opening_cash_balance} onChange={(e) => setForm({ ...form, opening_cash_balance: Number(e.target.value) })} /></Field>
-            <Field label="Taux impôt société (estim.)"><input type="number" step="0.01" className={inputClass} value={form.estimated_corp_tax_rate} onChange={(e) => setForm({ ...form, estimated_corp_tax_rate: Number(e.target.value) })} /></Field>
+            <Field label="Taux impôt société (estim.)"><input type="number" step="0.001" min={0} max={1} className={inputClass} value={form.estimated_corp_tax_rate} onChange={(e) => setForm({ ...form, estimated_corp_tax_rate: Number(e.target.value) })} /></Field>
           </div>
         </section>
 

@@ -23,7 +23,15 @@ import { PageHeader } from '../components/PageHeader'
 import { PageShell } from '../components/PageShell'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 
-const CATEGORIES: ExpenseCategory[] = ['software', 'office', 'travel', 'professional', 'marketing', 'other']
+const CATEGORIES: ExpenseCategory[] = [
+  'software',
+  'office',
+  'travel',
+  'professional',
+  'marketing',
+  'insurance',
+  'other',
+]
 
 /** Which amount field drives auto tax calculation. */
 type TaxEntryMode = 'total' | 'amount'
