@@ -90,7 +90,15 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       <StmtSection title="Actif" />
       <StmtRow label="Trésorerie comptable" value={formatCad(bs.cash)} />
       {bs.bankStatementBalance != null && (
-        <StmtRow label="Solde relevé bancaire (import)" value={formatCad(bs.bankStatementBalance)} indent />
+        <StmtRow
+          label={
+            bs.bankStatementIncludesOpening
+              ? "Solde banque (import + trésorerie d'ouverture)"
+              : 'Solde relevé bancaire (import)'
+          }
+          value={formatCad(bs.bankStatementBalance)}
+          indent
+        />
       )}
       {bs.bankReconciliationVariance != null && Math.abs(bs.bankReconciliationVariance) > 0.01 && (
         <StmtRow

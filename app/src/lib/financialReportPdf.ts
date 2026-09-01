@@ -80,7 +80,13 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
     { label: 'Trésorerie comptable', value: cad(bs.cash), indent: true },
   ]
   if (bs.bankStatementBalance != null) {
-    lines.push({ label: 'Solde relevé bancaire (import)', value: cad(bs.bankStatementBalance), indent: true })
+    lines.push({
+      label: bs.bankStatementIncludesOpening
+        ? "Solde banque (import + trésorerie d'ouverture)"
+        : 'Solde relevé bancaire (import)',
+      value: cad(bs.bankStatementBalance),
+      indent: true,
+    })
   }
   if (bs.bankReconciliationVariance != null && Math.abs(bs.bankReconciliationVariance) > 0.01) {
     lines.push({

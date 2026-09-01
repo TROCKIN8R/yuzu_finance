@@ -302,10 +302,11 @@ export function SettingsPage() {
           <h2 className="font-medium">Exercice fiscal et avoir</h2>
           <p className="text-xs text-muted">
             L&apos;écriture d&apos;ouverture est Dr banque · Cr capital-actions · Cr BNR. Les trois montants doivent
-            s&apos;équilibrer (trésorerie = capital + BNR). Un écart avec BNR saisi va au compte d&apos;attente 1190,
-            pas au 3100 — ainsi le BNR reste visible au bilan. Sans BNR saisi, l&apos;écart trésorerie − capital est
-            imputé au BNR. Taux d&apos;impôt société : décimal de planification (0,205 = 20,5 %) — féd. 9 % DPE + QC
-            11,5 % général, brouillon CPA.
+            s&apos;équilibrer (trésorerie = capital + BNR). La trésorerie d&apos;ouverture est le solde bancaire à
+            cette date : si le CSV commence après, elle est ajoutée au solde banque de réconciliation (pas en double
+            dans le relevé). Un écart avec BNR saisi va au compte d&apos;attente 1190, pas au 3100. Sans BNR saisi,
+            l&apos;écart trésorerie − capital est imputé au BNR. Taux d&apos;impôt société : décimal de planification
+            (0,205 = 20,5 %) — féd. 9 % DPE + QC 11,5 % général, brouillon CPA.
           </p>
           <Field label="Date des soldes d'ouverture">
             <input

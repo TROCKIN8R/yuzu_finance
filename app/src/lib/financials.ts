@@ -34,6 +34,8 @@ export interface EquityDetail {
 export interface BalanceSheetDetail {
   cash: number
   bankStatementBalance: number | null
+  /** Opening cash rolled into the statement figure (import starts after opening date). */
+  bankStatementIncludesOpening: boolean
   /** Bank import total minus GL cash (1010); should be near zero when fully reconciled. */
   bankReconciliationVariance: number | null
   accountsReceivable: number
@@ -154,6 +156,32 @@ export type GeneralLedgerBuildInput = Parameters<typeof buildGeneralLedger>[0]
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
+}
+
+export interface OpeningCashForBank {
+  cash: number
+  date: string | null
+}
+
+/**
+ * Imported CSV lines are activity, not an ending balance. If opening cash is
+ * dated before the first imported line, add it so recon matches GL 1010.
+ */
+export function statementBalanceFromImport(
+  transactions: { amount: number; transaction_date: string }[],
+  opening?: OpeningCashForBank | null
+): { balance: number; includedOpeningCash: number } | null {
+  if (transactions.length === 0) return null
+  const activity = round2(transactions.reduce((s, t) => s + Number(t.amount), 0))
+  const openingCash = round2(Number(opening?.cash ?? 0))
+  const openingDate = opening?.date ?? null
+  if (openingCash < 0.01 || !openingDate) return { balance: activity, includedOpeningCash: 0 }
+  const first = transactions.reduce(
+    (m, t) => (t.transaction_date < m ? t.transaction_date : m),
+    transactions[0].transaction_date
+  )
+  if (first > openingDate) return { balance: round2(activity + openingCash), includedOpeningCash: openingCash }
+  return { balance: activity, includedOpeningCash: 0 }
 }
 
 export function employeeDeductionsTotal(p: Pick<
@@ -304,10 +332,12 @@ export function buildFinancialSnapshot(
   const cashOut = cashOutTotal(cashFlow)
   const periodNetCashFlow = round2(cashIn - cashOut)
 
-  const bankStatementBalance =
-    data.bankTransactions && data.bankTransactions.length > 0
-      ? round2(data.bankTransactions.reduce((s, t) => s + Number(t.amount), 0))
-      : null
+  const statement = statementBalanceFromImport(data.bankTransactions ?? [], {
+    cash: Number(data.settings?.opening_cash_balance ?? 0),
+    date: data.settings?.opening_balance_date ?? null,
+  })
+  const bankStatementBalance = statement?.balance ?? null
+  const bankStatementIncludesOpening = (statement?.includedOpeningCash ?? 0) > 0.01
 
   const bankReconciliationVariance =
     bankStatementBalance != null ? round2(bankStatementBalance - cash) : null
@@ -349,6 +379,7 @@ export function buildFinancialSnapshot(
     balanceSheet: {
       cash,
       bankStatementBalance,
+      bankStatementIncludesOpening,
       bankReconciliationVariance,
       accountsReceivable,
       gstReceivable,

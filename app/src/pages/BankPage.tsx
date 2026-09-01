@@ -14,7 +14,7 @@ import type {
   SalesTaxPeriod,
 } from '../lib/types'
 import { formatCad, formatDate, relationOne, todayIso } from '../lib/format'
-import { buildFinancialSnapshot, payrollAllRemittancesTotal } from '../lib/financials'
+import { buildFinancialSnapshot, payrollAllRemittancesTotal, statementBalanceFromImport } from '../lib/financials'
 import { fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { allTimeRange } from '../lib/fiscalPeriod'
 import { invoiceBalance } from '../lib/invoice'
@@ -634,7 +634,17 @@ export function BankPage() {
   const selectedSalesTax = salesTaxMap[salesTaxForm.period_id]
   const selectedCorpTax = corpTaxMap[corpTaxForm.record_id]
 
-  const bankBalance = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows])
+  const importedActivity = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows])
+  const statement = useMemo(
+    () =>
+      statementBalanceFromImport(rows, {
+        cash: Number(settings?.opening_cash_balance ?? 0),
+        date: settings?.opening_balance_date ?? null,
+      }),
+    [rows, settings]
+  )
+  const bankBalance = statement?.balance ?? importedActivity
+  const includedOpeningCash = statement?.includedOpeningCash ?? 0
   const variance = round2(bookCash - bankBalance)
   const unassignedCount = rows.filter((r) => !r.match_source).length
 
@@ -737,7 +747,15 @@ export function BankPage() {
       {importMsg && <AlertBanner variant="success">{importMsg}</AlertBanner>}
 
       <MetricGrid cols={4}>
-        <MetricCard label="Solde relevé (importé)" value={formatCad(bankBalance)} />
+        <MetricCard
+          label="Solde banque"
+          value={formatCad(bankBalance)}
+          hint={
+            includedOpeningCash > 0.01
+              ? `Mouvements importés ${formatCad(importedActivity)} + ouverture ${formatCad(includedOpeningCash)}`
+              : undefined
+          }
+        />
         <MetricCard label="Trésorerie comptable" value={formatCad(bookCash)} />
         <MetricCard
           label="Écart"
