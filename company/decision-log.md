@@ -20,3 +20,4 @@
 | 2026-09-01 | Catégorie dépenses Assurances | Type `insurance` → GL 5070 Assurances (banque et frais employés). Charge immédiate. | Police annuelle à capitaliser : Dr 1400 via ajustement, puis amortir. Brouillon CPA. | Owner / agent |
 | 2026-09-01 | BNR d'ouverture vs solde 3100 | Si le BNR est saisi, l'écart d'ouverture (trésorerie ≠ capital + BNR) va au 1190, pas au 3100 | Un plug Dr/Cr 3100 annulait le BNR au bilan tout en le laissant visible au journal | Agent |
 | 2026-09-01 | Réconciliation banque vs ouverture | Si le CSV commence après la date d'ouverture, le solde banque = somme importée + trésorerie d'ouverture | Le 1010 inclut déjà l'ouverture ; la somme des lignes CSV ne la contient pas | Agent |
+| 2026-09-01 | Dépôt CSV vs BNR d'ouverture | Encaissement banque (capital ou solde d'ouverture) solde d'abord le 1190, puis 3000/3100 | Sans ça : Dr 1190 + Cr 3000 pour le même 100 $ — BNR et capital doublés | Agent |

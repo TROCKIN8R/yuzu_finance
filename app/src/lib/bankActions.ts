@@ -425,6 +425,19 @@ export async function assignBankInterest(bankId: string) {
   if (error) throw new Error(error.message)
 }
 
+export async function assignBankOpening(bankId: string) {
+  const { error } = await supabase
+    .from('bank_transactions')
+    .update({
+      reconciled: true,
+      match_source: 'opening',
+      match_id: null,
+      notes: 'opening_retained_earnings',
+    })
+    .eq('id', bankId)
+  if (error) throw new Error(error.message)
+}
+
 export async function assignBankCapital(bankId: string) {
   const { error } = await supabase
     .from('bank_transactions')

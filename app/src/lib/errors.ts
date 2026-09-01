@@ -20,7 +20,7 @@ export function bankImportSetupHint(message: string): string {
     lower.includes('match_source')
   ) {
     if (lower.includes('match_source')) {
-      return `${message} — exécutez supabase/migrations/20260831220000_bank_match_interest_capital.sql dans l’éditeur SQL Supabase.`
+      return `${message} — exécutez supabase/migrations/20260901040000_bank_match_opening.sql dans l’éditeur SQL Supabase.`
     }
     return `${message} — exécutez supabase/migrations/20260629100000_bank_import.sql dans l’éditeur SQL Supabase.`
   }

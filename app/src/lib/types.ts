@@ -10,6 +10,7 @@ export type BankMatchSource =
   | 'manual'
   | 'interest'
   | 'capital'
+  | 'opening'
 
 export type BankSourceFormat = 'chequing' | 'credit_card' | 'manual'
 

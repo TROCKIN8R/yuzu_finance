@@ -29,6 +29,7 @@ import {
   assignBankDividend,
   assignBankExpense,
   assignBankInterest,
+  assignBankOpening,
   assignBankCapital,
   assignBankPayment,
   assignBankPayroll,
@@ -99,6 +100,7 @@ type AssignmentFilter =
   | 'all'
   | 'payment'
   | 'capital'
+  | 'opening'
   | 'interest'
   | 'expense'
   | 'payroll'
@@ -106,13 +108,15 @@ type AssignmentFilter =
   | 'sales_tax'
   | 'corporate_tax'
   | 'ignored'
-type AssignKind = 'payment' | 'capital' | 'interest' | 'expense' | 'payroll' | 'dividend' | 'sales_tax' | 'corporate_tax'
+type AssignKind = 'payment' | 'capital' | 'opening' | 'interest' | 'expense' | 'payroll' | 'dividend' | 'sales_tax' | 'corporate_tax'
 
 const REVENUE_MATCH_CAPITAL = '__capital__'
+const REVENUE_MATCH_OPENING = '__opening__'
 const REVENUE_MATCH_INTEREST = '__interest__'
 
 const ASSIGN_KINDS: { id: AssignKind; label: string; outflow: boolean }[] = [
   { id: 'payment', label: 'Paiement client', outflow: false },
+  { id: 'opening', label: 'Solde d\'ouverture (BNR)', outflow: false },
   { id: 'capital', label: 'Apport en capital', outflow: false },
   { id: 'interest', label: 'Intérêts sur placement', outflow: false },
   { id: 'expense', label: 'Dépense', outflow: true },
@@ -135,17 +139,24 @@ function inferPaymentMethod(description: string): string {
   return 'virement'
 }
 
-function inferInflowKind(description: string): AssignKind {
+function inferInflowKind(
+  description: string,
+  settings?: { opening_retained_earnings?: number; opening_cash_balance?: number } | null
+): AssignKind {
   const d = description.toLowerCase()
   if (d.includes('interest') || d.includes('intérêt') || d.includes('interet')) return 'interest'
   if (d.includes('transfer into the account') || d.includes('apport') || /\bcapital\b/.test(d)) {
-    return 'capital'
+    const unfundedBnr =
+      Number(settings?.opening_retained_earnings ?? 0) > 0.01 &&
+      Number(settings?.opening_cash_balance ?? 0) < 0.01
+    return unfundedBnr ? 'opening' : 'capital'
   }
   return 'payment'
 }
 
 function revenueMatchValue(kind: AssignKind, invoiceId: string) {
   if (kind === 'capital') return REVENUE_MATCH_CAPITAL
+  if (kind === 'opening') return REVENUE_MATCH_OPENING
   if (kind === 'interest') return REVENUE_MATCH_INTEREST
   return invoiceId
 }
@@ -375,7 +386,7 @@ export function BankPage() {
     setAssignTx(tx)
     setExpenseReceiptFile(null)
     const outflow = Number(tx.amount) < 0
-    const kind: AssignKind = outflow ? 'expense' : inferInflowKind(tx.description)
+    const kind: AssignKind = outflow ? 'expense' : inferInflowKind(tx.description, settings)
     setAssignKind(kind)
     const absAmount = round2(Math.abs(Number(tx.amount)))
 
@@ -432,6 +443,10 @@ export function BankPage() {
   function onRevenueMatchChange(value: string) {
     if (value === REVENUE_MATCH_CAPITAL) {
       setAssignKind('capital')
+      return
+    }
+    if (value === REVENUE_MATCH_OPENING) {
+      setAssignKind('opening')
       return
     }
     if (value === REVENUE_MATCH_INTEREST) {
@@ -582,6 +597,8 @@ export function BankPage() {
         )
       } else if (assignKind === 'interest') {
         await assignBankInterest(assignTx.id)
+      } else if (assignKind === 'opening') {
+        await assignBankOpening(assignTx.id)
       } else if (assignKind === 'capital') {
         await assignBankCapital(assignTx.id)
       }
@@ -656,6 +673,7 @@ export function BankPage() {
       const inv = relationOne(p?.invoices)
       return inv ? `Paiement · ${inv.invoice_number}` : 'Paiement'
     }
+    if (tx.match_source === 'opening') return 'Solde d\'ouverture (BNR)'
     if (tx.match_source === 'capital') return 'Apport en capital'
     if (tx.match_source === 'interest') return 'Intérêts sur placement'
     if (tx.match_source === 'expense' && tx.match_id) {
@@ -790,6 +808,7 @@ export function BankPage() {
                 { value: 'unassigned', label: 'Non affectées' },
                 { value: 'all', label: 'Toutes' },
                 { value: 'payment', label: 'Paiements clients' },
+                { value: 'opening', label: 'Solde d\'ouverture (BNR)' },
                 { value: 'capital', label: 'Apport en capital' },
                 { value: 'interest', label: 'Intérêts sur placement' },
                 { value: 'expense', label: 'Dépenses' },
@@ -901,7 +920,7 @@ export function BankPage() {
         </div>
 
         <form onSubmit={saveAssignment} className="space-y-3">
-          {(assignKind === 'payment' || assignKind === 'capital' || assignKind === 'interest') ? (
+          {(assignKind === 'payment' || assignKind === 'capital' || assignKind === 'opening' || assignKind === 'interest') ? (
             <>
               <Field label="Affecter à *">
                 <select
@@ -912,6 +931,7 @@ export function BankPage() {
                 >
                   <option value="">— Choisir —</option>
                   <optgroup label="Autres encaissements">
+                    <option value={REVENUE_MATCH_OPENING}>Solde d'ouverture (BNR)</option>
                     <option value={REVENUE_MATCH_CAPITAL}>Apport en capital (investissement)</option>
                     <option value={REVENUE_MATCH_INTEREST}>Intérêts sur placement</option>
                   </optgroup>
@@ -965,11 +985,19 @@ export function BankPage() {
                   </Field>
                 </>
               )}
+              {assignKind === 'opening' && (
+                <p className="text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
+                  Écriture : débit banque 1010 · crédit compte d&apos;attente 1190 (BNR d&apos;ouverture déjà au
+                  3100). Utilisez ceci pour le dépôt qui finance le BNR, pas un nouvel apport d&apos;actions —
+                  brouillon pour révision CPA.
+                </p>
+              )}
               {assignKind === 'capital' && (
                 <p className="text-sm text-muted bg-stone-50 border border-border rounded-lg px-3 py-2">
                   Écriture : débit banque 1010 · crédit capital-actions 3000 pour{' '}
-                  {assignTx ? formatCad(Math.abs(Number(assignTx.amount))) : ''}. Si ce montant est déjà dans
-                  Paramètres (capital d&apos;ouverture), ne l&apos;affectez pas ici — brouillon pour révision CPA.
+                  {assignTx ? formatCad(Math.abs(Number(assignTx.amount))) : ''}. Un BNR d&apos;ouverture sans
+                  trésorerie d&apos;ouverture est d&apos;abord soldé (1190) avant le 3000. Si ce montant est déjà
+                  dans Paramètres (capital d&apos;ouverture), ne l&apos;affectez pas ici — brouillon CPA.
                 </p>
               )}
               {assignKind === 'interest' && (

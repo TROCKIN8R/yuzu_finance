@@ -90,6 +90,30 @@ function jl(code: string, debit: number, credit: number): JournalLine {
   return { accountCode: code, accountName: a.name, debit: round2(debit), credit: round2(credit) }
 }
 
+function debitBalance1190(entries: JournalEntry[]): number {
+  let n = 0
+  for (const e of entries) {
+    for (const l of e.lines) {
+      if (l.accountCode === '1190') n = round2(n + l.debit - l.credit)
+    }
+  }
+  return n
+}
+
+/** Bank inflows fund opening BNR suspense (1190) before share capital / extra BNR. */
+function bankInflowAgainstSuspense(
+  amt: number,
+  remainingSuspense: number,
+  leftoverEquity: '3000' | '3100'
+): { lines: JournalLine[]; remainingSuspense: number } {
+  const toSuspense = round2(Math.min(amt, Math.max(0, remainingSuspense)))
+  const leftover = round2(amt - toSuspense)
+  const lines: JournalLine[] = [jl('1010', amt, 0)]
+  if (toSuspense > 0.01) lines.push(jl('1190', 0, toSuspense))
+  if (leftover > 0.01) lines.push(jl(leftoverEquity, 0, leftover))
+  return { lines, remainingSuspense: round2(remainingSuspense - toSuspense) }
+}
+
 type PayrollRow = {
   id: string
   payment_date: string
@@ -185,7 +209,7 @@ export function buildGeneralLedger(data: {
     qst_net: number
     status: string
   }[]
-  /** Matched bank inflows posted directly (interest, capital). Payments/expenses stay on their own tables. */
+  /** Matched bank inflows posted directly (interest, capital, opening). Payments/expenses stay on their own tables. */
   bankMatches?: {
     id: string
     transaction_date: string
@@ -468,7 +492,9 @@ export function buildGeneralLedger(data: {
     )
   }
 
-  for (const tx of data.bankMatches ?? []) {
+  for (const tx of [...(data.bankMatches ?? [])].sort((a, b) =>
+    a.transaction_date.localeCompare(b.transaction_date)
+  )) {
     const amt = round2(Number(tx.amount))
     if (amt <= 0) continue
     if (tx.match_source === 'interest') {
@@ -483,16 +509,19 @@ export function buildGeneralLedger(data: {
           [jl('1010', amt, 0), jl('4100', 0, amt)]
         )
       )
-    } else if (tx.match_source === 'capital') {
+    } else if (tx.match_source === 'capital' || tx.match_source === 'opening') {
+      const leftoverEquity = tx.match_source === 'opening' ? '3100' : '3000'
+      const remaining = debitBalance1190(entries)
+      const { lines } = bankInflowAgainstSuspense(amt, remaining, leftoverEquity)
       entries.push(
         entry(
-          `bank-cap-${tx.id}`,
+          tx.match_source === 'opening' ? `bank-open-${tx.id}` : `bank-cap-${tx.id}`,
           tx.transaction_date,
-          'capital',
+          tx.match_source === 'opening' ? 'opening_deposit' : 'capital',
           tx.id,
-          tx.transaction_code || 'CAP',
+          tx.transaction_code || (tx.match_source === 'opening' ? 'OUV' : 'CAP'),
           tx.description,
-          [jl('1010', amt, 0), jl('3000', 0, amt)]
+          lines
         )
       )
     }

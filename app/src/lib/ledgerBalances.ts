@@ -265,6 +265,7 @@ export function cashFlowFromPeriodEntries(entries: JournalEntry[]): CashFlowBrea
         interestReceived += inflow
         break
       case 'capital':
+      case 'opening_deposit':
         capitalContributions += inflow
         break
       case 'expense':
