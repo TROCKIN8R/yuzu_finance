@@ -42,6 +42,10 @@ export interface BalanceSheetDetail {
   unbilledRevenue: number
   prepaidExpenses: number
   accumDepreciation: number
+  /** Debit balance of 1190 (unidentified opening asset) */
+  openingSuspenseAsset: number
+  /** Credit balance of 1190 (unidentified opening liability) */
+  openingSuspenseLiability: number
   totalAssets: number
   accountsPayable: number
   gstPayable: number
@@ -269,6 +273,8 @@ export function buildFinancialSnapshot(
     unbilledRevenue,
     prepaidExpenses,
     accumDepreciation,
+    openingSuspenseAsset,
+    openingSuspenseLiability,
     totalAssets,
     totalLiabilities,
     shareCapital,
@@ -350,6 +356,8 @@ export function buildFinancialSnapshot(
       unbilledRevenue,
       prepaidExpenses,
       accumDepreciation,
+      openingSuspenseAsset,
+      openingSuspenseLiability,
       totalAssets,
       accountsPayable,
       gstPayable,

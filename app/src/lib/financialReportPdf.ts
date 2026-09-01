@@ -113,6 +113,13 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
   if (bs.prepaidExpenses > 0) {
     lines.push({ label: 'Charges payées d\'avance', value: cad(bs.prepaidExpenses), indent: true })
   }
+  if (bs.openingSuspenseAsset > 0.01) {
+    lines.push({
+      label: "Compte d'attente — ouverture (à classer)",
+      value: cad(bs.openingSuspenseAsset),
+      indent: true,
+    })
+  }
   if (bs.accumDepreciation > 0) {
     lines.push({ label: 'Amortissement cumulé', value: cad(-bs.accumDepreciation), indent: true })
   }
@@ -136,6 +143,13 @@ function balanceSheetLines(fin: FinancialSnapshot): StmtLine[] {
   }
   if (bs.dividendsPayable > 0) {
     lines.push({ label: 'Dividendes à payer', value: cad(bs.dividendsPayable), indent: true })
+  }
+  if (bs.openingSuspenseLiability > 0.01) {
+    lines.push({
+      label: "Compte d'attente — ouverture (à classer)",
+      value: cad(bs.openingSuspenseLiability),
+      indent: true,
+    })
   }
   if (bs.corporateTaxDue > 0.01) {
     lines.push({ label: 'Impôts société dus', value: cad(bs.corporateTaxDue), indent: true })

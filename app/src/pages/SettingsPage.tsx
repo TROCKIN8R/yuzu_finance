@@ -14,6 +14,7 @@ import {
   DEFAULT_BILLING_EMAIL,
 } from '../lib/paymentInstructions'
 import { DEFAULT_FISCAL_YEAR_END_DAY, DEFAULT_FISCAL_YEAR_END_MONTH } from '../lib/fiscalPeriod'
+import { formatCad } from '../lib/format'
 import { Button } from '../components/Button'
 import { Field, inputClass } from '../components/Field'
 import { EmptyState } from '../components/EmptyState'
@@ -81,6 +82,13 @@ export function SettingsPage() {
 
   const paymentPreviewFr = useMemo(() => composePaymentInstructions(form, 'fr'), [form])
   const paymentPreviewEn = useMemo(() => composePaymentInstructions(form, 'en'), [form])
+  const openingGap = useMemo(() => {
+    const cash = Number(form.opening_cash_balance) || 0
+    const cap = Number(form.share_capital) || 0
+    const re = Number(form.opening_retained_earnings) || 0
+    return Math.round((cash - cap - re) * 100) / 100
+  }, [form.opening_cash_balance, form.share_capital, form.opening_retained_earnings])
+  const openingReSpecified = Math.abs(Number(form.opening_retained_earnings) || 0) > 0.01
 
   useEffect(() => {
     load()
@@ -293,10 +301,11 @@ export function SettingsPage() {
         <section className="space-y-3">
           <h2 className="font-medium">Exercice fiscal et avoir</h2>
           <p className="text-xs text-muted">
-            Le capital-actions et la trésorerie d&apos;ouverture génèrent une écriture d&apos;ouverture dans le grand
-            livre (Dr banque · Cr capital-actions). Indiquez la date d&apos;apport (incorporation ou virement initial).
-            Taux d&apos;impôt société : décimal de planification (0,205 = 20,5 %) — féd. 9 % DPE + QC 11,5 %
-            général, brouillon CPA.
+            L&apos;écriture d&apos;ouverture est Dr banque · Cr capital-actions · Cr BNR. Les trois montants doivent
+            s&apos;équilibrer (trésorerie = capital + BNR). Un écart avec BNR saisi va au compte d&apos;attente 1190,
+            pas au 3100 — ainsi le BNR reste visible au bilan. Sans BNR saisi, l&apos;écart trésorerie − capital est
+            imputé au BNR. Taux d&apos;impôt société : décimal de planification (0,205 = 20,5 %) — féd. 9 % DPE + QC
+            11,5 % général, brouillon CPA.
           </p>
           <Field label="Date des soldes d'ouverture">
             <input
@@ -314,6 +323,13 @@ export function SettingsPage() {
             <Field label="Trésorerie d'ouverture ($)"><input type="number" step="0.01" className={inputClass} value={form.opening_cash_balance} onChange={(e) => setForm({ ...form, opening_cash_balance: Number(e.target.value) })} /></Field>
             <Field label="Taux impôt société (estim.)"><input type="number" step="0.001" min={0} max={1} className={inputClass} value={form.estimated_corp_tax_rate} onChange={(e) => setForm({ ...form, estimated_corp_tax_rate: Number(e.target.value) })} /></Field>
           </div>
+          {Math.abs(openingGap) > 0.01 && (
+            <p className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              {openingReSpecified
+                ? `Écart d'ouverture ${formatCad(openingGap)} : porté au compte d'attente 1190 pour équilibrer l'écriture. Le BNR saisi reste au 3100.`
+                : `Sans BNR saisi, l'écart trésorerie − capital (${formatCad(openingGap)}) est imputé au BNR (3100).`}
+            </p>
+          )}
         </section>
 
         <section className="space-y-3">

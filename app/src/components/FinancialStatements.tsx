@@ -120,6 +120,13 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       {bs.prepaidExpenses > 0 && (
         <StmtRow label="Charges payées d\'avance" value={formatCad(bs.prepaidExpenses)} indent />
       )}
+      {bs.openingSuspenseAsset > 0.01 && (
+        <StmtRow
+          label="Compte d'attente — ouverture (à classer)"
+          value={formatCad(bs.openingSuspenseAsset)}
+          indent
+        />
+      )}
       {bs.accumDepreciation > 0 && (
         <StmtRow label="Amortissement cumulé" value={formatCad(-bs.accumDepreciation)} indent negative />
       )}
@@ -142,6 +149,13 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
       )}
       {bs.dividendsPayable > 0 && (
         <StmtRow label="Dividendes à payer" value={formatCad(bs.dividendsPayable)} indent />
+      )}
+      {bs.openingSuspenseLiability > 0.01 && (
+        <StmtRow
+          label="Compte d'attente — ouverture (à classer)"
+          value={formatCad(bs.openingSuspenseLiability)}
+          indent
+        />
       )}
       {bs.corporateTaxDue > 0.01 && (
         <StmtRow label="Impôts société dus" value={formatCad(bs.corporateTaxDue)} />
@@ -176,6 +190,12 @@ export function BalanceSheetStatement({ fin, periodLabel }: { fin: FinancialSnap
         L&apos;avoir inclut le résultat cumulatif non clôturé (comptes 4xxx/5xxx, incluant impôt société 5900) tant
         que la clôture annuelle n&apos;est pas passée au BNR (3100).
       </p>
+      {(bs.openingSuspenseAsset > 0.01 || bs.openingSuspenseLiability > 0.01) && (
+        <p className="text-xs text-amber-800 mt-2">
+          Compte d&apos;attente 1190 : l&apos;ouverture n&apos;équilibre pas trésorerie = capital + BNR. Classez ce
+          solde (encaisse déjà importée, avance actionnaire, etc.) — brouillon CPA.
+        </p>
+      )}
       <p className="text-xs text-muted mt-3">
         Période — résultat d&apos;exploitation : {formatCad(eq.periodOperatingIncome)} · impôt société :{' '}
         {formatCad(fin.income.corpTaxExpense)} · résultat net : {formatCad(eq.periodNetIncome)}

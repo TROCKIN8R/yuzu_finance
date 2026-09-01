@@ -71,11 +71,14 @@ export function balanceSheetTotals(balances: Map<string, number>) {
   const unbilledRevenue = balanceOf(balances, '1300')
   const prepaidExpenses = balanceOf(balances, '1400')
   const accumDepreciation = balanceOf(balances, '1500')
+  const openingSuspense = balanceOf(balances, '1190')
+  const openingSuspenseAsset = openingSuspense > 0 ? openingSuspense : 0
+  const openingSuspenseLiability = openingSuspense < 0 ? round2(-openingSuspense) : 0
   const totalAssets = round2(
-    ASSET_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0) - accumDepreciation
+    ASSET_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0) - accumDepreciation + openingSuspenseAsset
   )
   const totalLiabilities = round2(
-    LIABILITY_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0)
+    LIABILITY_BS_CODES.reduce((s, c) => s + balanceOf(balances, c), 0) + openingSuspenseLiability
   )
   const shareCapital = balanceOf(balances, '3000')
   const retainedEarningsGl = balanceOf(balances, '3100')
@@ -90,6 +93,8 @@ export function balanceSheetTotals(balances: Map<string, number>) {
     unbilledRevenue,
     prepaidExpenses,
     accumDepreciation,
+    openingSuspenseAsset,
+    openingSuspenseLiability,
     totalAssets,
     totalLiabilities,
     shareCapital,

@@ -592,37 +592,37 @@ export function buildOpeningBalanceEntries(
   const shareCapital = round2(Number(settings.share_capital ?? 0))
   const openingRE = round2(Number(settings.opening_retained_earnings ?? 0))
   const openingCash = round2(Number(settings.opening_cash_balance ?? 0))
-  if (shareCapital <= 0 && openingCash <= 0 && openingRE <= 0) return []
+  if (Math.abs(shareCapital) < 0.01 && Math.abs(openingCash) < 0.01 && Math.abs(openingRE) < 0.01) return []
 
   const date = settings.opening_balance_date ?? '2000-01-01'
-  const entries: JournalEntry[] = []
+  const lines: JournalLine[] = []
+  if (openingCash > 0.01) lines.push(jl('1010', openingCash, 0))
+  if (shareCapital > 0.01) lines.push(jl('3000', 0, shareCapital))
+  if (openingRE > 0.01) lines.push(jl('3100', 0, openingRE))
+  else if (openingRE < -0.01) lines.push(jl('3100', Math.abs(openingRE), 0))
 
-  if (openingCash > 0 || shareCapital > 0 || openingRE > 0) {
-    const lines: JournalLine[] = []
-    if (openingCash > 0) lines.push(jl('1010', openingCash, 0))
-    if (shareCapital > 0) lines.push(jl('3000', 0, shareCapital))
-    if (openingRE > 0) lines.push(jl('3100', 0, openingRE))
-    const debits = round2(lines.reduce((s, l) => s + l.debit, 0))
-    const credits = round2(lines.reduce((s, l) => s + l.credit, 0))
-    const diff = round2(debits - credits)
-    if (Math.abs(diff) > 0.01) {
-      if (diff > 0) lines.push(jl('3100', 0, diff))
-      else lines.push(jl('3100', Math.abs(diff), 0))
-    }
-    entries.push(
-      entry(
-        'opening-capital',
-        date,
-        'opening',
-        'settings',
-        'OUVERTURE',
-        'Soldes d\'ouverture — trésorerie, capital et BNR',
-        lines
-      )
-    )
+  const debits = round2(lines.reduce((s, l) => s + l.debit, 0))
+  const credits = round2(lines.reduce((s, l) => s + l.credit, 0))
+  const diff = round2(debits - credits)
+  if (Math.abs(diff) > 0.01) {
+    // Explicit BNR must stay on 3100. Plugging the imbalance back onto 3100
+    // cancelled the amount in the trial balance / bilan (Dr 3100 = Cr 3100).
+    const plugAccount = Math.abs(openingRE) > 0.01 ? '1190' : '3100'
+    if (diff > 0) lines.push(jl(plugAccount, 0, diff))
+    else lines.push(jl(plugAccount, Math.abs(diff), 0))
   }
 
-  return entries
+  return [
+    entry(
+      'opening-capital',
+      date,
+      'opening',
+      'settings',
+      'OUVERTURE',
+      "Soldes d'ouverture — trésorerie, capital et BNR",
+      lines
+    ),
+  ]
 }
 
 export function filterEntriesByPeriod(entries: JournalEntry[], start: string, end: string): JournalEntry[] {

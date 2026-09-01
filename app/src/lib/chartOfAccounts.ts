@@ -11,6 +11,7 @@ export interface Account {
 export const CHART_OF_ACCOUNTS: Account[] = [
   { code: '1010', name: 'Banque / Trésorerie', type: 'asset' },
   { code: '1100', name: 'Comptes clients', type: 'asset' },
+  { code: '1190', name: 'Compte d\'attente — ouverture', type: 'asset' },
   { code: '1200', name: 'TPS à recevoir (CTI)', type: 'asset' },
   { code: '1210', name: 'TVQ à recevoir (RTI)', type: 'asset' },
   { code: '1300', name: 'Revenus non facturés (WIP)', type: 'asset' },

@@ -55,7 +55,7 @@ EXPENSE_ACCT = {
 }
 
 ACCOUNT_TYPES: dict[str, str] = {
-    "1010": "asset", "1100": "asset", "1200": "asset", "1210": "asset", "1300": "asset", "1400": "asset",
+    "1010": "asset", "1100": "asset", "1190": "asset", "1200": "asset", "1210": "asset", "1300": "asset", "1400": "asset",
     "1500": "contra",
     "2000": "liability", "2050": "liability", "2060": "liability", "2100": "liability", "2110": "liability",
     "2125": "liability", "2200": "liability", "2210": "liability", "2215": "liability", "2300": "liability",
@@ -142,8 +142,11 @@ def account_balances(entries: list[dict]) -> dict[str, float]:
 def balance_sheet_totals(entries: list[dict]) -> dict[str, float]:
     bal = account_balances(entries)
     accum = bal.get("1500", 0.0)
-    total_assets = round2(sum(bal.get(c, 0.0) for c in ASSET_BS_CODES) - accum)
-    total_liabilities = round2(sum(bal.get(c, 0.0) for c in LIAB_BS_CODES))
+    suspense = bal.get("1190", 0.0)
+    susp_asset = suspense if suspense > 0 else 0.0
+    susp_liab = round2(-suspense) if suspense < 0 else 0.0
+    total_assets = round2(sum(bal.get(c, 0.0) for c in ASSET_BS_CODES) - accum + susp_asset)
+    total_liabilities = round2(sum(bal.get(c, 0.0) for c in LIAB_BS_CODES) + susp_liab)
     share_capital = bal.get("3000", 0.0)
     retained_gl = bal.get("3100", 0.0)
     unclosed = round2(
@@ -261,13 +264,15 @@ def build_gl_entries(data: dict, period_end: str = "2026-12-31") -> tuple[list[d
         lines = []
         if oc: lines.append(("1010", oc, 0))
         if sc: lines.append(("3000", 0, sc))
-        if re: lines.append(("3100", 0, re))
+        if re: lines.append(("3100", 0, re) if re > 0 else ("3100", abs(re), 0))
         deb = sum(d for _, d, _ in lines)
         cred = sum(c for _, _, c in lines)
-        if deb > cred:
-            lines.append(("3100", 0, round2(deb - cred)))
-        elif cred > deb:
-            lines.append(("3100", round2(cred - deb), 0))
+        if abs(deb - cred) > 0.01:
+            plug = "1190" if abs(re) > 0.01 else "3100"
+            if deb > cred:
+                lines.append((plug, 0, round2(deb - cred)))
+            else:
+                lines.append((plug, round2(cred - deb), 0))
         post("opening", od, "opening", lines, "Opening balances")
 
     inv_by_id = {i["id"]: i for i in data["invoices"]}
