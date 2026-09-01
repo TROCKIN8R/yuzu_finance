@@ -260,7 +260,9 @@ export function BankPage() {
     const text = await file.text()
     const { rows: parsed, format, skipped } = parseWealthsimpleCsv(text)
     if (!format || parsed.length === 0) {
-      setImportMsg('Format CSV non reconnu. Utilisez un export Wealthsimple (chèques ou carte de crédit).')
+      setImportMsg(
+        'Format CSV non reconnu. Utilisez un export Wealthsimple (chèques, carte de crédit, ou activités).'
+      )
       return
     }
     if (blockIfClosed(...parsed.map((r) => r.transaction_date))) {
@@ -273,7 +275,12 @@ export function BankPage() {
         wealthsimpleFormatLabel(format),
       ]
       if (duplicates > 0) parts.push(`${duplicates} doublon${duplicates !== 1 ? 's' : ''} ignoré${duplicates !== 1 ? 's' : ''}`)
-      if (skipped > 0) parts.push(`${skipped} ligne${skipped !== 1 ? 's' : ''} filtrée${skipped !== 1 ? 's' : ''} (carte)`)
+      if (skipped > 0) {
+        const reason = format === 'credit_card' ? ' (carte)' : ''
+        parts.push(
+          `${skipped} ligne${skipped !== 1 ? 's' : ''} filtrée${skipped !== 1 ? 's' : ''}${reason}`
+        )
+      }
       setImportMsg(parts.join(' · '))
       load()
     } catch (e) {
@@ -645,7 +652,7 @@ export function BankPage() {
     <PageShell>
       <PageHeader
         title="Banque"
-        subtitle="Importez un relevé CSV Wealthsimple ou saisissez une transaction manuellement, puis affectez chaque ligne."
+        subtitle="Importez un CSV Wealthsimple (chèques, carte, ou export activités) ou saisissez une transaction manuellement, puis affectez chaque ligne."
         actions={
           <>
             <Button type="button" variant="secondary" onClick={openManual}>
@@ -683,7 +690,7 @@ export function BankPage() {
       </MetricGrid>
 
       {rows.length === 0 ? (
-        <EmptyState message="Importez un CSV Wealthsimple ou ajoutez une transaction manuellement pour commencer." />
+        <EmptyState message="Importez un CSV Wealthsimple (chèques, carte, ou activités) ou ajoutez une transaction manuellement pour commencer." />
       ) : (
         <>
           <ListToolbar
