@@ -1,7 +1,6 @@
 import type { MetricsTimeEntry } from './billingMetrics'
-import type { TaxSettings } from './taxes'
 import type { InvoiceLineDraft } from './invoice'
-import { computeLineTaxes } from './invoice'
+import { htLineTotals } from './invoice'
 import { effectiveRate, lineAmount, relationOne } from './format'
 import type { Project, TimeEntry, TimeEntryLine } from './types'
 
@@ -111,10 +110,7 @@ export function sheetBillableAmount(
   )
 }
 
-export function buildGroupedLinesFromTimeSheets(
-  entries: TimeEntrySheetSource[],
-  settings: TaxSettings
-): InvoiceLineDraft[] {
+export function buildGroupedLinesFromTimeSheets(entries: TimeEntrySheetSource[]): InvoiceLineDraft[] {
   const flat = flattenAllEntryLines(entries).filter((l) => l.billable)
   const groups = new Map<
     string,
@@ -143,7 +139,6 @@ export function buildGroupedLinesFromTimeSheets(
     .sort((a, b) => a.item_name.localeCompare(b.item_name, 'fr'))
     .map((g, sortOrder) => {
       const subtotal = lineAmount(g.hours, g.rate)
-      const taxes = computeLineTaxes(subtotal, settings)
       return {
         project_id: g.project_id,
         time_entry_id: null,
@@ -152,7 +147,7 @@ export function buildGroupedLinesFromTimeSheets(
         quantity: g.hours,
         unit_label: 'h',
         unit_price: g.rate,
-        ...taxes,
+        ...htLineTotals(subtotal),
         sort_order: sortOrder,
       }
     })

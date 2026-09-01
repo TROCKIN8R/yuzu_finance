@@ -19,31 +19,28 @@ export interface InvoiceLineDraft {
   sort_order: number
 }
 
-export function computeLineTaxes(subtotal: number, settings: TaxSettings) {
-  return computeSalesTaxes(subtotal, settings)
+/** Line amounts are always HT. TPS/TVQ are applied once on the invoice sous-total. */
+export function htLineTotals(subtotal: number): LineTaxes {
+  const base = round2(subtotal)
+  return { subtotal: base, gst: 0, qst: 0, total: base }
 }
 
 export function computeInvoiceTotals(subtotal: number, settings: TaxSettings): LineTaxes {
-  return computeLineTaxes(subtotal, settings)
+  return computeSalesTaxes(subtotal, settings)
 }
 
-export function sumInvoiceLines(lines: Pick<LineTaxes, 'subtotal' | 'gst' | 'qst' | 'total'>[]): LineTaxes {
-  const subtotal = lines.reduce((s, l) => s + Number(l.subtotal), 0)
-  const gst = lines.reduce((s, l) => s + Number(l.gst), 0)
-  const qst = lines.reduce((s, l) => s + Number(l.qst), 0)
-  const total = lines.reduce((s, l) => s + Number(l.total), 0)
-  return { subtotal: round2(subtotal), gst: round2(gst), qst: round2(qst), total: round2(total) }
+export function invoiceTotalsFromLines(
+  lines: Pick<LineTaxes, 'subtotal'>[],
+  settings: TaxSettings
+): LineTaxes {
+  const subtotal = round2(lines.reduce((s, l) => s + Number(l.subtotal), 0))
+  return computeSalesTaxes(subtotal, settings)
 }
 
-export function buildLineFromTimeEntry(
-  entry: TimeEntry,
-  settings: TaxSettings,
-  sortOrder: number
-): InvoiceLineDraft {
+export function buildLineFromTimeEntry(entry: TimeEntry, sortOrder: number): InvoiceLineDraft {
   const project = entry.projects!
   const rate = effectiveRate(entry, project)
   const subtotal = lineAmount(Number(entry.hours), rate)
-  const taxes = computeLineTaxes(subtotal, settings)
   return {
     project_id: entry.project_id,
     time_entry_id: entry.id,
@@ -52,18 +49,13 @@ export function buildLineFromTimeEntry(
     quantity: Number(entry.hours),
     unit_label: 'h',
     unit_price: rate,
-    ...taxes,
+    ...htLineTotals(subtotal),
     sort_order: sortOrder,
   }
 }
 
-export function buildLineFromFixedProject(
-  project: Project,
-  settings: TaxSettings,
-  sortOrder: number
-): InvoiceLineDraft {
+export function buildLineFromFixedProject(project: Project, sortOrder: number): InvoiceLineDraft {
   const subtotal = Number(project.fixed_price ?? 0)
-  const taxes = computeLineTaxes(subtotal, settings)
   return {
     project_id: project.id,
     time_entry_id: null,
@@ -72,16 +64,13 @@ export function buildLineFromFixedProject(
     quantity: 1,
     unit_label: 'forfait',
     unit_price: subtotal,
-    ...taxes,
+    ...htLineTotals(subtotal),
     sort_order: sortOrder,
   }
 }
 
-export function buildLegacyLinesFromTimeEntries(
-  entries: TimeEntry[],
-  settings: TaxSettings
-): InvoiceLineDraft[] {
-  return entries.map((e, i) => buildLineFromTimeEntry(e, settings, i))
+export function buildLegacyLinesFromTimeEntries(entries: TimeEntry[]): InvoiceLineDraft[] {
+  return entries.map((e, i) => buildLineFromTimeEntry(e, i))
 }
 
 export function invoiceBalance(total: number, paid: number) {

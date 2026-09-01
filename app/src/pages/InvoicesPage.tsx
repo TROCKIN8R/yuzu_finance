@@ -15,7 +15,7 @@ import {
   buildLegacyLinesFromTimeEntries,
   buildLineFromFixedProject,
   distinctPoNumbers,
-  sumInvoiceLines,
+  invoiceTotalsFromLines,
   type InvoiceLineDraft,
 } from '../lib/invoice'
 import { DEFAULT_CURRENCY, addDays, formatCad, formatDate, todayIso } from '../lib/format'
@@ -46,7 +46,7 @@ import { PageShell } from '../components/PageShell'
 
 type BillingOutletContext = { refreshMetrics?: () => void }
 
-function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | InvoiceLineDraft)[]; showTaxes: boolean }) {
+function LineItemsTable({ lines }: { lines: (InvoiceLineItem | InvoiceLineDraft)[] }) {
   return (
     <div className="overflow-x-auto -mx-1">
       <table className="w-full min-w-[640px] text-sm">
@@ -56,14 +56,7 @@ function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | Invoic
             <th className="py-2 pr-2">Description</th>
             <th className="py-2 pr-2 text-right">Qté</th>
             <th className="py-2 pr-2 text-right">Prix unit.</th>
-            <th className="py-2 pr-2 text-right">Sous-total</th>
-            {showTaxes && (
-              <>
-                <th className="py-2 pr-2 text-right">TPS</th>
-                <th className="py-2 pr-2 text-right">TVQ</th>
-              </>
-            )}
-            <th className="py-2 text-right">Total</th>
+            <th className="py-2 text-right">Montant</th>
           </tr>
         </thead>
         <tbody>
@@ -77,14 +70,7 @@ function LineItemsTable({ lines, showTaxes }: { lines: (InvoiceLineItem | Invoic
               <td className="py-2 pr-2 text-right text-muted">
                 {line.unit_label === 'h' ? `${formatCad(line.unit_price)}/h` : formatCad(line.unit_price)}
               </td>
-              <td className="py-2 pr-2 text-right">{formatCad(line.subtotal)}</td>
-              {showTaxes && (
-                <>
-                  <td className="py-2 pr-2 text-right text-muted">{formatCad(line.gst)}</td>
-                  <td className="py-2 pr-2 text-right text-muted">{formatCad(line.qst)}</td>
-                </>
-              )}
-              <td className="py-2 text-right font-medium">{formatCad(line.total)}</td>
+              <td className="py-2 text-right font-medium">{formatCad(line.subtotal)}</td>
             </tr>
           ))}
         </tbody>
@@ -221,12 +207,11 @@ export function InvoicesPage() {
         .select('*, time_entry_lines(item_name, hours, billable), projects(name, default_hourly_rate, billing_type)')
         .eq('invoice_id', inv.id)
         .order('entry_date')
-      const tax = effectiveTaxSettings(settings, inv.include_sales_tax ?? false)
       const withLines = entries ?? []
       const legacy =
         withLines.some((e) => (e.time_entry_lines ?? []).length > 0)
-          ? buildGroupedLinesFromTimeSheets(withLines, tax)
-          : buildLegacyLinesFromTimeEntries(withLines as TimeEntry[], tax)
+          ? buildGroupedLinesFromTimeSheets(withLines)
+          : buildLegacyLinesFromTimeEntries(withLines as TimeEntry[])
       setLineItems(legacy as InvoiceLineItem[])
       await loadPoNumbersForLines(legacy)
     }
@@ -239,18 +224,18 @@ export function InvoicesPage() {
   }
 
   function previewLines() {
-    const taxSettings = taxSettingsForCreate()
-    if (!taxSettings) return []
     const selectedSheets = unbilled.filter((x) => selectedEntryIds.has(x.id))
-    const hourlyLines = buildGroupedLinesFromTimeSheets(selectedSheets, taxSettings)
+    const hourlyLines = buildGroupedLinesFromTimeSheets(selectedSheets)
     const fixedLines = unbilledFixed
       .filter((x) => selectedProjectIds.has(x.id))
-      .map((p, i) => buildLineFromFixedProject(p, taxSettings, hourlyLines.length + i))
+      .map((p, i) => buildLineFromFixedProject(p, hourlyLines.length + i))
     return [...hourlyLines, ...fixedLines]
   }
 
   function previewTotals() {
-    return sumInvoiceLines(previewLines())
+    const taxSettings = taxSettingsForCreate()
+    if (!taxSettings) return { subtotal: 0, gst: 0, qst: 0, total: 0 }
+    return invoiceTotalsFromLines(previewLines(), taxSettings)
   }
 
   async function createInvoice() {
@@ -266,7 +251,8 @@ export function InvoicesPage() {
       return
     }
 
-    const totals = sumInvoiceLines(lines)
+    const taxSettings = effectiveTaxSettings(settings, includeSalesTax)
+    const totals = invoiceTotalsFromLines(lines, taxSettings)
     const invoiceDate = todayIso()
     const entryDates = unbilled.filter((x) => selectedEntryIds.has(x.id)).map((x) => x.entry_date)
     if (blockIfClosed(invoiceDate, ...entryDates)) return
@@ -629,21 +615,14 @@ export function InvoicesPage() {
               {canCreate && settings && (
                 <div className="bg-stone-50 rounded-lg p-3 text-sm space-y-2">
                   <p className="text-xs font-medium text-muted uppercase tracking-wide">
-                    Aperçu{showTaxesOnInvoice ? ' des taxes par ligne' : ''}
+                    Aperçu
                   </p>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[520px] text-xs">
                       <thead className="text-muted">
                         <tr>
                           <th className="text-left py-1">Description</th>
-                          <th className="text-right py-1">Sous-total</th>
-                          {showTaxesOnInvoice && (
-                            <>
-                              <th className="text-right py-1">TPS</th>
-                              <th className="text-right py-1">TVQ</th>
-                            </>
-                          )}
-                          <th className="text-right py-1">Total</th>
+                          <th className="text-right py-1">Montant</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -651,13 +630,6 @@ export function InvoicesPage() {
                           <tr key={i} className="border-t border-border">
                             <td className="py-1 pr-2">{line.description}</td>
                             <td className="py-1 text-right">{formatCad(line.subtotal)}</td>
-                            {showTaxesOnInvoice && (
-                              <>
-                                <td className="py-1 text-right text-muted">{formatCad(line.gst)}</td>
-                                <td className="py-1 text-right text-muted">{formatCad(line.qst)}</td>
-                              </>
-                            )}
-                            <td className="py-1 text-right font-medium">{formatCad(line.total)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -719,13 +691,7 @@ export function InvoicesPage() {
               )}
             </div>
 
-            <LineItemsTable
-              lines={lineItems}
-              showTaxes={
-                (selected.include_sales_tax ?? false) &&
-                (Number(selected.gst) > 0 || Number(selected.qst) > 0)
-              }
-            />
+            <LineItemsTable lines={lineItems} />
 
             <div className="text-right space-y-1 border-t border-border pt-3">
               <div>Sous-total : {formatCad(selected.subtotal)}</div>

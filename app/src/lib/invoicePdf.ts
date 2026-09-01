@@ -164,9 +164,7 @@ export async function buildInvoicePdfBlob({
   }
   y += 6
 
-  const head = showTaxes
-    ? [t.dateCol, t.description, t.qty, t.unitPrice, t.subtotal, t.gst, t.qst, t.total]
-    : [t.dateCol, t.description, t.qty, t.unitPrice, t.amount]
+  const head = [t.dateCol, t.description, t.qty, t.unitPrice, t.amount]
 
   const rows = lines.map((line) => {
     const qtyLabel =
@@ -175,22 +173,13 @@ export async function buildInvoicePdfBlob({
       line.unit_label === 'h'
         ? `${formatCadCode(Number(line.unit_price), lang)}/h`
         : formatCadCode(Number(line.unit_price), lang)
-    const base = [
+    return [
       line.line_date ? formatDate(line.line_date, lang) : '—',
       line.description,
       qtyLabel,
       unitPrice,
+      formatCadCode(Number(line.subtotal), lang),
     ]
-    if (showTaxes) {
-      return [
-        ...base,
-        formatCadCode(Number(line.subtotal), lang),
-        formatCadCode(Number(line.gst), lang),
-        formatCadCode(Number(line.qst), lang),
-        formatCadCode(Number(line.total), lang),
-      ]
-    }
-    return [...base, formatCadCode(Number(line.total), lang)]
   })
 
   autoTable(doc, {
@@ -199,22 +188,12 @@ export async function buildInvoicePdfBlob({
     body: rows,
     styles: { fontSize: 7 },
     headStyles: { fillColor: [229, 168, 23] },
-    columnStyles: showTaxes
-      ? {
-          0: { cellWidth: 22 },
-          2: { halign: 'right' },
-          3: { halign: 'right' },
-          4: { halign: 'right' },
-          5: { halign: 'right' },
-          6: { halign: 'right' },
-          7: { halign: 'right' },
-        }
-      : {
-          0: { cellWidth: 22 },
-          2: { halign: 'right' },
-          3: { halign: 'right' },
-          4: { halign: 'right' },
-        },
+    columnStyles: {
+      0: { cellWidth: 22 },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+    },
   })
 
   const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
