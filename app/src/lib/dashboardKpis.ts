@@ -5,6 +5,7 @@ import {
   type MetricsTimeEntry,
 } from './billingMetrics'
 import { currentYearMonth, previousYearMonth, type DateRange } from './fiscalPeriod'
+import type { FinancialSnapshot } from './financials'
 
 export interface MomChange {
   current: number
@@ -79,6 +80,39 @@ export function buildServiceKpiTrends(points: MonthlySeriesPoint[]): ServiceKpiT
 export function operatingMarginPct(revenue: number, operatingIncome: number): number | null {
   if (revenue === 0) return null
   return round2((operatingIncome / revenue) * 100)
+}
+
+/** Cash vs unpaid statutory dues at period end — draft for owner/CPA review. */
+export interface EstimatedDues {
+  cash: number
+  cashFromBankImport: boolean
+  /** Unremitted payroll: employee withholdings + employer statutory + HSF/CNESST (GL 2200+2210+2215). */
+  payrollUnpaid: number
+  salesTaxUnpaid: number
+  companyTaxUnpaid: number
+  totalDue: number
+  estimatedRemaining: number
+}
+
+export function buildEstimatedDues(fin: FinancialSnapshot): EstimatedDues {
+  const bank = fin.balanceSheet.bankStatementBalance
+  const cash = bank != null ? bank : fin.balanceSheet.cash
+  const payrollUnpaid = Math.max(0, fin.balanceSheet.payrollRemittancesPending)
+  const salesTaxUnpaid = Math.max(0, fin.balanceSheet.salesTaxNetPosition)
+  const companyTaxUnpaid = Math.max(
+    0,
+    round2(fin.balanceSheet.corporateTaxDue + fin.balanceSheet.corpTaxProvision)
+  )
+  const totalDue = round2(payrollUnpaid + salesTaxUnpaid + companyTaxUnpaid)
+  return {
+    cash,
+    cashFromBankImport: bank != null,
+    payrollUnpaid,
+    salesTaxUnpaid,
+    companyTaxUnpaid,
+    totalDue,
+    estimatedRemaining: round2(cash - totalDue),
+  }
 }
 
 export { averageRate, computeWorkedRevenueMetrics }

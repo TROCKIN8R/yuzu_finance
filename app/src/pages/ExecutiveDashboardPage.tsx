@@ -6,43 +6,80 @@ import { formatCad } from '../lib/format'
 import { buildFinancialSnapshot } from '../lib/financials'
 import { fetchFinancialReportExtras, fetchGeneralLedgerData } from '../lib/glDataLoader'
 import { buildMonthlySeries, cumulativeMonthlySeries, hasChartData, seriesInSelectedPeriod } from '../lib/dashboardSeries'
+import { buildPartnerBreakdown, buildServiceTypeBreakdown } from '../lib/billingMetrics'
 import {
-  averageRate,
-  buildPartnerBreakdown,
-  buildServiceTypeBreakdown,
-  computeUnbilledWip,
-} from '../lib/billingMetrics'
-import {
+  buildEstimatedDues,
   buildServiceKpiTrends,
   computeWorkedRevenueMetrics,
+  type EstimatedDues,
+  type MomChange,
 } from '../lib/dashboardKpis'
-import {
-  fetchDashboardBillingData,
-  fetchExecutiveExtras,
-} from '../lib/dashboardData'
+import { fetchDashboardBillingData, fetchExecutiveExtras } from '../lib/dashboardData'
 import { useDashboardPeriod } from '../hooks/useDashboardPeriod'
 import { RevenueTrendChart } from '../components/DashboardCharts'
 import { ExecutiveBreakdownPanel } from '../components/ExecutiveBreakdownPanel'
-import { KpiCard, MetricGrid, TrendBadge } from '../components/MetricCard'
+import { TrendBadge } from '../components/MetricCard'
 import { UpcomingDeadlinesCard } from '../components/UpcomingDeadlinesCard'
 import type { ComplianceDeadline } from '../lib/types'
 
-function RateChip({
+function ActivityMetricRow({
   label,
   value,
-  detail,
+  sub,
+  trend,
+  to,
 }: {
   label: string
   value: string
-  detail: string
+  sub?: string
+  trend?: MomChange
+  to: string
 }) {
   return (
-    <div className="flex-1 min-w-[10rem] rounded-lg border border-border bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
-      <div className="text-sm font-semibold tabular-nums mt-0.5">{value}</div>
-      <div className="text-[11px] text-muted mt-0.5 truncate">{detail}</div>
-    </div>
+    <Link
+      to={to}
+      className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0 -mx-1 px-1 rounded-lg hover:bg-stone-50"
+    >
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
+        {sub && <div className="text-[11px] text-muted mt-0.5 leading-snug">{sub}</div>}
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-lg font-semibold tabular-nums leading-tight">{value}</div>
+        {trend && (
+          <div className="mt-0.5 flex justify-end">
+            <TrendBadge change={trend} label="" />
+          </div>
+        )}
+      </div>
+    </Link>
   )
+}
+
+function DuesLine({
+  label,
+  value,
+  to,
+}: {
+  label: string
+  value: string
+  to?: string
+}) {
+  const inner = (
+    <>
+      <span className="text-ink">{label}</span>
+      <span className="tabular-nums font-medium text-ink">{value}</span>
+    </>
+  )
+  const className = 'flex items-center justify-between gap-3 text-sm py-0.5'
+  if (to) {
+    return (
+      <Link to={to} className={`${className} rounded-md -mx-1 px-1 hover:bg-stone-50`}>
+        {inner}
+      </Link>
+    )
+  }
+  return <div className={className}>{inner}</div>
 }
 
 export function ExecutiveDashboardPage() {
@@ -52,8 +89,8 @@ export function ExecutiveDashboardPage() {
   const [invoiced, setInvoiced] = useState(0)
   const [recognized, setRecognized] = useState(0)
   const [collected, setCollected] = useState(0)
-  const [unbilled, setUnbilled] = useState(0)
   const [collectionRate, setCollectionRate] = useState<number | null>(null)
+  const [dues, setDues] = useState<EstimatedDues | null>(null)
   const [monthlySeries, setMonthlySeries] = useState<ReturnType<typeof buildMonthlySeries>>([])
   const [partnerRows, setPartnerRows] = useState<ReturnType<typeof buildPartnerBreakdown>>([])
   const [serviceRows, setServiceRows] = useState<ReturnType<typeof buildServiceTypeBreakdown>>([])
@@ -80,13 +117,13 @@ export function ExecutiveDashboardPage() {
       const fin = buildFinancialSnapshot(
         {
           ...glData,
+          bankTransactions: reportExtras.bankTransactions,
           settings: settingsRow.data ?? glData.settings ?? undefined,
         },
         range
       )
 
       const workedMetrics = computeWorkedRevenueMetrics(billing.timeEntries, range)
-      const wip = computeUnbilledWip(billing.timeEntries, billing.fixedProjects)
       const series = buildMonthlySeries(
         {
           payments: glData.payments,
@@ -112,7 +149,7 @@ export function ExecutiveDashboardPage() {
       setRecognized(fin.income.revenueSubtotal)
       setCollected(fin.cashIn)
       setCollectionRate(fin.billing.collectionRatePct)
-      setUnbilled(wip.amount)
+      setDues(buildEstimatedDues(fin))
       setMonthlySeries(series)
       setPartnerRows(
         buildPartnerBreakdown(
@@ -144,16 +181,14 @@ export function ExecutiveDashboardPage() {
   const trends = useMemo(() => buildServiceKpiTrends(monthlySeries), [monthlySeries])
   const chartSeries = useMemo(() => (period ? seriesInSelectedPeriod(monthlySeries, period) : monthlySeries), [monthlySeries, period])
   const cumulativeSeries = useMemo(() => cumulativeMonthlySeries(chartSeries), [chartSeries])
-  const hourlyAvg = averageRate(worked.hourly, worked.hourlyHours)
-  const fixedAvg = averageRate(worked.fixed, worked.fixedHours)
 
   if (!ready || !period || loading) return <div className="text-muted">Chargement…</div>
 
-  if (error) {
+  if (error || !dues) {
     return (
       <div className="max-w-xl mx-auto ui-card p-6 space-y-3">
         <h1 className="text-lg font-semibold">Vue exécutive</h1>
-        <p className="text-sm text-red-700">{error}</p>
+        <p className="text-sm text-red-700">{error ?? 'Impossible de calculer les dues estimées.'}</p>
         <p className="text-xs text-muted">
           Brouillon pour révision — souvent causé par une paie dont le net ne correspond pas aux remboursements liés.
         </p>
@@ -168,12 +203,15 @@ export function ExecutiveDashboardPage() {
     )
   }
 
+  const remainingTone =
+    dues.estimatedRemaining < 0 ? 'text-red-700' : dues.totalDue > 0 ? 'text-ink' : 'text-emerald-800'
+
   return (
     <div className="max-w-[1440px] mx-auto space-y-3 pb-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold leading-tight">Vue exécutive</h1>
-          <p className="text-xs text-muted mt-0.5">Prestations · Facturation · Encaissements</p>
+          <p className="text-xs text-muted mt-0.5">Prestations · Facturation · Encaissements · Dues estimées</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -197,71 +235,73 @@ export function ExecutiveDashboardPage() {
         </div>
       </div>
 
-      <MetricGrid cols={4} dense>
-        <KpiCard
-          dense
-          label="Prestations réalisées"
-          value={formatCad(worked.total)}
-          sub={`${worked.hours} h · dont ${formatCad(worked.fixed)} forfait`}
-          trend={trends.workedRevenue}
-          to="/billing/time"
-        />
-        <KpiCard
-          dense
-          label="Revenus facturés"
-          value={formatCad(invoiced)}
-          sub={`HT · GL ${formatCad(recognized)}`}
-          trend={trends.invoicedRevenue}
-          to="/billing/invoices"
-        />
-        <KpiCard
-          dense
-          label="Encaissements"
-          value={formatCad(collected)}
-          sub={
-            collectionRate != null
-              ? `${collectionRate.toFixed(1)} % encaissé (TTC cumul.)`
-              : 'Paiements clients'
-          }
-          trend={trends.cashCollected}
-          to="/billing/invoices"
-        />
-        <KpiCard
-          dense
-          label="À facturer (WIP)"
-          value={formatCad(unbilled)}
-          sub="Horaire + forfaits non facturés"
-          to="/billing/invoices"
-        />
-      </MetricGrid>
-
-      <div className="flex flex-wrap gap-2">
-        <RateChip
-          label="$/h moyen — Horaire"
-          value={hourlyAvg != null ? `${formatCad(hourlyAvg)}/h` : '—'}
-          detail={`${worked.hourlyHours} h · ${formatCad(worked.hourly)}`}
-        />
-        <RateChip
-          label="$/h moyen — Forfait"
-          value={fixedAvg != null ? `${formatCad(fixedAvg)}/h` : '—'}
-          detail={`${worked.fixedHours} h int. · ${formatCad(worked.fixed)}`}
-        />
-        <div className="flex-1 min-w-[12rem] rounded-lg border border-border bg-white px-3 py-2 flex flex-col justify-center gap-1">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Variation M/M</div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-muted">Prest.</span>
-              <TrendBadge change={trends.workedRevenue} label="" />
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-muted">Fact.</span>
-              <TrendBadge change={trends.invoicedRevenue} label="" />
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-muted">Enc.</span>
-              <TrendBadge change={trends.cashCollected} label="" />
-            </span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        <div className="ui-card px-3 py-2.5 h-full flex flex-col">
+          <div className="ui-metric-label leading-tight mb-1">Activité</div>
+          <div className="divide-y divide-border flex-1">
+            <ActivityMetricRow
+              label="Prestations réalisées"
+              value={formatCad(worked.total)}
+              sub={`${worked.hours} h · dont ${formatCad(worked.fixed)} forfait`}
+              trend={trends.workedRevenue}
+              to="/billing/time"
+            />
+            <ActivityMetricRow
+              label="Revenus facturés"
+              value={formatCad(invoiced)}
+              sub={`HT · GL ${formatCad(recognized)}`}
+              trend={trends.invoicedRevenue}
+              to="/billing/invoices"
+            />
+            <ActivityMetricRow
+              label="Encaissements"
+              value={formatCad(collected)}
+              sub={
+                collectionRate != null
+                  ? `${collectionRate.toFixed(1)} % encaissé (TTC cumul.)`
+                  : 'Paiements clients'
+              }
+              trend={trends.cashCollected}
+              to="/billing/invoices"
+            />
           </div>
+        </div>
+
+        <div className="ui-card px-3 py-2.5 h-full flex flex-col">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div>
+              <div className="ui-metric-label leading-tight">Dues estimées</div>
+              <p className="text-[11px] text-muted mt-0.5">Brouillon pour révision — trésorerie après obligations</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-0.5 flex-1">
+            <DuesLine
+              label="Trésorerie (compte bancaire)"
+              value={formatCad(dues.cash)}
+              to="/bank"
+            />
+            <DuesLine
+              label="Cotisations à verser"
+              value={formatCad(dues.payrollUnpaid)}
+              to="/compensation/payroll"
+            />
+            <DuesLine label="Taxes de vente à verser" value={formatCad(dues.salesTaxUnpaid)} to="/sales-tax" />
+            <DuesLine label="Impôt société à verser" value={formatCad(dues.companyTaxUnpaid)} to="/corporate-tax" />
+            <div className="border-t border-border mt-1.5 pt-1.5 space-y-0.5">
+              <DuesLine label="Total à payer" value={formatCad(dues.totalDue)} />
+              <div className="flex items-center justify-between gap-3 pt-0.5">
+                <span className="text-sm font-semibold">Solde estimé</span>
+                <span className={`text-lg font-semibold tabular-nums leading-tight ${remainingTone}`}>
+                  {formatCad(dues.estimatedRemaining)}
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted mt-2 leading-snug">
+            {dues.cashFromBankImport ? 'Solde relevé importé' : 'Solde GL (aucun relevé importé)'}
+            {' · '}
+            cotisations = retenues + charges patronales non versées · TPS/TVQ nettes · impôt dû + provision.
+          </p>
         </div>
       </div>
 
