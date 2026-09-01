@@ -24,6 +24,7 @@ const emptyEmployee = {
   active: true,
   hire_date: '',
   notes: '',
+  over_40_percent_voting: false,
 }
 
 export function EmployeesPage() {
@@ -60,6 +61,7 @@ export function EmployeesPage() {
       active: e.active,
       hire_date: e.hire_date ?? '',
       notes: e.notes ?? '',
+      over_40_percent_voting: Boolean(e.over_40_percent_voting),
     })
     setEditingId(e.id)
     setOpen(true)
@@ -77,6 +79,7 @@ export function EmployeesPage() {
       active: form.active,
       hire_date: form.hire_date || null,
       notes: form.notes || null,
+      over_40_percent_voting: form.over_40_percent_voting,
     }
     if (editingId) await supabase.from('employees').update(payload).eq('id', editingId)
     else await supabase.from('employees').insert(payload)
@@ -206,6 +209,21 @@ export function EmployeesPage() {
               </select>
             </Field>
           </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={form.over_40_percent_voting}
+              onChange={(e) => setForm({ ...form, over_40_percent_voting: e.target.checked })}
+            />
+            <span>
+              Détient plus de 40 % des actions avec droit de vote
+              <span className="block text-xs text-muted mt-0.5">
+                Aucune AE (employé ni employeur) — L.A.E. al. 5(2)b). Le RQAP, le RRQ et le FSS continuent de
+                s&apos;appliquer au salaire. Brouillon CPA.
+              </span>
+            </span>
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
             <Button type="submit">Enregistrer</Button>

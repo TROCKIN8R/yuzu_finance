@@ -549,11 +549,17 @@ export function EmployeeExpensesPage() {
               checked={form.taxable}
               onChange={(e) => setForm({ ...form, taxable: e.target.checked })}
             />
-            Remboursement imposable (ajouté au brut de paie)
+            Remboursement imposable (HT ajouté au brut de paie ; TTC toujours versé à l&apos;employé)
           </label>
           {!form.taxable && (
             <p className="text-xs text-muted">
-              Par défaut, le remboursement est non imposable et s&apos;ajoute au net de paie uniquement.
+              Par défaut, le remboursement est non imposable : le TTC s&apos;ajoute au net de paie, sans retenues.
+            </p>
+          )}
+          {form.taxable && (
+            <p className="text-xs text-muted">
+              L&apos;employé reçoit le TTC. Seul le montant HT est assujetti aux cotisations et à l&apos;impôt ; TPS/TVQ
+              sont ajoutées au net.
             </p>
           )}
           <Field label="Notes">

@@ -103,6 +103,8 @@ export interface Employee {
   active: boolean
   hire_date: string | null
   notes: string | null
+  /** More than 40% of voting shares — employment is not EI-insurable (EI Act s. 5(2)(b)). */
+  over_40_percent_voting: boolean
   created_at: string
   updated_at: string
 }

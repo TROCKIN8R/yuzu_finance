@@ -10,7 +10,10 @@ alwaysApply: false
 
 - Link each run to an `employee` record.
 - Separate **employee withholdings** (income tax, RPC, AE, RQAP) from **employer contributions**.
-- Net pay = gross − employee withholdings − other deductions.
+- Net pay = gross − employee withholdings − other deductions, **plus** non-taxable reimbursements (TTC) and GST/QST on taxable reimbursements.
+- Taxable employee expenses: HT added to gross (pensionable); employee still receives full TTC.
+- Estimates use **2026** Québec rates (QPP 6.3% + QPP2 4%, AE Québec 1.30% unless **>40% voting shares**, RQAP 0.430%/0.602%, abattement fédéral 16,5 %, FSS on salary with no 40% exclusion). Draft for CPA review — not a payroll provider.
+- **EI / AE**: skip employee and employer premiums when the employee has more than 40% of voting shares (flag or cap table). RQAP, QPP, and HSF/FSS still apply to that salary.
 
 ## Remittances
 

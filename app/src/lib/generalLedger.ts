@@ -289,12 +289,25 @@ export function buildGeneralLedger(data: {
     const linkedExpenses = (data.employeeExpenses ?? []).filter((e) => e.payroll_run_id === pr.id)
     const nonTaxLinked = linkedExpenses.filter((e) => !e.taxable)
     const nonTaxReimb = nonTaxLinked.reduce((s, e) => s + Number(e.total), 0)
-    const taxableReimb = linkedExpenses.filter((e) => e.taxable).reduce((s, e) => s + Number(e.amount), 0)
+    const taxableLinked = linkedExpenses.filter((e) => e.taxable)
+    const taxableReimb = taxableLinked.reduce((s, e) => s + Number(e.amount), 0)
+    const taxableTaxes = round2(
+      taxableLinked.reduce((s, e) => s + Number(e.gst) + Number(e.qst), 0)
+    )
     const employerContrib = employerPayrollExpenseContributions(pr)
     const incomeTax = payrollIncomeTaxWithheld(pr)
     const statutory = payrollStatutoryRemittance(pr)
     const levies = payrollLeviesRemittance(pr)
     const benefits = Number(pr.employer_benefits)
+    const empDeductions =
+      Number(pr.federal_tax) +
+      Number(pr.provincial_tax) +
+      Number(pr.cpp_employee) +
+      Number(pr.ei_employee) +
+      Number(pr.qpip_employee) +
+      Number(pr.other_deductions)
+    const extraInNet = round2(Number(pr.net_pay) - (Number(pr.gross_pay) - empDeductions))
+    const taxableTaxesInNet = Math.max(0, round2(extraInNet - nonTaxReimb))
 
     const payrollLines: JournalLine[] = [
       jl('5100', Number(pr.gross_pay), 0),
@@ -309,8 +322,15 @@ export function buildGeneralLedger(data: {
     // Taxable reimbursements are in gross_pay but not paid as extra cash — reclass to expense categories.
     if (taxableReimb > 0) {
       payrollLines.push(jl('5100', 0, taxableReimb))
-      for (const e of linkedExpenses.filter((x) => x.taxable)) {
+      for (const e of taxableLinked) {
         payrollLines.push(jl(expenseCategoryAccount(e.category), Number(e.amount), 0))
+      }
+    }
+    // TTC on taxable items: GST/QST paid to the employee when net_pay includes them.
+    if (taxableTaxes > 0 && Math.abs(taxableTaxesInNet - taxableTaxes) <= 0.02) {
+      for (const e of taxableLinked) {
+        if (Number(e.gst) > 0) payrollLines.push(jl('1200', Number(e.gst), 0))
+        if (Number(e.qst) > 0) payrollLines.push(jl('1210', Number(e.qst), 0))
       }
     }
 

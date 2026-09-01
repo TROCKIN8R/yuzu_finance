@@ -22,9 +22,10 @@ function isGlOperatingExpense(e: { category?: string; payroll_run_id?: string | 
   return e.category !== 'payroll' && !e.payroll_run_id
 }
 
-/** Employee expenses with ITC in GL (non-taxable accruals at expense date). */
-function isGlEmployeeExpense(e: { taxable?: boolean }) {
-  return !e.taxable
+/** Employee expenses with ITC in GL (non-taxable at expense date; taxable GST/QST when reimbursed). */
+function isGlEmployeeExpense(e: { taxable?: boolean; payroll_run_id?: string | null }) {
+  if (!e.taxable) return true
+  return !!e.payroll_run_id
 }
 
 export function calculateSalesTaxPeriod(

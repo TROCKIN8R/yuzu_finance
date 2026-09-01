@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Employee, EmployeeExpense, PayrollRun, RemittanceStatus } from '../lib/types'
+import type { Employee, EmployeeExpense, PayrollRun, RemittanceStatus, Shareholder } from '../lib/types'
 import { formatCad, formatDate, todayIso } from '../lib/format'
 import { inDateRange, matchesSearch } from '../lib/filters'
 import { payrollEmployerTotal, employeeDeductionsTotal, employerContributionsTotal } from '../lib/financials'
@@ -11,16 +11,20 @@ import {
   employeeDisplayName,
   EMPLOYEE_DEDUCTION_FIELDS,
   EMPLOYER_CONTRIBUTION_FIELDS,
+  PAYROLL_RATES_YEAR,
   payFrequencyLabel,
   payPeriodRange,
+  isEiExemptOver40Voting,
   sumEmployeeDeductions,
   sumEmployerContributions,
 } from '../lib/payrollCalc'
 import { deletePayrollRun, linkReimbursements } from '../lib/payrollActions'
 import {
+  grossWithTaxableReimbursement,
   netPayWithReimbursement,
   reimbursementTotals,
 } from '../lib/reimbursement'
+import { round2 } from '../lib/taxes'
 import { recalculatePayrollWithReimbursements } from '../lib/payrollForm'
 import { usePeriodCloseGuard } from '../contexts/PeriodCloseContext'
 import { payrollLeviesRemittance, payrollRemittancesTotal } from '../lib/payrollRemittance'
@@ -70,23 +74,33 @@ type PayrollForm = {
 }
 
 function calcNet(f: PayrollForm) {
-  return (
+  return round2(
     f.gross_pay -
-    f.federal_tax -
-    f.provincial_tax -
-    f.cpp_employee -
-    f.ei_employee -
-    f.qpip_employee -
-    f.other_deductions
+      f.federal_tax -
+      f.provincial_tax -
+      f.cpp_employee -
+      f.ei_employee -
+      f.qpip_employee -
+      f.other_deductions
   )
 }
 
-function payrollFormFromEmployee(emp: Employee, paymentDate = todayIso()): PayrollForm {
+function payrollFormFromEmployee(
+  emp: Employee,
+  paymentDate = todayIso(),
+  shareholders: Pick<Shareholder, 'employee_id' | 'shares_held' | 'active'>[] = []
+): PayrollForm {
   const range = payPeriodRange(paymentDate, emp.pay_frequency)
+  const eiExempt = isEiExemptOver40Voting({
+    over_40_percent_voting: emp.over_40_percent_voting,
+    employeeId: emp.id,
+    shareholders,
+  })
   const calc = calculatePayrollDeductions({
     yearlySalary: Number(emp.yearly_salary),
     payFrequency: emp.pay_frequency,
     estimatedYearlyIncome: emp.estimated_yearly_income,
+    eiExempt,
   })
   return {
     employee_id: emp.id,
@@ -128,6 +142,9 @@ export function PayrollPage() {
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set())
   const [salaryGrossBase, setSalaryGrossBase] = useState(0)
   const [levyRates, setLevyRates] = useState({ hsf: 0.0165, cnesst: 0.01 })
+  const [shareholders, setShareholders] = useState<
+    Pick<Shareholder, 'employee_id' | 'shares_held' | 'active'>[]
+  >([])
   const { blockIfClosed, isClosed } = usePeriodCloseGuard()
 
   const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees])
@@ -157,16 +174,18 @@ export function PayrollPage() {
   }, [])
 
   async function load() {
-    const [emp, pay, settings] = await Promise.all([
+    const [emp, pay, settings, sh] = await Promise.all([
       supabase.from('employees').select('*').order('last_name').order('first_name'),
       supabase
         .from('payroll_runs')
         .select('*, employees(first_name, last_name)')
         .order('payment_date', { ascending: false }),
       supabase.from('organization_settings').select('hsf_rate, cnesst_rate').maybeSingle(),
+      supabase.from('shareholders').select('employee_id, shares_held, active'),
     ])
     setEmployees((emp.data as Employee[]) ?? [])
     setRows((pay.data as PayrollRun[]) ?? [])
+    setShareholders(sh.data ?? [])
     if (settings.data) {
       setLevyRates({
         hsf: Number(settings.data.hsf_rate ?? 0.0165),
@@ -212,10 +231,21 @@ export function PayrollPage() {
       expenses,
       selectedIds: selected,
       paymentDate: current.payment_date,
+      shareholders,
     })
     return {
       ...current,
-      ...updated,
+      pay_period_start: updated.pay_period_start,
+      pay_period_end: updated.pay_period_end,
+      gross_pay: updated.gross_pay,
+      federal_tax: updated.federal_tax,
+      provincial_tax: updated.provincial_tax,
+      cpp_employee: updated.cpp_employee,
+      ei_employee: updated.ei_employee,
+      qpip_employee: updated.qpip_employee,
+      cpp_employer: updated.cpp_employer,
+      ei_employer: updated.ei_employer,
+      qpip_employer: updated.qpip_employer,
       other_deductions: current.other_deductions,
       employer_benefits: current.employer_benefits,
     }
@@ -238,12 +268,17 @@ export function PayrollPage() {
       alert('Ajoutez un employé actif avant de créer une paie.')
       return
     }
-    const initial = payrollFormFromEmployee(target)
+    const initial = payrollFormFromEmployee(target, todayIso(), shareholders)
     setSalaryGrossBase(initial.gross_pay)
-    setForm(initial)
-    setSelectedExpenseIds(new Set())
     setPayEditingId(null)
-    await loadReimbursableExpenses(target.id)
+    const expenses = await loadReimbursableExpenses(target.id)
+    const selected = new Set(expenses.map((e) => e.id))
+    setSelectedExpenseIds(selected)
+    setForm(
+      selected.size > 0
+        ? applyPayrollRecalc(target, initial.gross_pay, expenses, selected, initial)
+        : initial
+    )
     setPayOpen(true)
   }
 
@@ -293,6 +328,11 @@ export function PayrollPage() {
       yearlySalary: Number(emp.yearly_salary),
       payFrequency: emp.pay_frequency,
       estimatedYearlyIncome: emp.estimated_yearly_income,
+      eiExempt: isEiExemptOver40Voting({
+        over_40_percent_voting: emp.over_40_percent_voting,
+        employeeId: emp.id,
+        shareholders,
+      }),
     })
     setSalaryGrossBase(calc.gross_pay)
     setForm(applyPayrollRecalc(emp, calc.gross_pay, reimbursableExpenses, selectedExpenseIds, form))
@@ -301,11 +341,16 @@ export function PayrollPage() {
   async function onPayrollEmployeeChange(employeeId: string) {
     const emp = employees.find((e) => e.id === employeeId)
     if (!emp || !form) return
-    const initial = payrollFormFromEmployee(emp, form.payment_date)
+    const initial = payrollFormFromEmployee(emp, form.payment_date, shareholders)
     setSalaryGrossBase(initial.gross_pay)
-    setForm(initial)
-    setSelectedExpenseIds(new Set())
-    await loadReimbursableExpenses(employeeId)
+    const expenses = await loadReimbursableExpenses(employeeId)
+    const selected = new Set(expenses.map((e) => e.id))
+    setSelectedExpenseIds(selected)
+    setForm(
+      selected.size > 0
+        ? applyPayrollRecalc(emp, initial.gross_pay, expenses, selected, initial)
+        : initial
+    )
   }
 
   function onPaymentDateChange(paymentDate: string) {
@@ -323,24 +368,15 @@ export function PayrollPage() {
     ev.preventDefault()
     if (!form || !form.employee_id) return
     if (blockIfClosed(form.payment_date)) return
-    const emp = employees.find((e) => e.id === form.employee_id)
-    if (!emp) return
+    if (!employees.some((e) => e.id === form.employee_id)) return
 
     const reimb = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
-    const recalc = recalculatePayrollWithReimbursements({
-      emp,
-      salaryGrossBase,
-      expenses: reimbursableExpenses,
-      selectedIds: selectedExpenseIds,
-      paymentDate: form.payment_date,
-    })
-    const levies = calculateEmployerLevies(recalc.gross_pay, levyRates.hsf, levyRates.cnesst)
+    const gross_pay = grossWithTaxableReimbursement(salaryGrossBase, reimb.taxable)
+    const levies = calculateEmployerLevies(gross_pay, levyRates.hsf, levyRates.cnesst)
     const formWithGross = {
       ...form,
-      ...recalc,
+      gross_pay,
       ...levies,
-      other_deductions: form.other_deductions,
-      employer_benefits: form.employer_benefits,
     }
     const salaryNet = calcNet(formWithGross)
     const net_pay = netPayWithReimbursement(salaryNet, reimb.nonTaxable)
@@ -386,6 +422,13 @@ export function PayrollPage() {
   const ytdEmployerContributions = filtered.reduce((s, p) => s + employerContributionsTotal(p), 0)
   const ytdGross = filtered.reduce((s, p) => s + Number(p.gross_pay), 0)
   const selectedEmp = form ? employees.find((e) => e.id === form.employee_id) : null
+  const selectedEiExempt = selectedEmp
+    ? isEiExemptOver40Voting({
+        over_40_percent_voting: selectedEmp.over_40_percent_voting,
+        employeeId: selectedEmp.id,
+        shareholders,
+      })
+    : false
   const reimbPreview = reimbursementTotals(reimbursableExpenses, selectedExpenseIds)
   const previewSalaryNet = form ? calcNet(form) : 0
   const previewNetPay = netPayWithReimbursement(previewSalaryNet, reimbPreview.nonTaxable)
@@ -521,7 +564,9 @@ export function PayrollPage() {
                     <td className="px-3 py-3">
                       {formatCad(p.net_pay)}
                       {Number(p.reimbursement_total) > 0 && (
-                        <span className="block text-xs text-muted">+ {formatCad(p.reimbursement_total)} remb.</span>
+                        <span className="block text-xs text-muted">
+                          dont {formatCad(p.reimbursement_total)} remb. TTC
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-3 text-muted">{formatCad(employerContributionsTotal(p))}</td>
@@ -576,6 +621,14 @@ export function PayrollPage() {
                 {selectedEmp.estimated_yearly_income != null && (
                   <> · Revenu estimé impôts : {formatCad(selectedEmp.estimated_yearly_income)}</>
                 )}
+                {' · '}
+                Barèmes {PAYROLL_RATES_YEAR} (estimation, brouillon CPA)
+                {selectedEiExempt && (
+                  <>
+                    {' · '}
+                    <span className="text-amber-800">AE exclue (&gt; 40 % des droits de vote)</span>
+                  </>
+                )}
               </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -589,8 +642,24 @@ export function PayrollPage() {
                 <input type="date" className={inputClass} required value={form.payment_date} onChange={(e) => onPaymentDateChange(e.target.value)} />
               </Field>
             </div>
-            <Field label="Salaire brut *">
-              <input type="number" step="0.01" className={inputClass} required value={form.gross_pay} onChange={(e) => setForm({ ...form, gross_pay: Number(e.target.value) })} />
+            <Field label="Salaire brut (emploi) *">
+              <input
+                type="number"
+                step="0.01"
+                className={inputClass}
+                required
+                value={form.gross_pay}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  setSalaryGrossBase(round2(v - reimbPreview.taxable))
+                  setForm({ ...form, gross_pay: v })
+                }}
+              />
+              {reimbPreview.taxable > 0 && (
+                <p className="text-xs text-muted mt-1">
+                  Inclut {formatCad(reimbPreview.taxable)} de remboursement imposable (HT).
+                </p>
+              )}
             </Field>
 
             <div className="rounded-xl border border-border overflow-hidden">
@@ -598,11 +667,24 @@ export function PayrollPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Part employé — retenues sur salaire</p>
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {EMPLOYEE_DEDUCTION_FIELDS.map(({ key, label }) => (
-                  <Field key={key} label={label}>
-                    <input type="number" step="0.01" className={inputClass} value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} />
-                  </Field>
-                ))}
+                {EMPLOYEE_DEDUCTION_FIELDS.map(({ key, label }) => {
+                  const eiLocked = selectedEiExempt && (key === 'ei_employee')
+                  return (
+                    <Field key={key} label={label}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className={inputClass}
+                        readOnly={eiLocked}
+                        value={form[key]}
+                        onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                      />
+                      {eiLocked && (
+                        <p className="text-xs text-muted mt-1">Non assurable — plus de 40 % des droits de vote.</p>
+                      )}
+                    </Field>
+                  )
+                })}
               </div>
               <div className="px-4 pb-3 text-sm text-right text-muted">
                 Total retenues employé : <strong className="text-ink">{formatCad(sumEmployeeDeductions(form))}</strong>
@@ -614,14 +696,39 @@ export function PayrollPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">Part employeur — cotisations et charges</p>
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {EMPLOYER_CONTRIBUTION_FIELDS.map(({ key, label }) => (
-                  <Field key={key} label={label}>
-                    <input type="number" step="0.01" className={inputClass} value={form[key]} onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })} />
-                  </Field>
-                ))}
+                {EMPLOYER_CONTRIBUTION_FIELDS.map(({ key, label }) => {
+                  const eiLocked = selectedEiExempt && key === 'ei_employer'
+                  return (
+                    <Field key={key} label={label}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className={inputClass}
+                        readOnly={eiLocked}
+                        value={form[key]}
+                        onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                      />
+                      {eiLocked && (
+                        <p className="text-xs text-muted mt-1">Aucune cotisation employeur AE.</p>
+                      )}
+                    </Field>
+                  )
+                })}
+                <Field label="FSS / HSF (estim.)">
+                  <input type="number" step="0.01" className={inputClass} readOnly value={previewLevies.hsf_employer} />
+                  <p className="text-xs text-muted mt-1">
+                    Le FSS s&apos;applique au salaire (y compris actionnaire-dirigeant). Pas d&apos;exclusion 40 %.
+                  </p>
+                </Field>
+                <Field label="CNESST (estim.)">
+                  <input type="number" step="0.01" className={inputClass} readOnly value={previewLevies.cnesst_employer} />
+                </Field>
               </div>
               <div className="px-4 pb-3 text-sm text-right text-muted">
-                Total charges employeur : <strong className="text-ink">{formatCad(sumEmployerContributions(form))}</strong>
+                Total charges employeur :{' '}
+                <strong className="text-ink">
+                  {formatCad(sumEmployerContributions({ ...form, ...previewLevies }))}
+                </strong>
               </div>
             </div>
 
@@ -656,12 +763,16 @@ export function PayrollPage() {
                 {reimbPreview.total > 0 && (
                   <div className="px-4 py-2 text-xs text-muted border-t border-border space-y-0.5">
                     <div className="flex justify-between">
-                      <span>Non imposable (ajouté au net)</span>
-                      <span>{formatCad(reimbPreview.nonTaxable)}</span>
+                      <span>Imposable HT (ajouté au brut)</span>
+                      <span>{formatCad(reimbPreview.taxable)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Imposable (ajouté au brut)</span>
-                      <span>{formatCad(reimbPreview.taxable)}</span>
+                      <span>Ajouté au net (non imposable + taxes)</span>
+                      <span>{formatCad(reimbPreview.nonTaxable)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium text-ink">
+                      <span>Total versé à l&apos;employé (TTC)</span>
+                      <span>{formatCad(reimbPreview.total)}</span>
                     </div>
                   </div>
                 )}
@@ -675,7 +786,7 @@ export function PayrollPage() {
               </div>
               {reimbPreview.nonTaxable > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted">Remboursements non imposables</span>
+                  <span className="text-muted">Remboursements hors brut (TTC)</span>
                   <span>+ {formatCad(reimbPreview.nonTaxable)}</span>
                 </div>
               )}

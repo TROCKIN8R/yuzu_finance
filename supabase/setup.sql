@@ -211,6 +211,7 @@ create table public.employees (
   active boolean not null default true,
   hire_date date,
   notes text,
+  over_40_percent_voting boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
