@@ -315,7 +315,7 @@ export function ExecutiveDashboardPage() {
           <p className="text-[11px] text-muted mt-2 leading-snug">
             {dues.cashFromBankImport ? 'Solde relevé importé' : 'Solde GL (aucun relevé importé)'}
             {' · '}
-            TPS/TVQ sur factures encaissées, nettes d'ITCs et remises · impôt = (ventes HT − salaires − coûts) ×{' '}
+            TPS/TVQ et impôt sur factures encaissées · impôt = (ventes HT encaissées − salaires − coûts) ×{' '}
             {(dues.corpTaxRate * 100).toFixed(1)} % (brouillon).
           </p>
         </div>
