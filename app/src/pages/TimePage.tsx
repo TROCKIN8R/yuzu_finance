@@ -52,6 +52,9 @@ const emptyLine = (): TimeEntryLineDraft => ({
 const TIME_SELECT =
   '*, time_entry_lines(id, item_name, hours, notes, billable, sort_order), projects(name, default_hourly_rate, billing_type, fixed_price, partner_id, partners(legal_name)), employees(first_name, last_name), invoices(invoice_number)'
 
+const DUPLICATE_SHEET_MESSAGE =
+  'Une feuille existe déjà pour cet employé, ce projet et cette date. Ouvrez-la pour la modifier, ou changez la date ou le projet.'
+
 function ItemNameInput({
   value,
   onChange,
@@ -110,7 +113,6 @@ export function TimePage() {
   })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [itemSuggestions, setItemSuggestions] = useState<string[]>([])
-  const [loadingSheet, setLoadingSheet] = useState(false)
 
   const partnerOptions = useMemo(() => {
     const names = new Map<string, string>()
@@ -167,52 +169,12 @@ export function TimePage() {
 
   const defaultEmployeeId = employees[0]?.id ?? ''
 
-  async function loadSheetForProjectDate(projectId: string, entryDate: string, employeeId: string) {
-    if (!projectId || !entryDate) return
-    setLoadingSheet(true)
-    let query = supabase
-      .from('time_entries')
-      .select(TIME_SELECT)
-      .eq('project_id', projectId)
-      .eq('entry_date', entryDate)
-    query = employeeId ? query.eq('employee_id', employeeId) : query.is('employee_id', null)
-    const { data } = await query.maybeSingle()
-    const suggestions = await fetchItemNameSuggestions(projectId)
-    setItemSuggestions(suggestions)
-
-    if (data) {
-      const sheet = data as TimeEntryWithLines
-      setEditingId(sheet.id)
-      setForm({
-        project_id: sheet.project_id,
-        employee_id: sheet.employee_id ?? employeeId,
-        entry_date: sheet.entry_date,
-        notes: sheet.notes ?? '',
-        rate_override: sheet.rate_override != null ? String(sheet.rate_override) : '',
-        lines:
-          (sheet.time_entry_lines ?? []).length > 0
-            ? (sheet.time_entry_lines ?? []).map((l) => ({
-                id: l.id,
-                item_name: l.item_name,
-                hours: Number(l.hours),
-                notes: l.notes ?? '',
-                billable: l.billable,
-              }))
-            : [emptyLine()],
-      })
-    } else {
-      setEditingId(null)
-      setForm((prev) => ({
-        ...prev,
-        project_id: projectId,
-        employee_id: employeeId,
-        entry_date: entryDate,
-        notes: '',
-        rate_override: '',
-        lines: [emptyLine()],
-      }))
+  function refreshItemSuggestions(projectId: string) {
+    if (!projectId) {
+      setItemSuggestions([])
+      return
     }
-    setLoadingSheet(false)
+    void fetchItemNameSuggestions(projectId).then(setItemSuggestions)
   }
 
   function openNew() {
@@ -227,7 +189,7 @@ export function TimePage() {
     })
     setEditingId(null)
     setOpen(true)
-    if (projectId) void loadSheetForProjectDate(projectId, todayIso(), defaultEmployeeId)
+    refreshItemSuggestions(projectId)
   }
 
   function openEdit(t: TimeEntryWithLines) {
@@ -254,18 +216,20 @@ export function TimePage() {
     })
     setEditingId(t.id)
     setOpen(true)
-    void fetchItemNameSuggestions(t.project_id).then(setItemSuggestions)
+    refreshItemSuggestions(t.project_id)
   }
 
-  async function onProjectOrDateChange(projectId: string, entryDate: string, employeeId: string) {
-    if (!open || tInvoiced()) return
-    await loadSheetForProjectDate(projectId, entryDate, employeeId)
-  }
-
-  function tInvoiced() {
-    if (!editingId) return false
-    return rows.some((r) => r.id === editingId && r.invoice_id)
-  }
+  const collidingSheet = useMemo(() => {
+    if (!open || !form.project_id || !form.entry_date) return undefined
+    const employeeKey = form.employee_id || ''
+    return rows.find(
+      (r) =>
+        r.id !== editingId &&
+        r.project_id === form.project_id &&
+        r.entry_date === form.entry_date &&
+        (r.employee_id ?? '') === employeeKey
+    )
+  }, [open, rows, editingId, form.project_id, form.entry_date, form.employee_id])
 
   function updateLine(index: number, patch: Partial<TimeEntryLineDraft>) {
     setForm((prev) => ({
@@ -306,6 +270,11 @@ export function TimePage() {
       return
     }
 
+    if (collidingSheet) {
+      alert(DUPLICATE_SHEET_MESSAGE)
+      return
+    }
+
     const totalHours = totalLineHours(cleanedLines)
     const headerPayload = {
       project_id: form.project_id,
@@ -322,14 +291,14 @@ export function TimePage() {
     if (entryId) {
       const { error } = await supabase.from('time_entries').update(headerPayload).eq('id', entryId)
       if (error) {
-        alert(error.message)
+        alert(error.code === '23505' ? DUPLICATE_SHEET_MESSAGE : error.message)
         return
       }
       await supabase.from('time_entry_lines').delete().eq('time_entry_id', entryId)
     } else {
       const { data, error } = await supabase.from('time_entries').insert(headerPayload).select('id').single()
       if (error || !data) {
-        alert(error?.message ?? 'Erreur — une feuille existe peut-être déjà pour ce projet et cette date.')
+        alert(error?.code === '23505' ? DUPLICATE_SHEET_MESSAGE : (error?.message ?? DUPLICATE_SHEET_MESSAGE))
         return
       }
       entryId = data.id
@@ -396,7 +365,7 @@ export function TimePage() {
       ) : (
         <PageHeader
           title="Suivi du temps"
-          subtitle="Une feuille par projet et par jour. Les notes quotidiennes restent internes ; la facture regroupe par item."
+          subtitle="Une feuille par projet et par jour — plusieurs projets le même jour sont permis. Les notes quotidiennes restent internes ; la facture regroupe par item."
           actions={logTimeBtn}
         />
       )}
@@ -538,11 +507,7 @@ export function TimePage() {
                 className={inputClass}
                 required
                 value={form.employee_id}
-                onChange={(e) => {
-                  const employeeId = e.target.value
-                  setForm({ ...form, employee_id: employeeId })
-                  void onProjectOrDateChange(form.project_id, form.entry_date, employeeId)
-                }}
+                onChange={(e) => setForm({ ...form, employee_id: e.target.value })}
               >
                 {employees.map((e) => (
                   <option key={e.id} value={e.id}>
@@ -559,7 +524,7 @@ export function TimePage() {
                 onChange={(e) => {
                   const projectId = e.target.value
                   setForm({ ...form, project_id: projectId })
-                  void onProjectOrDateChange(projectId, form.entry_date, form.employee_id)
+                  refreshItemSuggestions(projectId)
                 }}
               >
                 {projects.map((p) => (
@@ -575,11 +540,7 @@ export function TimePage() {
                 className={inputClass}
                 required
                 value={form.entry_date}
-                onChange={(e) => {
-                  const entryDate = e.target.value
-                  setForm({ ...form, entry_date: entryDate })
-                  void onProjectOrDateChange(form.project_id, entryDate, form.employee_id)
-                }}
+                onChange={(e) => setForm({ ...form, entry_date: e.target.value })}
               />
             </Field>
           </div>
@@ -590,10 +551,20 @@ export function TimePage() {
             </p>
           )}
 
-          {loadingSheet ? (
-            <p className="text-sm text-muted">Chargement de la feuille…</p>
-          ) : (
-            <div className="rounded-xl border border-border overflow-hidden">
+          {collidingSheet && (
+            <AlertBanner>
+              Une feuille existe déjà pour cet employé, ce projet et cette date.{' '}
+              <button
+                type="button"
+                className="font-medium underline"
+                onClick={() => openEdit(collidingSheet)}
+              >
+                Ouvrir la feuille existante
+              </button>
+            </AlertBanner>
+          )}
+
+          <div className="rounded-xl border border-border overflow-hidden">
               <div className="bg-stone-50 px-4 py-2 border-b border-border flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">Items du jour</p>
                 <span className="text-xs text-muted">Total : {formTotalHours.toFixed(2)} h</span>
@@ -657,7 +628,6 @@ export function TimePage() {
                 </Button>
               </div>
             </div>
-          )}
 
           <Field label="Notes de la feuille (interne, optionnel)">
             <textarea
@@ -686,7 +656,7 @@ export function TimePage() {
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               Annuler
             </Button>
-            <Button type="submit" disabled={loadingSheet}>
+            <Button type="submit" disabled={!!collidingSheet}>
               Enregistrer
             </Button>
           </div>
